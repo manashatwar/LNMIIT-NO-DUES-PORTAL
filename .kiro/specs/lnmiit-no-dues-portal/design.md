@@ -295,16 +295,16 @@ flowchart TD
 flowchart TB
     START(( )) --> P[PENDING]
 
-    P --> AP(["officer approves (prereqs APPROVED, role+scope match)"])
+    P --> AP["officer approves<br/>(prereqs APPROVED,<br/>role+scope match)"]
     AP --> A[APPROVED]
 
-    P --> RJ(["officer rejects (reason required)"])
+    P --> RJ["officer rejects<br/>(reason required)"]
     RJ --> R[REJECTED]
 
-    A --> RC(["upstream revert (reverse cascade)"])
+    A --> RC["upstream revert<br/>(reverse cascade)"]
     RC --> P
 
-    R --> RS(["student re-submits"])
+    R --> RS["student re-submits"]
     RS --> P
 
     classDef state fill:#eef4ff,stroke:#1f6feb,stroke-width:2px,color:#0f2748;
