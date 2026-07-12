@@ -69,7 +69,55 @@ Based on how each LNMIIT section operates and on conversations with the people w
 
 ---
 
-## 3. Why We Chose This Design and This Language
+## 3. Clearance Workflow
+
+The clearance follows the institute's official "Order of No Dues." The student picks an exit type and uploads proof to each section; independent sections review in parallel; the HOD consolidates a group of sections; Accounts handles the refund; and Administration gives the final approval. If a section that had already cleared a student later reverts to "due," the reverse-hierarchy cascade resets the dependent downstream approvals to pending.
+
+```mermaid
+flowchart TD
+    A([Student logs in]) --> B[Select exit type:<br/>Graduation / NEP Exit / Withdrawal / Admission Cancel]
+    B --> C[Upload required documents per section<br/>max 50 KB · OCR extracts name & roll]
+
+    C --> LIB[Central Library]
+    C --> TPC[TPC / Placement]
+    C --> WAR[Warden — own hostel only<br/>BH1..BH5 / GH1 · needs vacant room no.]
+    C --> STO[Store]
+    C --> LUCS[LUCS — event report link/file]
+    C --> SPO[Sports + GSAC Gen. Secretary]
+    C --> MED[Medical Cell]
+    C --> NAD[NAD Cell]
+    C --> DEP[Department Purpose<br/>No Dues Form upload]
+
+    STO --> HOD{HOD — CCE/CSE/ECE/MME<br/>consolidates sub-sections}
+    LUCS --> HOD
+    SPO --> HOD
+    MED --> HOD
+    NAD --> HOD
+    DEP --> HOD
+
+    LIB --> ACC[Accounts<br/>cancelled cheque + refund]
+    TPC --> ACC
+    WAR --> ACC
+    HOD --> ACC
+
+    ACC --> ADM{Administration<br/>final approval — all green?}
+    ADM -->|Yes| CERT([Download No-Dues Certificate<br/>+ Fund Us])
+    ADM -->|Any section reverts to due| RC[Reverse-hierarchy cascade:<br/>downstream approvals reset to pending]
+    RC -.-> HOD
+
+    classDef sec fill:#e8f1ff,stroke:#1f6feb,color:#0f2748;
+    classDef gate fill:#fdf3e2,stroke:#b7791f,color:#0f2748;
+    classDef done fill:#e4f6ec,stroke:#1a8f4c,color:#0f2748;
+    class LIB,TPC,WAR,STO,LUCS,SPO,MED,NAD,DEP,ACC sec;
+    class HOD,ADM gate;
+    class CERT done;
+```
+
+Every section supports approve/reject with a mandatory written reason and a two-way comment thread; these are omitted from the diagram to keep it readable.
+
+---
+
+## 4. Why We Chose This Design and This Language
 
 Every choice below earns its place by solving a specific LNMIIT problem. We reason only the decisions that genuinely need it.
 
@@ -99,7 +147,7 @@ Every choice below earns its place by solving a specific LNMIIT problem. We reas
 
 ---
 
-## 4. References
+## 5. References
 
 All links are official institute pages/PDFs, publicly published accounts, or public code repositories. Content throughout has been paraphrased and summarised for licensing compliance.
 
