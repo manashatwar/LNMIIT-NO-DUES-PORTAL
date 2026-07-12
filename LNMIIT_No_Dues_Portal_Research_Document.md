@@ -66,27 +66,26 @@ For each section below we answer three questions: **What does it do? · What doe
 - *Found:* only relevant for students who went through placement, so it clears quickly for everyone else.
 
 **LUCS**
-- *Does:* confirms event/club obligations are settled.
+- *Does:* 
 - *Needs:* an event report, submitted either as a file upload **or** a link.
-- *Found:* this is the clearest document-specific case, so "attach a file or a link" is treated as a first-class feature.
+- *Found:* 
 
 **Store**
 - *Does:* checks for any outstanding store material.
 - *Needs:* name and roll number.
-- *Found:* a simple, fast-clearing step, but an important link in the institutional chain.
 
 **Medical Cell**
 - *Does:* confirms no medical-cell dues, and can approve or reject with comments.
 - *Needs:* name and roll number.
 
 **NAD Cell**
-- *Does:* verifies the student as a separate clearance step in the process.
+- *Does:* 
 - *Needs:* the required identifying details (name, NAD-related details, roll number).
 
 **Sports**
 - *Does:* verifies whether any sports item or obligation is still pending.
 - *Needs:* name and roll number as the student-facing requirement.
-- *Found:* the decision is made office-side — the **GSAC General Secretary of the Sports Council and the Sports Secretary coordinate on sports equipment and records** between themselves; individual students are not part of that coordination. So in the portal the student only faces a single Sports clearance step, while the shared internal sign-off stays behind it.
+- *Found:* the decision is made office-side — the **GSAC General Secretary of the Sports Council and the Sports Secretary coordinate on sports equipment and records** between themselves; individual students are not part of that coordination.
 
 **Warden / Hostel**
 - *Does:* verifies vacancy / vacated-room status from the hostel side, then approves or rejects with written comments.
@@ -104,7 +103,7 @@ For each section below we answer three questions: **What does it do? · What doe
 - *Found:* bank verification naturally belongs here; a **Fund Us** voluntary contribution also sits near this final stage, consistent with the welfare-fund idea on institute no-dues forms.
 
 **Administration**
-- *Does:* the final approving authority; views the overall status across all sections and issues final approval only after every required section is cleared.
+- *Does:* the final approving authority; views the overall status across all sections and issues final approval only after every required section is cleared.It just keeps final No-dues form.
 - *Needs:* nothing from the student directly — it acts on the complete "all-green" picture.
 
 ---
