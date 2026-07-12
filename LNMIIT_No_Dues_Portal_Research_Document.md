@@ -49,23 +49,25 @@ A publicly available project automates the IIT Guwahati No Dues form using the *
 
 ---
 
-## 2. LNMIIT Sections — Roles, Requirements, and What We Found
+## 2. System Overview (from the Design)
 
-Based on how each LNMIIT section operates and on conversations with the people who run them. The institute has four departments — **CCE, CSE, ECE, MME** — and roll numbers are **alphanumeric** (e.g. `24UCC174` CCE, `24UCS124` CSE, `24UME034` MME), so the system treats roll number as text. A student first selects an **exit type**: **Graduation, NEP Exit, Withdrawal, or Admission Cancel**, which can change the rules that apply.
+This section gives a high-level picture of what we are building, so the design is easy to follow. The full technical design is maintained separately.
 
-| Section | What they do | Needs from student | Upload | What we found |
-|---|---|---|---|---|
-| **Central Library** | Confirm books returned, fines cleared; thesis/report submission for research students | Name, roll, submission proof | Yes | Genuine dependency (books/fines/thesis); staff want to *see* the document, not re-key it — strong OCR case |
-| **TPC (Placement)** | Confirm no placement-related obligation | Name, roll, placement doc | Yes | Only relevant for students who went through placement — good auto-approval case |
-| **LUCS** | Confirm event/club/equipment dues settled | **Event report (link or file)** | Yes | Document-driven; "attach a link or a file" must be first-class |
-| **Store** | Confirm no outstanding store material | Name, roll | — | Simple lookup; light, fast-clearing; verified later by HOD |
-| **Medical Cell** | Confirm no medical-cell dues | Name, roll | — | |
-| **NAD Cell** | Confirm records / National Academic Depository formalities | Name, NAD ID, roll | — | |
-| **Sports** | Confirm sports equipment returned, no dues | Name, roll | — | Runs **in coordination with the GSAC General Secretary, Sports Council** — the sign-off is shared, not one individual's |
-| **Warden (BH1–BH5, GH1)** | Confirm room vacated, no hostel dues; approve/reject | Hostel, **vacant room number** | — | Submission must route to the **student's own hostel warden only**; wardens verify and approve/reject **with a comment** |
-| **HOD (per dept.)** | Consolidating checkpoint over Store, LUCS, Sports, Medical, NAD, and Department-Purpose | **Dept. "No Dues Form" (name, roll)** | Yes (form) | HOD relies on sub-sections being clear + confirms the dept. form — maps cleanly to a hierarchy rule |
-| **Accounts** | Confirm no financial dues; process refund | Bank details + **cancelled cheque** | Yes | Cancelled-cheque upload belongs here, where bank verification actually happens |
-| **Administration** | Final authority; sees all-clear and gives final approval | — | — | Needs a single trustworthy "all-green" view before signing off |
+**What it is.** A web application that digitizes LNMIIT's student No Dues clearance from start to finish. A student initiates a request, selects an exit type, uploads the proof each section needs, and every institutional section independently approves or rejects with a written reason. Once all required sections are cleared, the student downloads a digital No-Dues certificate.
+
+**Who uses it.** Students, and the officers of each clearing section — Central Library, TPC/Placement, LUCS, Store, Medical Cell, NAD Cell, Sports, Warden, HOD, Accounts, and Administration.
+
+**Scope specifics.** Four departments (CCE, CSE, ECE, MME) and six hostels (BH1–BH5, GH1). Roll numbers are alphanumeric (e.g. `24UCC174`), so they are handled as text. Exit type is one of Graduation, NEP Exit, Withdrawal, or Admission Cancel, and it determines which sections a student must clear.
+
+**How clearance flows.**
+- Each section holds its own status (pending / approved / rejected) — the student sees all of them on one dashboard.
+- Sections review in parallel; the **HOD** consolidates Store, LUCS, Sports, Medical, NAD, and the department form; **Accounts** handles the refund; **Administration** gives the final approval.
+- A **rejection always carries a written reason**, and student and section share a comment thread.
+- A **reverse-hierarchy cascade** protects correctness: if a section that had cleared a student later reopens, every approval that depended on it resets to pending, so a stale approval can never leak a student through.
+
+**Routing and access.** A warden sees only their own hostel's students; an HOD sees only their own department's students; each officer sees only their own section. Sensitive data (bank details, cancelled cheque) is limited to Accounts and Administration.
+
+**Documents and OCR.** Uploads are capped at 50 KB (JPG/PNG/PDF); LUCS also accepts an event-report link. On upload, OCR reads the name and roll number to help the officer verify quickly, but it is advisory only — the original file is always kept and remains downloadable. Accounts collects a cancelled cheque for the refund, and an optional "Fund Us" contribution is captured at the start and shown on the final certificate.
 
 ---
 
