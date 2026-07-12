@@ -57,23 +57,19 @@ A publicly available project automates the IIT Guwahati No Dues form using the *
 
 ## 3. Why We Chose This Design
 
-Each decision solves a concrete LNMIIT problem. Stated plainly, the way we would defend them in a review.
+Each decision solves a concrete LNMIIT problem.
 
 - **Status per section, not one long form.** Sections clear in parallel and the student sees exactly where they are stuck on one dashboard. This is the model IIT Kanpur (DOAA) and NITK (IRIS) already run in production, so we are reusing a proven pattern rather than experimenting.
 
-- **Hierarchy enforced in code, with a reverse cascade.** The clearance is genuinely ordered — the HOD acts only after its sub-sections clear, and Administration acts only when everything is green. The reverse cascade is the reason the certificate is trustworthy: if a section that already cleared a student flips back to "due," every approval that depended on it automatically drops to pending. No student can slip out on a stale approval.
+- **Hierarchy enforced in code, with a reverse cascade.** The clearance is genuinely ordered ,the HOD acts only after its sub-sections clear, and Administration acts only when everything is green. The reverse cascade is the reason the certificate is trustworthy: if a section that already cleared a student flips back to "due," every approval that depended on it automatically drops to pending. No student can slip out on a stale approval.
 
 - **Every rejection carries a reason, with two-way comments.** A blocked student must know exactly what to fix. Clarification and re-submission happen inside the portal instead of over email or in person, which is where the paper process bleeds days.
 
-- **Routing is scoped.** A warden sees only their own hostel; an HOD sees only their own department. This keeps each queue clean and makes wrong-desk action impossible — so hostel and department are routing keys in the design, not just labels.
+- **Routing is scoped.** A warden sees only their own hostel; an HOD sees only their own department. This keeps each queue clean and makes wrong-desk action impossible ,so hostel and department are routing keys in the design, not just labels.
 
 - **OCR reads the document; the original is always kept.** On upload, OCR pulls the name and roll number so officers verify at a glance instead of opening every file. Because OCR is only as good as the scan, the original file stays the source of truth and remains downloadable. Uploads are capped at 50 KB to keep the portal fast, with guidance to submit the clearest scan that fits.
 
 ## Why Python + Django (and not another stack)
-
-- **The problem is a forms-and-approvals workflow, which is exactly what Django is built for.** Multi-role dashboards, file uploads, and a records-driven backend are core Django territory, so we spend our effort on LNMIIT's rules rather than on plumbing. This is validated in the field — the IIT Guwahati No Dues portal is itself a Django application with hierarchy enforcement. ([vaibz9697/No-Dues-Form](https://github.com/vaibz9697/No-Dues-Form))
-
-- **Django's built-in admin gives staff a management back office for free.** Adding students, sections, and officers needs almost no extra code — a real advantage for a small team that has to ship and maintain this.
 
 - **One language end-to-end.** The document-reading (OCR) step lives most naturally in Python via Tesseract/pytesseract, so keeping the backend in Python avoids stitching two ecosystems together.
 
