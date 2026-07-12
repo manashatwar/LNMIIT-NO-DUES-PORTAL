@@ -2,9 +2,9 @@
 
 *How other institutes run their No Dues process, what we found across LNMIIT's own sections, and the reasoning behind our design and technology choices.*
 
-
 **Project:** LNMIIT No Dues Portal
-
+**Prepared for:** Faculty mentor / co-founder review
+**Date:** July 2026
 
 ---
 
@@ -57,24 +57,36 @@ A publicly available project automates the IIT Guwahati No Dues form using the *
 
 ## 3. Why We Chose This Design
 
-Each decision solves a concrete LNMIIT problem.
+Each decision solves a concrete LNMIIT problem. Stated plainly, the way we would defend them in a review.
 
 - **Status per section, not one long form.** Sections clear in parallel and the student sees exactly where they are stuck on one dashboard. This is the model IIT Kanpur (DOAA) and NITK (IRIS) already run in production, so we are reusing a proven pattern rather than experimenting.
 
-- **Hierarchy enforced in code, with a reverse cascade.** The clearance is genuinely ordered ,the HOD acts only after its sub-sections clear, and Administration acts only when everything is green. The reverse cascade is the reason the certificate is trustworthy: if a section that already cleared a student flips back to "due," every approval that depended on it automatically drops to pending. No student can slip out on a stale approval.
+- **Hierarchy enforced in code, with a reverse cascade.** The clearance is genuinely ordered — the HOD acts only after its sub-sections clear, and Administration acts only when everything is green. The reverse cascade is the reason the certificate is trustworthy: if a section that already cleared a student flips back to "due," every approval that depended on it automatically drops to pending. No student can slip out on a stale approval.
 
 - **Every rejection carries a reason, with two-way comments.** A blocked student must know exactly what to fix. Clarification and re-submission happen inside the portal instead of over email or in person, which is where the paper process bleeds days.
 
-- **Routing is scoped.** A warden sees only their own hostel; an HOD sees only their own department. This keeps each queue clean and makes wrong-desk action impossible ,so hostel and department are routing keys in the design, not just labels.
+- **Routing is scoped.** A warden sees only their own hostel; an HOD sees only their own department. This keeps each queue clean and makes wrong-desk action impossible — so hostel and department are routing keys in the design, not just labels.
 
 - **OCR reads the document; the original is always kept.** On upload, OCR pulls the name and roll number so officers verify at a glance instead of opening every file. Because OCR is only as good as the scan, the original file stays the source of truth and remains downloadable. Uploads are capped at 50 KB to keep the portal fast, with guidance to submit the clearest scan that fits.
 
 ## Why Python + Django (and not another stack)
 
+- **The problem is a forms-and-approvals workflow, which is exactly what Django is built for.** Multi-role dashboards, file uploads, and a records-driven backend are core Django territory, so we spend our effort on LNMIIT's rules rather than on plumbing. This is validated in the field — the IIT Guwahati No Dues portal is itself a Django application with hierarchy enforcement. ([vaibz9697/No-Dues-Form](https://github.com/vaibz9697/No-Dues-Form))
+
+- **Django's built-in admin gives staff a management back office for free.** Adding students, sections, and officers needs almost no extra code — a real advantage for a small team that has to ship and maintain this.
+
 - **One language end-to-end.** The document-reading (OCR) step lives most naturally in Python via Tesseract/pytesseract, so keeping the backend in Python avoids stitching two ecosystems together.
 
 - **Team familiarity — Python is taught in our curriculum.** The people who will build and later hand this over already know Python from coursework. Choosing a stack we can actually staff and maintain is a practical call, not a theoretical one; a JavaScript-heavy stack (e.g. MERN) would add a learning curve without buying us anything for this kind of workflow.
 
+**Why these dependencies.** The stack is kept deliberately small — each library earns its place, and all are mature, widely used, and easy to hand over:
+
+- **Django** — carries the whole application: routing, the data models, forms, file uploads, user roles, and a ready-made admin back office. It removes the need for a pile of separate libraries, so one dependency covers most of the build.
+- **Tesseract + pytesseract** — the OCR engine that reads name and roll number off uploaded documents. Tesseract is the standard open-source OCR engine (free, no per-use cost, no data sent to any third party), and pytesseract lets us call it directly from Python.
+- **Pillow** — prepares each upload (resize/clean-up) before OCR so the text is read more reliably; it is the default image-handling library in Python and pairs naturally with pytesseract.
+- **PDF library (ReportLab / WeasyPrint)** — generates the final No-Dues certificate as a proper PDF the student can download, instead of a plain web page.
+
+We deliberately avoid heavier add-ons (background-job queues, search engines, cloud OCR services) because the portal's scale doesn't need them, and every extra dependency is one more thing to maintain and explain.
 
 ---
 
