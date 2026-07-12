@@ -75,7 +75,6 @@ Each decision solves a concrete LNMIIT problem.
 
 - **Team familiarity — Python is taught in our curriculum.** The people who will build and later hand this over already know Python from coursework. Choosing a stack we can actually staff and maintain is a practical call, not a theoretical one; a JavaScript-heavy stack (e.g. MERN) would add a learning curve without buying us anything for this kind of workflow.
 
-**Dependencies (kept deliberately small):** Django (web framework, ORM, admin), Tesseract + pytesseract with Pillow (OCR), and a PDF library (ReportLab/WeasyPrint) for the certificate. Nothing exotic — all mature, widely used, and easy to hand over.
 
 ---
 
