@@ -297,7 +297,7 @@ flowchart TB
     P -->|"officer approves<br/>(prereqs APPROVED,<br/>role+scope match)"| A[APPROVED]
     A -->|"upstream revert<br/>(reverse cascade)"| P
     P -->|"officer rejects<br/>(reason required)"| R[REJECTED]
-    R -->|"student re-submits"| P
+    R -->|"student<br/>re-submits"| P
 
     classDef state fill:#eef4ff,stroke:#1f6feb,stroke-width:1.5px,color:#0f2748,padding:10px;
     class P,A,R state;
