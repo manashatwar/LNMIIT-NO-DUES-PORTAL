@@ -57,7 +57,7 @@ For each section below we answer three questions: **What does it do? · What doe
 
 **Central Library**
 - *Does:* reviews the student's details and any document relevant to library clearance.
-- *Needs:* basic identity details, with document upload supported.
+- *Needs:* basic identity details, with central library form uploaded by the student.
 - *Found:* library checking can depend on document-based verification, so upload is a genuine requirement here, not optional.
 
 **TPC / Placement**
@@ -105,7 +105,7 @@ For each section below we answer three questions: **What does it do? · What doe
 **Administration**
 - *Does:* the final approving authority; views the overall status across all sections and issues final approval only after every required section is cleared.It just keeps final No-dues form.
 - *Needs:* nothing from the student directly — it acts on the complete "all-green" picture.
-
+Final form 
 ---
 
 ## 3. Design
