@@ -51,7 +51,7 @@ A publicly available project automates the IIT Guwahati No Dues form using the *
 
 ## 2. Design
 
-**See [`Design.md`](./Design.md)** for the full design and diagrams.
+**See [`Design.md`](./Design.md)** for the full design.
 
 ---
 
