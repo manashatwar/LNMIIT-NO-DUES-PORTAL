@@ -293,11 +293,12 @@ flowchart TD
 
 ```mermaid
 stateDiagram-v2
+    direction TB
     [*] --> PENDING
-    PENDING --> APPROVED: officer approves (prereqs APPROVED, role+scope match)
-    PENDING --> REJECTED: officer rejects (reason required)
+    PENDING --> APPROVED: officer approves<br/>(prereqs APPROVED,<br/>role+scope match)
+    APPROVED --> PENDING: upstream revert<br/>(reverse cascade)
+    PENDING --> REJECTED: officer rejects<br/>(reason required)
     REJECTED --> PENDING: student re-submits
-    APPROVED --> PENDING: upstream revert (reverse cascade)
 ```
 
 ### Approval rule
