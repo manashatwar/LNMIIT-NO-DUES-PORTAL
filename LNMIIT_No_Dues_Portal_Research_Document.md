@@ -2,6 +2,7 @@
 
 *How other institutes run their No Dues process, what we found across LNMIIT's own sections, and the reasoning behind our design and technology choices.*
 
+
 **Project:** LNMIIT No Dues Portal
 
 
