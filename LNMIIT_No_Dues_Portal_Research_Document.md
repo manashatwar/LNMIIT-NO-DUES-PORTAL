@@ -53,7 +53,7 @@ A publicly available project automates the IIT Guwahati No Dues form using the *
 
 The complete technical design of the LNMIIT No Dues Portal — architecture, data model, the approval engine (hierarchy and reverse-cascade), section flow, routing, OCR, certificate handling, and diagrams showing how the portal is structured — is maintained in a separate design document.
 
-**See [`design.md`](./design.md)** for the full design and diagrams.
+**See [`Design.md`](./Design.md)** for the full design and diagrams.
 
 ---
 
