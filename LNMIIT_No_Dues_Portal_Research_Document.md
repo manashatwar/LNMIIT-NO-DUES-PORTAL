@@ -49,77 +49,15 @@ A publicly available project automates the IIT Guwahati No Dues form using the *
 
 ---
 
-## 2. System Overview (from the Design)
+## 2. Design
 
-This section gives a high-level picture of what we are building, so the design is easy to follow. The full technical design is maintained separately.
+The complete technical design of the LNMIIT No Dues Portal — architecture, data model, the approval engine (hierarchy and reverse-cascade), section flow, routing, OCR, certificate handling, and diagrams showing how the portal is structured — is maintained in a separate design document.
 
-**What it is.** A web application that digitizes LNMIIT's student No Dues clearance from start to finish. A student initiates a request, selects an exit type, uploads the proof each section needs, and every institutional section independently approves or rejects with a written reason. Once all required sections are cleared, the student downloads a digital No-Dues certificate.
-
-**Who uses it.** Students, and the officers of each clearing section — Central Library, TPC/Placement, LUCS, Store, Medical Cell, NAD Cell, Sports, Warden, HOD, Accounts, and Administration.
-
-**Scope specifics.** Four departments (CCE, CSE, ECE, MME) and six hostels (BH1–BH5, GH1). Roll numbers are alphanumeric (e.g. `24UCC174`), so they are handled as text. Exit type is one of Graduation, NEP Exit, Withdrawal, or Admission Cancel, and it determines which sections a student must clear.
-
-**How clearance flows.**
-- Each section holds its own status (pending / approved / rejected) — the student sees all of them on one dashboard.
-- Sections review in parallel; the **HOD** consolidates Store, LUCS, Sports, Medical, NAD, and the department form; **Accounts** handles the refund; **Administration** gives the final approval.
-- A **rejection always carries a written reason**, and student and section share a comment thread.
-- A **reverse-hierarchy cascade** protects correctness: if a section that had cleared a student later reopens, every approval that depended on it resets to pending, so a stale approval can never leak a student through.
-
-**Routing and access.** A warden sees only their own hostel's students; an HOD sees only their own department's students; each officer sees only their own section. Sensitive data (bank details, cancelled cheque) is limited to Accounts and Administration.
-
-**Documents and OCR.** Uploads are capped at 50 KB (JPG/PNG/PDF); LUCS also accepts an event-report link. On upload, OCR reads the name and roll number to help the officer verify quickly, but it is advisory only — the original file is always kept and remains downloadable. Accounts collects a cancelled cheque for the refund, and an optional "Fund Us" contribution is captured at the start and shown on the final certificate.
+**See [`design.md`](./design.md)** for the full design and diagrams.
 
 ---
 
-## 3. Clearance Workflow
-
-The clearance follows the institute's official "Order of No Dues." The student picks an exit type and uploads proof to each section; independent sections review in parallel; the HOD consolidates a group of sections; Accounts handles the refund; and Administration gives the final approval. If a section that had already cleared a student later reverts to "due," the reverse-hierarchy cascade resets the dependent downstream approvals to pending.
-
-```mermaid
-flowchart TD
-    A([Student logs in]) --> B[Select exit type:<br/>Graduation / NEP Exit / Withdrawal / Admission Cancel]
-    B --> C[Upload required documents per section<br/>max 50 KB · OCR extracts name & roll]
-
-    C --> LIB[Central Library]
-    C --> TPC[TPC / Placement]
-    C --> WAR[Warden — own hostel only<br/>BH1..BH5 / GH1 · needs vacant room no.]
-    C --> STO[Store]
-    C --> LUCS[LUCS — event report link/file]
-    C --> SPO[Sports + GSAC Gen. Secretary]
-    C --> MED[Medical Cell]
-    C --> NAD[NAD Cell]
-    C --> DEP[Department Purpose<br/>No Dues Form upload]
-
-    STO --> HOD{HOD — CCE/CSE/ECE/MME<br/>consolidates sub-sections}
-    LUCS --> HOD
-    SPO --> HOD
-    MED --> HOD
-    NAD --> HOD
-    DEP --> HOD
-
-    LIB --> ACC[Accounts<br/>cancelled cheque + refund]
-    TPC --> ACC
-    WAR --> ACC
-    HOD --> ACC
-
-    ACC --> ADM{Administration<br/>final approval — all green?}
-    ADM -->|Yes| CERT([Download No-Dues Certificate<br/>+ Fund Us])
-    ADM -->|Any section reverts to due| RC[Reverse-hierarchy cascade:<br/>downstream approvals reset to pending]
-    RC -.-> HOD
-
-    classDef sec fill:#e8f1ff,stroke:#1f6feb,color:#0f2748;
-    classDef gate fill:#fdf3e2,stroke:#b7791f,color:#0f2748;
-    classDef done fill:#e4f6ec,stroke:#1a8f4c,color:#0f2748;
-    class LIB,TPC,WAR,STO,LUCS,SPO,MED,NAD,DEP,ACC sec;
-    class HOD,ADM gate;
-    class CERT done;
-```
-
-Every section supports approve/reject with a mandatory written reason and a two-way comment thread; these are omitted from the diagram to keep it readable.
-
----
-
-## 4. Why We Chose This Design and This Language
+## 3. Why We Chose This Design and This Language
 
 Every choice below earns its place by solving a specific LNMIIT problem. We reason only the decisions that genuinely need it.
 
@@ -149,7 +87,7 @@ Every choice below earns its place by solving a specific LNMIIT problem. We reas
 
 ---
 
-## 5. References
+## 4. References
 
 All links are official institute pages/PDFs, publicly published accounts, or public code repositories. Content throughout has been paraphrased and summarised for licensing compliance.
 
