@@ -51,37 +51,37 @@ A publicly available project automates the IIT Guwahati No Dues form using the *
 
 ## 2. Design
 
-**See [`Design.md`](./Design.md)** for the full design.
+The complete technical design of the LNMIIT No Dues Portal — architecture, data model, the approval engine (hierarchy and reverse-cascade), section flow, routing, OCR, certificate handling, and diagrams showing how the portal is structured — is maintained in a separate design document.
+
+**See [`Design.md`](./Design.md)** for the full design and diagrams.
 
 ---
 
-## 3. Why We Chose This Design and This Language
+## 3. Why We Chose This Design
 
-Every choice below earns its place by solving a specific LNMIIT problem. We reason only the decisions that genuinely need it.
+Each decision solves a concrete LNMIIT problem. Stated plainly, the way we would defend them in a review.
 
-> **Decision 1 — Each section holds its own status, not one long form.**
-> A single linear form blocks a student at one desk while other sections sit idle. Giving every section an independent status lets them work in parallel and gives the student one live view of exactly where they stand. This is the exact model IIT Kanpur (DOAA) and NITK (IRIS) run in production — we are reusing a proven pattern, not inventing one.
+- **Status per section, not one long form.** Sections clear in parallel and the student sees exactly where they are stuck on one dashboard. This is the model IIT Kanpur (DOAA) and NITK (IRIS) already run in production, so we are reusing a proven pattern rather than experimenting.
 
-> **Decision 2 — Enforce the hierarchy in code, and cascade in reverse.**
-> The clearance genuinely is hierarchical: the HOD only acts once Store, LUCS, Sports, Medical, NAD, and the Department form are clear; Administration only acts once everything is green. We enforce this so approvals can't be given out of order. The **reverse cascade** is the key safety net — if a section that already cleared a student flips back to "due," every approval that depended on it automatically resets to pending. Without this, a stale approval could let a student walk out with dues still open. The final certificate is only trustworthy because of this rule.
+- **Hierarchy enforced in code, with a reverse cascade.** The clearance is genuinely ordered — the HOD acts only after its sub-sections clear, and Administration acts only when everything is green. The reverse cascade is the reason the certificate is trustworthy: if a section that already cleared a student flips back to "due," every approval that depended on it automatically drops to pending. No student can slip out on a stale approval.
 
-> **Decision 3 — No rejection without a written reason, and comments both ways.**
-> NITK's experience shows that a blocked student needs to know *why* to fix it. So every rejection must carry a reason, and both the student and the section share a comment thread. Clarification and re-submission happen inside the portal instead of over email or in person — which is where the current paper process loses days.
+- **Every rejection carries a reason, with two-way comments.** A blocked student must know exactly what to fix. Clarification and re-submission happen inside the portal instead of over email or in person, which is where the paper process bleeds days.
 
-> **Decision 4 — A warden sees only their own hostel.**
-> A BH1 submission reaches the BH1 warden and no one else. This is a privacy rule and an operational one: it keeps each warden's queue clean and makes cross-hostel action impossible. Hostel is therefore a routing key in the design, not just a label on the screen.
+- **Routing is scoped.** A warden sees only their own hostel; an HOD sees only their own department. This keeps each queue clean and makes wrong-desk action impossible — so hostel and department are routing keys in the design, not just labels.
 
-> **Decision 5 — Python and Django for the build.**
-> Django fits this exact shape — a hierarchical, form-and-document workflow handling sensitive student data:
-> - **Security is built in.** Dues, refund bank details, and uploaded IDs are sensitive. Django ships with protection against CSRF, XSS, and SQL injection, so we don't hand-build security. ([Django security docs](https://docs.djangoproject.com/en/stable/topics/security/); [Django XSS escaping, MDN](https://developer.mozilla.org/en-US/docs/learn/Server-side/Django/web_application_security))
-> - **A free admin panel** lets staff manage students, sections, and records with almost no extra code — valuable for a small team.
-> - **It's already proven here.** An open-source IIT Guwahati No Dues portal runs on Django with hierarchy enforcement. ([vaibz9697/No-Dues-Form](https://github.com/vaibz9697/No-Dues-Form))
-> - **One language end-to-end**, because the OCR step (below) is easiest in Python.
->
-> We don't claim Django wins on every axis — only that security, the admin panel, ecosystem fit, and OCR integration are what matter for this project.
+- **OCR reads the document; the original is always kept.** On upload, OCR pulls the name and roll number so officers verify at a glance instead of opening every file. Because OCR is only as good as the scan, the original file stays the source of truth and remains downloadable. Uploads are capped at 50 KB to keep the portal fast, with guidance to submit the clearest scan that fits.
 
-> **Decision 6 — OCR reads the document, but the original is always kept.**
-> Officers shouldn't have to open and read every file to pull out a name and roll number. On upload, the portal runs OCR (Tesseract via the pytesseract Python wrapper — the most widely used open-source OCR engine) to extract those fields and check them against what the student typed. Because OCR accuracy depends on image quality, the original file stays the source of truth and remains downloadable. To keep files small yet legible, uploads are capped at **50 KB** with guidance to submit the highest quality that still fits.
+## Why Python + Django (and not another stack)
+
+- **The problem is a forms-and-approvals workflow, which is exactly what Django is built for.** Multi-role dashboards, file uploads, and a records-driven backend are core Django territory, so we spend our effort on LNMIIT's rules rather than on plumbing. This is validated in the field — the IIT Guwahati No Dues portal is itself a Django application with hierarchy enforcement. ([vaibz9697/No-Dues-Form](https://github.com/vaibz9697/No-Dues-Form))
+
+- **Django's built-in admin gives staff a management back office for free.** Adding students, sections, and officers needs almost no extra code — a real advantage for a small team that has to ship and maintain this.
+
+- **One language end-to-end.** The document-reading (OCR) step lives most naturally in Python via Tesseract/pytesseract, so keeping the backend in Python avoids stitching two ecosystems together.
+
+- **Team familiarity — Python is taught in our curriculum.** The people who will build and later hand this over already know Python from coursework. Choosing a stack we can actually staff and maintain is a practical call, not a theoretical one; a JavaScript-heavy stack (e.g. MERN) would add a learning curve without buying us anything for this kind of workflow.
+
+**Dependencies (kept deliberately small):** Django (web framework, ORM, admin), Tesseract + pytesseract with Pillow (OCR), and a PDF library (ReportLab/WeasyPrint) for the certificate. Nothing exotic — all mature, widely used, and easy to hand over.
 
 ---
 
