@@ -294,13 +294,17 @@ flowchart TD
 ```mermaid
 flowchart TB
     START(( )) --> P[PENDING]
-    P -->|"officer approves<br/>(prereqs APPROVED,<br/>role+scope match)"| A[APPROVED]
-    A -->|"upstream revert<br/>(reverse cascade)"| P
-    P -->|"officer rejects<br/>(reason required)"| R[REJECTED]
-    R -->|"student<br/>re-submits"| P
+    P -->|"officer approves (prereqs APPROVED, role+scope match)"| A[APPROVED]
+    A -->|"upstream revert (reverse cascade)"| M1(( )):::hidden
+    M1 --> P
+    P -->|"officer rejects (reason required)"| R[REJECTED]
+    R -->|"student re-submits"| M2(( )):::hidden
+    M2 --> P
 
-    classDef state fill:#eef4ff,stroke:#1f6feb,stroke-width:1.5px,color:#0f2748,padding:10px;
+    classDef state fill:#eef4ff,stroke:#1f6feb,stroke-width:1.5px,color:#0f2748;
+    classDef hidden fill:none,stroke:none,color:none;
     class P,A,R state;
+    class M1,M2 hidden;
 ```
 
 ### Approval rule
