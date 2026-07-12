@@ -75,14 +75,7 @@ Each decision solves a concrete LNMIIT problem.
 
 - **Team familiarity — Python is taught in our curriculum.** The people who will build and later hand this over already know Python from coursework. Choosing a stack we can actually staff and maintain is a practical call, not a theoretical one; a JavaScript-heavy stack (e.g. MERN) would add a learning curve without buying us anything for this kind of workflow.
 
-**Why these dependencies.** The stack is kept deliberately small — each library earns its place, and all are mature, widely used, and easy to hand over:
 
-- **Django** — carries the whole application: routing, the data models, forms, file uploads, user roles, and a ready-made admin back office. It removes the need for a pile of separate libraries, so one dependency covers most of the build.
-- **Tesseract + pytesseract** — the OCR engine that reads name and roll number off uploaded documents. Tesseract is the standard open-source OCR engine (free, no per-use cost, no data sent to any third party), and pytesseract lets us call it directly from Python.
-- **Pillow** — prepares each upload (resize/clean-up) before OCR so the text is read more reliably; it is the default image-handling library in Python and pairs naturally with pytesseract.
-- **PDF library (ReportLab / WeasyPrint)** — generates the final No-Dues certificate as a proper PDF the student can download, instead of a plain web page.
-
-We deliberately avoid heavier add-ons (background-job queues, search engines, cloud OCR services) because the portal's scale doesn't need them, and every extra dependency is one more thing to maintain and explain.
 
 
 ---
