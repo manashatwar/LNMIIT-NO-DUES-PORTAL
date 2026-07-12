@@ -49,6 +49,51 @@ A publicly available project automates the IIT Guwahati No Dues form using the *
 
 ---
 
+
+## Sections and Their Roles
+The portal should reflect the practical responsibilities of LNMIIT sections involved in the no-dues process. These include Central Library, TPC / Placement Section, LUCS, Store Section, Medical Cell, NAD Cell, Sports, Warden / Hostel Section, HOD / Department, Accounts, and Administration.
+
+Certain sections require simple identity-based checking, while others require uploaded proof or supporting records. The proposal therefore distinguishes between basic verification sections and document-driven sections, so the portal remains aligned with actual administrative work instead of forcing all sections into a single identical workflow.
+
+Central Library
+The Central Library should be able to review student details and any required document relevant to its clearance process. This section should include upload functionality because library verification may depend on document-based checking in addition to the student's basic identity details.
+
+TPC / Placement Section
+The TPC or Placement Section should have upload functionality and should be able to verify whether the student has any placement-related obligation that must be cleared before final approval.
+
+LUCS
+LUCS should support submission of an event report either as a file upload or as a link. This is one of the clearest examples of a section whose requirement is document-specific and should therefore be treated as a first-class feature in the portal.
+
+Store Section
+The Store Section should primarily require the student's name and roll number for its checking process. Its role is comparatively simple, but it remains important as part of the institutional clearance chain.
+
+Medical Cell
+The Medical Cell should require the student's name and roll number and should be able to approve or reject with comments where necessary.
+
+NAD Cell
+The NAD Cell should similarly support student verification using the required identifying details and should be treated as a separate clearance step within the process.
+
+Sports
+The Sports section should verify whether any sports-related item or obligation is still pending. It should use name and roll number as the student-facing requirement, while the internal decision-making may depend on coordination with the relevant office-bearers responsible for sports assets and records.
+
+Warden / Hostel Section
+The Warden section should be hostel-specific and should not function as one common queue for all hostels. LNMIIT hostel routing must distinguish BH1, BH2, BH3, BH4, BH5, and GH1, and a student submission should go only to the corresponding hostel authority.
+
+The warden should be able to verify vacancy or vacated-room status from the hostel side and then approve or reject with written comments. This routing rule is a major institutional requirement and should be treated as mandatory in the portal's design.
+
+HOD / Department
+The HOD should function as a departmental checkpoint rather than as an isolated section. The HOD's approval should depend on relevant subordinate clearances, including Store, LUCS, Sports, Medical Cell, NAD Cell, and the department-purpose no-dues form uploaded by the student.
+
+This reflects the idea that the HOD is not re-performing each subordinate office's work but confirming departmental clearance after those linked steps have already been satisfied.
+
+Accounts
+The Accounts section should act as the financial clearance stage. It should include a facility for uploading a cancelled cheque so that refund-related bank verification can be handled at the appropriate point in the process.
+
+The proposal also keeps space for a Fund Us option near the final stage, consistent with the idea of a voluntary contribution mechanism associated with final student exit documentation.
+
+Administration
+Administration should function as the final approving authority. It should be able to view the overall status across all sections and issue final approval only after every required section has been cleared.
+
 ## 2. Design
 
 **See [`Design.md`](./Design.md)** for the full design.
