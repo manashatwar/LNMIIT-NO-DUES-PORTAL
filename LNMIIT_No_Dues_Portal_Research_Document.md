@@ -49,13 +49,73 @@ A publicly available project automates the IIT Guwahati No Dues form using the *
 
 ---
 
-## 2. Design
+## 2. LNMIIT Sections and Their Roles
+
+The portal reflects the practical responsibilities of the LNMIIT sections involved in the no-dues process: Central Library, TPC / Placement, LUCS, Store, Medical Cell, NAD Cell, Sports, Warden / Hostel, HOD / Department, Accounts, and Administration. Some sections only need a simple identity check, while others depend on an uploaded document. The portal therefore separates **basic verification sections** from **document-driven sections** rather than forcing every section into one identical workflow.
+
+For each section below we answer three questions: **What does it do? · What does it need from the student? · What we found when we talked to them.**
+
+**Central Library**
+- *Does:* reviews the student's details and any document relevant to library clearance.
+- *Needs:* basic identity details, with document upload supported.
+- *Found:* library checking can depend on document-based verification, so upload is a genuine requirement here, not optional.
+
+**TPC / Placement**
+- *Does:* verifies whether the student has any placement-related obligation to clear before final approval.
+- *Needs:* identity details, with upload supported.
+- *Found:* only relevant for students who went through placement, so it clears quickly for everyone else.
+
+**LUCS**
+- *Does:* confirms event/club obligations are settled.
+- *Needs:* an event report, submitted either as a file upload **or** a link.
+- *Found:* this is the clearest document-specific case, so "attach a file or a link" is treated as a first-class feature.
+
+**Store**
+- *Does:* checks for any outstanding store material.
+- *Needs:* name and roll number.
+- *Found:* a simple, fast-clearing step, but an important link in the institutional chain.
+
+**Medical Cell**
+- *Does:* confirms no medical-cell dues, and can approve or reject with comments.
+- *Needs:* name and roll number.
+
+**NAD Cell**
+- *Does:* verifies the student as a separate clearance step in the process.
+- *Needs:* the required identifying details (name, NAD-related details, roll number).
+
+**Sports**
+- *Does:* verifies whether any sports item or obligation is still pending.
+- *Needs:* name and roll number as the student-facing requirement.
+- *Found:* the decision is made office-side — the **GSAC General Secretary of the Sports Council and the Sports Secretary coordinate on sports equipment and records** between themselves; individual students are not part of that coordination. So in the portal the student only faces a single Sports clearance step, while the shared internal sign-off stays behind it.
+
+**Warden / Hostel**
+- *Does:* verifies vacancy / vacated-room status from the hostel side, then approves or rejects with written comments.
+- *Needs:* hostel identity and the vacated room number.
+- *Found:* this must be **hostel-specific, not one common queue** — BH1, BH2, BH3, BH4, BH5, and GH1 are routed separately, and a submission goes only to the matching hostel authority. This routing rule is a major institutional requirement and is treated as mandatory.
+
+**HOD / Department**
+- *Does:* acts as a departmental checkpoint, confirming departmental clearance.
+- *Needs:* the department-purpose no-dues form uploaded by the student.
+- *Found:* the HOD's approval depends on the linked subordinate clearances — Store, LUCS, Sports, Medical Cell, NAD Cell, and the department form — so the HOD is not re-doing each office's work, only confirming it after those steps are satisfied.
+
+**Accounts**
+- *Does:* handles the financial clearance and refund stage.
+- *Needs:* bank details and a **cancelled cheque upload** for refund verification.
+- *Found:* bank verification naturally belongs here; a **Fund Us** voluntary contribution also sits near this final stage, consistent with the welfare-fund idea on institute no-dues forms.
+
+**Administration**
+- *Does:* the final approving authority; views the overall status across all sections and issues final approval only after every required section is cleared.
+- *Needs:* nothing from the student directly — it acts on the complete "all-green" picture.
+
+---
+
+## 3. Design
 
 **See [`Design.md`](./Design.md)** for the full design.
 
 ---
 
-## 3. Why We Chose This Design
+## 4. Why We Chose This Design
 
 Each decision solves a concrete LNMIIT problem.
 
@@ -80,7 +140,7 @@ Each decision solves a concrete LNMIIT problem.
 
 ---
 
-## 4. References
+## 5. References
 
 All links are official institute pages/PDFs, publicly published accounts, or public code repositories. Content throughout has been paraphrased and summarised for licensing compliance.
 
