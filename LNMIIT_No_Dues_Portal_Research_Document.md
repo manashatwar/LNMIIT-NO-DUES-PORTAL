@@ -3,9 +3,6 @@
 *How other institutes run their No Dues process, what we found across LNMIIT's own sections, and the reasoning behind our design and technology choices.*
 
 **Project:** LNMIIT No Dues Portal
-**Prepared for:** Faculty mentor / co-founder review
-**Date:** July 2026
-
 ---
 
 ## 1. Research: How Other Colleges Run No Dues
