@@ -57,7 +57,7 @@ For each section below we answer three questions: **What does it do? · What doe
 
 **Central Library**
 - *Does:* reviews the student's details and any document relevant to library clearance.
-- *Needs:* basic identity details, with central library form uploaded by the student.
+- *Needs:* basic identity details, with [central library form](./LNMIIT_DOCUMENTS/IMG-20260628-WA0009%20%281%29.jpg) uploaded by the student.
 - *Found:* library checking can depend on document-based verification, so upload is a genuine requirement here, not optional.
 
 **TPC / Placement**
@@ -94,7 +94,7 @@ For each section below we answer three questions: **What does it do? · What doe
 
 **HOD / Department**
 - *Does:* acts as a departmental checkpoint, confirming departmental clearance.
-- *Needs:* the department-purpose no-dues form uploaded by the student.
+- *Needs:* the [department-purpose no-dues form](./LNMIIT_DOCUMENTS/IMG-20260628-WA0008.jpg) uploaded by the student.
 - *Found:* the HOD's approval depends on the linked subordinate clearances — Store, LUCS, Sports, Medical Cell, NAD Cell, and the department form — so the HOD is not re-doing each office's work, only confirming it after those steps are satisfied.
 
 **Accounts**
@@ -105,7 +105,7 @@ For each section below we answer three questions: **What does it do? · What doe
 **Administration**
 - *Does:* the final approving authority; views the overall status across all sections and issues final approval only after every required section is cleared.It just keeps final No-dues form.
 - *Needs:* nothing from the student directly — it acts on the complete "all-green" picture.
-Final form 
+[Final form](./LNMIIT_DOCUMENTS/WhatsApp%20Image%202026-04-16%20at%207.02.53%20PM.jpeg)
 ---
 
 ## 3. Design
