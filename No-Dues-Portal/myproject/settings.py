@@ -25,7 +25,15 @@ SECRET_KEY = 'z=dqu984s9ps!l(2s)xqj!53852bc5%_+e3ayui#85z!j+a%%z'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
+
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:8000',
+    'http://127.0.0.1:8000',
+]
+
 
 
 # Application definition

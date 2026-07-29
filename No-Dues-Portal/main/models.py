@@ -42,24 +42,20 @@ class Student(models.Model):
 
 	def dept_status(self):
 		faculty_dept=Faculty.objects.filter(dept=self.dept)
-		dept_status =True
 		for fac in faculty_dept:
-			status = StudFacStatus.objects.get(faculty=fac, student=self).approval
-			if status == False:
-				dept_status = False
-				break
-		return dept_status
-
+			st = StudFacStatus.objects.filter(faculty=fac, student=self).first()
+			if not st or not st.approval:
+				return False
+		return True
 
 	def lab_status(self):
 		labs=Lab.objects.all()
-		lab_status =True
 		for lab in labs:
-			status = StudLabStatus.objects.get(lab=lab, student=self).approval
-			if status == False:
-				lab_status = False
-				break
-		return lab_status
+			st = StudLabStatus.objects.filter(lab=lab, student=self).first()
+			if not st or not st.approval:
+				return False
+		return True
+
 
 	def __unicode__(self):
 		return self.webmail
