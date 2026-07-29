@@ -54,6 +54,12 @@ export interface QueueStudent {
   name: string;
   webmail: string;
   approved: boolean;
+  hostel?: string;
+  vacant_room_no?: string;
+  btp_doc_title?: string;
+  btp_form_no?: string;
+  btp_plagiarism?: string;
+  offer_letter_name?: string;
 }
 
 export interface SectionQueue {

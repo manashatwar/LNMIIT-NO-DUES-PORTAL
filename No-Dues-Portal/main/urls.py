@@ -13,4 +13,5 @@ urlpatterns = [
     path('api/student/lab_detail/', api.student_lab_detail, name='student_lab_detail'),
     path('api/section/queue/', api.section_queue, name='section_queue'),
     path('api/section/save/', api.section_save, name='section_save'),
+    path('api/student/submit-intake/', api.submit_intake, name='submit_intake'),
 ]

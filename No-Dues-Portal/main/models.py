@@ -39,6 +39,12 @@ class Student(models.Model):
 	submit_thesis = models.BooleanField(default=False)
 	hod_approval = models.BooleanField(default=False)
 	account_approval = models.BooleanField(default=False)
+	intake_submitted = models.BooleanField(default=False)
+	vacant_room_no = models.CharField(max_length=50, default='', blank=True)
+	btp_doc_title = models.CharField(max_length=250, default='', blank=True)
+	btp_form_no = models.CharField(max_length=100, default='', blank=True)
+	btp_plagiarism = models.CharField(max_length=50, default='', blank=True)
+	offer_letter_name = models.CharField(max_length=250, default='', blank=True)
 
 	def dept_status(self):
 		faculty_dept=Faculty.objects.filter(dept=self.dept)

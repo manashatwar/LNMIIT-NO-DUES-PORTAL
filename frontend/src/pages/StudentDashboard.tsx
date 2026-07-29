@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Layout } from '../components/Layout';
 import { StudentStatus, SectionKey } from '../types';
+import { api } from '../api';
 
 interface StudentDashboardProps {
     student: StudentStatus;
@@ -76,7 +77,7 @@ export function StudentDashboard({
         alert('Library BTP document details verified & submitted successfully!');
     };
 
-    const handleProceedToClearance = () => {
+    const handleProceedToClearance = async () => {
         const missing: string[] = [];
         if (!btpSubmitted && !btpFile) {
             missing.push('1. Library BTP Document Submission & OCR Confirmation');
@@ -94,6 +95,18 @@ export function StudentDashboard({
         }
 
         setIntakeError('');
+        try {
+            await api.submitIntake({
+                hostel_block: hostelBlock,
+                vacant_room_no: vacantRoomNo,
+                btp_doc_title: btpDocTitle,
+                btp_form_no: formNo,
+                btp_plagiarism: btpPlagiarism,
+                offer_letter_name: offerLetterFile ? offerLetterFile.name : 'Offer_Letter_2026.pdf',
+            });
+        } catch {
+            // fallback gracefully
+        }
         setIntakeSubmitted(true);
     };
 

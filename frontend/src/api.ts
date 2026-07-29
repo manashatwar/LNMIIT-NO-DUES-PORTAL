@@ -72,4 +72,17 @@ export const api = {
             method: 'POST',
             body: JSON.stringify({ approvals }),
         }),
+
+    submitIntake: (data: {
+        hostel_block?: string;
+        vacant_room_no?: string;
+        btp_doc_title?: string;
+        btp_form_no?: string;
+        btp_plagiarism?: string;
+        offer_letter_name?: string;
+    }) =>
+        request<{ ok: boolean; student: StudentStatus }>('/api/student/submit-intake/', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        }),
 };

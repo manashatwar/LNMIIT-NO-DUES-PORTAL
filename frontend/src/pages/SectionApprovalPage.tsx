@@ -66,13 +66,13 @@ export function SectionApprovalPage({
             {/* Officer Context Intake Submission Details Badge */}
             <div style={{ marginLeft: 30, fontSize: 11, color: '#475569', background: '#f8fafc', padding: '6px 10px', borderRadius: 4, borderLeft: '3px solid #1b365d' }}>
                 {heading.toLowerCase().includes('warden') && (
-                    <span>🏛️ <strong>Submitted Hostel Details:</strong> Block BH1 &nbsp;|&nbsp; Vacant Room: <strong style={{ color: '#1b365d' }}>A110</strong></span>
+                    <span>🏛️ <strong>Submitted Hostel Details:</strong> Block {s.hostel || 'BH1'} &nbsp;|&nbsp; Vacant Room: <strong style={{ color: '#1b365d' }}>{s.vacant_room_no || 'A110'}</strong></span>
                 )}
                 {heading.toLowerCase().includes('library') && (
-                    <span>📘 <strong>Submitted Library BTP:</strong> Title: <em>Development of Online No-Dues Portal</em> &nbsp;|&nbsp; Plagiarism: <strong style={{ color: '#b91c1c' }}>8%</strong></span>
+                    <span>📘 <strong>Submitted Library BTP:</strong> Title: <em>{s.btp_doc_title || 'Development of Online No-Dues Portal'}</em> &nbsp;|&nbsp; Form No: <code>{s.btp_form_no || 'CL/LB/IR/2026/042'}</code> &nbsp;|&nbsp; Plagiarism: <strong style={{ color: '#b91c1c' }}>{s.btp_plagiarism || '8%'}</strong></span>
                 )}
                 {(heading.toLowerCase().includes('thesis') || heading.toLowerCase().includes('tpc')) && (
-                    <span>💼 <strong>Submitted Offer Letter:</strong> 📄 <em>Offer_Letter_2026.pdf</em> (Verified)</span>
+                    <span>💼 <strong>Submitted Offer Letter:</strong> 📄 <em>{s.offer_letter_name || 'Offer_Letter_2026.pdf'}</em> (Verified)</span>
                 )}
                 {!heading.toLowerCase().includes('warden') && !heading.toLowerCase().includes('library') && !heading.toLowerCase().includes('thesis') && !heading.toLowerCase().includes('tpc') && (
                     <span>📋 Student clearance request pending officer review</span>

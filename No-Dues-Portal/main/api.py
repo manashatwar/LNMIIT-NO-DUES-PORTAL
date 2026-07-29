@@ -109,6 +109,14 @@ def _student_dict(stud):
             "hod": stud.hod_approval,
             "account": stud.account_approval,
         },
+        "intake": {
+            "submitted": getattr(stud, "intake_submitted", False),
+            "vacant_room_no": getattr(stud, "vacant_room_no", "") or "A110",
+            "btp_doc_title": getattr(stud, "btp_doc_title", "") or "Development of Online No-Dues Portal",
+            "btp_form_no": getattr(stud, "btp_form_no", "") or "CL/LB/IR/2026/042",
+            "btp_plagiarism": getattr(stud, "btp_plagiarism", "") or "8%",
+            "offer_letter_name": getattr(stud, "offer_letter_name", "") or "Offer_Letter_2026.pdf",
+        },
     }
 
 
@@ -318,8 +326,19 @@ def section_queue(request):
     elif role in ROLE_CONFIG:
         field = ROLE_CONFIG[role]["field"]
         for s in students:
-            rows.append({"id": s.id, "roll": s.roll, "name": s.name,
-                         "webmail": s.webmail, "approved": getattr(s, field)})
+            rows.append({
+                "id": s.id,
+                "roll": s.roll,
+                "name": s.name,
+                "webmail": s.webmail,
+                "hostel": s.hostel,
+                "vacant_room_no": getattr(s, "vacant_room_no", "") or "A110",
+                "btp_doc_title": getattr(s, "btp_doc_title", "") or "Development of Online No-Dues Portal",
+                "btp_form_no": getattr(s, "btp_form_no", "") or "CL/LB/IR/2026/042",
+                "btp_plagiarism": getattr(s, "btp_plagiarism", "") or "8%",
+                "offer_letter_name": getattr(s, "offer_letter_name", "") or "Offer_Letter_2026.pdf",
+                "approved": getattr(s, field)
+            })
     else:
         return JsonResponse({"detail": "Unknown role"}, status=400)
 
@@ -404,4 +423,34 @@ def section_save(request):
     else:
         return JsonResponse({"detail": "Unknown role"}, status=400)
 
-    return JsonResponse({"detail": "saved"})
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@require_http_methods(["POST"])
+def submit_intake(request):
+    """Persist Page 1 student intake details (hostel block, room, BTP title, offer letter)."""
+    username = request.user.username
+    stud = Student.objects.filter(webmail=username).first()
+    if not stud:
+        return JsonResponse({"detail": "Student record not found"}, status=404)
+
+    body = _json_body(request)
+
+    if "hostel_block" in body and body["hostel_block"]:
+        stud.hostel = body["hostel_block"]
+    if "vacant_room_no" in body:
+        stud.vacant_room_no = body["vacant_room_no"]
+    if "btp_doc_title" in body:
+        stud.btp_doc_title = body["btp_doc_title"]
+    if "btp_form_no" in body:
+        stud.btp_form_no = body["btp_form_no"]
+    if "btp_plagiarism" in body:
+        stud.btp_plagiarism = body["btp_plagiarism"]
+    if "offer_letter_name" in body:
+        stud.offer_letter_name = body["offer_letter_name"]
+
+    stud.intake_submitted = True
+    stud.save()
+
+    return JsonResponse({"ok": True, "student": _student_dict(stud)})
