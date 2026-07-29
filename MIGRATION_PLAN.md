@@ -13,9 +13,9 @@
 We are modernizing the institute's No-Dues (student clearance) process. There are two parts to the codebase:
 
 1. **`No-Dues-Portal/`** — the original Django backend. It works, but it was built for **IIT Guwahati**, not LNMIIT. Its sections, roll-number format, and approval order do not match our [`Design.md`](./Design.md). It needs a structured rebuild.
-2. **`frontend/`** — a new React web app. Its screens have been rebuilt to **look exactly like** the original portal, using the correct **LNMIIT** sections. It currently runs on sample data and is not yet connected to the backend.
+2. **`frontend/`** — a new React web app that looks like the original portal and is now **connected to the existing Django backend** end-to-end (login, student dashboard, officer approvals all work against the real database). It currently shows the original **IIT-G** sections. See [`BACKEND_CONNECTION.md`](./BACKEND_CONNECTION.md) for how it connects and how to run it.
 
-**Where we are:** the new frontend look-and-feel is complete (Phase 1). **What's next:** rebuild the Django backend to the design, then connect the two, then add automated correctness tests.
+**Where we are:** the React frontend is built and connected to the existing backend (Phases 1 and 1.5 done). **What's next:** rebuild the Django backend to the LNMIIT design, then switch the UI to the LNMIIT sections, then add automated correctness tests.
 
 **Business value of the redesign:** trustworthy certificates (an approval can't be bypassed), correct hostel/department routing (no wrong-desk actions), document uploads with OCR assistance, and a voluntary welfare-fund ("Fund Us") contribution — all defined in [`Design.md`](./Design.md).
 
@@ -55,29 +55,31 @@ We are modernizing the institute's No-Dues (student clearance) process. There ar
 
 ---
 
-## 2. React Frontend (`frontend/`)
+## 2. React Frontend (`frontend/`) — connected to the existing backend
+
+The React app has replaced all the Django HTML templates and is now **wired to the existing Django backend** over a JSON API (via a Vite dev proxy). It shows the backend's real **IIT-G sections**. Full details of that connection are in [`BACKEND_CONNECTION.md`](./BACKEND_CONNECTION.md).
 
 ### 2.1 What's present today
 
-| File | Mirrors (old Django template) | Status |
+| File | Purpose | Status |
 |---|---|---|
 | `src/index.css` | Bootstrap 3 styling (grid, navbar, panels, well, login card) | ✅ |
-| `src/components/Layout.tsx` | `base.html` (logo header, dark navbar, footer) | ✅ |
-| `src/pages/LoginPage.tsx` | `login.html` | ✅ |
-| `src/pages/StudentDashboard.tsx` | `student.html` (color-coded section panels) | ✅ |
-| `src/pages/SectionApprovalPage.tsx` | all officer approval pages (Not Approved / Approved split) | ✅ |
-| `src/pages/RulesPage.tsx`, `ContactPage.tsx` | `rules.html`, `contact.html` | ✅ |
-| `src/App.tsx` | role-based routing + sample data + client-side cascade demo | ✅ |
-| `src/types.ts` | LNMIIT domain types (text roll, CCE/CSE/ECE/MME, BH1–BH5/GH1, 11 sections) | ✅ |
+| `src/components/Layout.tsx` | Logo header, dark navbar, footer (was `base.html`) | ✅ |
+| `src/pages/LoginPage.tsx` | Login screen wired to real auth (was `login.html`) | ✅ |
+| `src/pages/StudentDashboard.tsx` | Live status matrix, all boxes clickable (was `student.html`) | ✅ |
+| `src/pages/StudentDetailPage.tsx` | Department / Labs breakdown (was `student_dept_detail.html` / `student_lab_detail.html`) | ✅ |
+| `src/pages/SectionApprovalPage.tsx` | Officer queue with live approve/save (was all officer templates) | ✅ |
+| `src/pages/RulesPage.tsx`, `ContactPage.tsx` | Static info pages | ✅ |
+| `src/api.ts` | Typed API client (fetch + CSRF handling) | ✅ |
+| `src/App.tsx` | Session restore, role-based routing, login/logout/save | ✅ |
+| `src/types.ts` | Types matching the existing backend (IIT-G sections) | ✅ |
+| `vite.config.ts` | `/api` → Django dev proxy | ✅ |
 
-Screens use the **correct LNMIIT section set** from [Section Flow](./Design.md#section-flow) and follow the routes in [Screen Flow & Routes](./Design.md#screen-flow--routes).
-
-### 2.2 What's missing
+### 2.2 What's still to come (LNMIIT redesign)
 
 | Item | Design reference | Status |
 |---|---|---|
-| Real backend connection (currently sample data in `App.tsx`) | [Architecture](./Design.md#architecture) | ❌ |
-| Real login/session auth | [Access Control & Security](./Design.md#access-control--security) | ❌ |
+| Switch UI to the LNMIIT section set | [Section Flow](./Design.md#section-flow) | ❌ |
 | Student initiation screen (exit type + Fund-Us) | [Screen Flow & Routes](./Design.md#screen-flow--routes) | ❌ |
 | Per-section document upload / LUCS link | [Upload Handling](./Design.md#upload-handling) | ❌ |
 | Officer review screen (document + OCR view, approve/reject with reason) | [OCR Pipeline](./Design.md#ocr-pipeline) · [Component 2: Approval Engine](./Design.md#component-2-approval-engine) | ❌ |
@@ -89,11 +91,14 @@ Screens use the **correct LNMIIT section set** from [Section Flow](./Design.md#s
 
 | Phase | Work | Design reference | Status |
 |---|---|---|---|
-| **1** | React shell: pages matching the old portal, on sample data | [Screen Flow & Routes](./Design.md#screen-flow--routes) | ✅ Done |
-| **2** | Django rebuild: new data models, approval engine (gating + transactional cascade), upload handler, OCR, certificate generator, REST API | [Data Models](./Design.md#data-models) · [Approval Engine](./Design.md#approval-engine) · [Upload Handling](./Design.md#upload-handling) · [OCR Pipeline](./Design.md#ocr-pipeline) · [Component 5: Certificate Generator](./Design.md#component-5-certificate-generator) | ❌ Next |
-| **3** | Connect React ↔ Django: auth, student initiate/upload/dashboard, officer queue/review, certificate download | [Architecture](./Design.md#architecture) · [Screen Flow & Routes](./Design.md#screen-flow--routes) | ❌ |
+| **1** | React shell: pages matching the old portal | [Screen Flow & Routes](./Design.md#screen-flow--routes) | ✅ Done |
+| **1.5** | Connect React to the **existing** backend (JSON API, session auth, Vite proxy, demo seed) — IIT-G sections | [Architecture](./Design.md#architecture) · see [`BACKEND_CONNECTION.md`](./BACKEND_CONNECTION.md) | ✅ Done |
+| **2** | Django rebuild to the design: new data models, approval engine (gating + transactional cascade), upload handler, OCR, certificate generator | [Data Models](./Design.md#data-models) · [Approval Engine](./Design.md#approval-engine) · [Upload Handling](./Design.md#upload-handling) · [OCR Pipeline](./Design.md#ocr-pipeline) · [Component 5: Certificate Generator](./Design.md#component-5-certificate-generator) | ❌ Next |
+| **3** | Switch React to the LNMIIT sections + add initiate/upload/review/certificate screens | [Screen Flow & Routes](./Design.md#screen-flow--routes) | ❌ |
 | **4** | Automated correctness tests (Hypothesis) for Properties 1–12 | [Correctness Properties](./Design.md#correctness-properties) · [Testing Strategy](./Design.md#testing-strategy) | ❌ |
 
-**Immediate next step:** Phase 2 — rebuild the Django backend to match [`Design.md`](./Design.md), starting with the [Data Models](./Design.md#data-models) and the [Approval Engine](./Design.md#approval-engine).
+**Current state:** the React app is fully connected to the original backend and works end-to-end (login → dashboard → officer approvals). See [`BACKEND_CONNECTION.md`](./BACKEND_CONNECTION.md) to run it.
+
+**Next step:** Phase 2 — rebuild the Django backend to match [`Design.md`](./Design.md), starting with the [Data Models](./Design.md#data-models) and the [Approval Engine](./Design.md#approval-engine).
 
 **Tools required for Phase 2** (see [Dependencies](./Design.md#dependencies)): Django, pytesseract + Tesseract engine, Pillow, and a PDF library (ReportLab or WeasyPrint).
