@@ -8,7 +8,7 @@
 
 ---
 
-## Executive Summary (for the manager)
+## Executive Summary 
 
 We are modernizing the institute's No-Dues (student clearance) process. There are two parts to the codebase:
 
