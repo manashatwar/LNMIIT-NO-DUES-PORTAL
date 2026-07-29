@@ -14,72 +14,124 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 
 from .models import (
-    Student, Faculty, Lab, Caretaker, Warden, Gymkhana, Library,
-    OnlineCC, CC, SubmitThesis, asstreg, HOD, Account,
-    StudFacStatus, StudLabStatus,
+    Account,
+    Faculty,
+    HOD,
+    Lab,
+    Library,
+    Student,
+    StudFacStatus,
+    StudLabStatus,
+    SupportOffice,
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Role configuration
-#
-# Each officer role maps to a boolean field on Student, an optional scope
-# (hostel/dept), the profile model that authorises the role, an optional queue
-# filter, and the downstream fields to reset when clearance is revoked
-# (reverse-hierarchy cascade — mirrors the original views).
 # ─────────────────────────────────────────────────────────────────────────────
 
 ROLE_CONFIG = {
-    "Caretaker": {
-        "model": Caretaker, "field": "caretaker_approval", "scope": "hostel",
+    "BH1 Support": {
+        "model": SupportOffice,
+        "role_name": "BH1 Support",
+        "field": "bh1_approval",
+        "scope": "hostel",
         "queue_extra": {},
-        "resets": ["warden_approval", "assistant_registrar_approval", "hod_approval", "account_approval"],
-    },
-    "Warden": {
-        "model": Warden, "field": "warden_approval", "scope": "hostel",
-        "queue_extra": {"caretaker_approval": True},
-        "resets": ["assistant_registrar_approval", "hod_approval", "account_approval"],
-    },
-    "Gymkhana": {
-        "model": Gymkhana, "field": "gymkhana_approval", "scope": None,
-        "queue_extra": {},
-        "resets": ["assistant_registrar_approval", "hod_approval", "account_approval"],
-    },
-    "OnlineCC": {
-        "model": OnlineCC, "field": "online_cc_approval", "scope": None,
-        "queue_extra": {},
-        "resets": ["cc_approval", "hod_approval", "account_approval"],
-    },
-    "CC": {
-        "model": CC, "field": "cc_approval", "scope": None,
-        "queue_extra": {"online_cc_approval": True},
+        "feedback_key": "bh1_support",
         "resets": ["hod_approval", "account_approval"],
     },
-    "Thesis Manager": {
-        "model": SubmitThesis, "field": "submit_thesis", "scope": None,
+    "BH2 Support": {
+        "model": SupportOffice,
+        "role_name": "BH2 Support",
+        "field": "bh2_approval",
+        "scope": "hostel",
         "queue_extra": {},
-        "resets": ["library_approval", "hod_approval", "account_approval"],
+        "feedback_key": "bh2_support",
+        "resets": ["hod_approval", "account_approval"],
+    },
+    "BH3 Support": {
+        "model": SupportOffice,
+        "role_name": "BH3 Support",
+        "field": "bh3_approval",
+        "scope": "hostel",
+        "queue_extra": {},
+        "feedback_key": "bh3_support",
+        "resets": ["hod_approval", "account_approval"],
+    },
+    "BH5 Support": {
+        "model": SupportOffice,
+        "role_name": "BH5 Support",
+        "field": "bh5_approval",
+        "scope": "hostel",
+        "queue_extra": {},
+        "feedback_key": "bh5_support",
+        "resets": ["hod_approval", "account_approval"],
     },
     "Library": {
-        "model": Library, "field": "library_approval", "scope": None,
-        "queue_extra": {"submit_thesis": True},
+        "model": Library,
+        "field": "library_approval",
+        "scope": None,
+        "queue_extra": {},
+        "feedback_key": "library",
         "resets": ["hod_approval", "account_approval"],
     },
-    "Assistant Registrar": {
-        "model": asstreg, "field": "assistant_registrar_approval", "scope": None,
-        "queue_extra": {"caretaker_approval": True, "warden_approval": True, "gymkhana_approval": True},
+    "Store Release": {
+        "model": SupportOffice,
+        "role_name": "Store Release",
+        "field": "store_release_approval",
+        "scope": None,
+        "queue_extra": {},
+        "feedback_key": "store_release",
+        "resets": ["hod_approval", "account_approval"],
+    },
+    "LUCS": {
+        "model": SupportOffice,
+        "role_name": "LUCS",
+        "field": "lucs_approval",
+        "scope": None,
+        "queue_extra": {},
+        "feedback_key": "lucs",
+        "resets": ["hod_approval", "account_approval"],
+    },
+    "Sports": {
+        "model": SupportOffice,
+        "role_name": "Sports",
+        "field": "sports_approval",
+        "scope": None,
+        "queue_extra": {},
+        "feedback_key": "sports",
+        "resets": ["hod_approval", "account_approval"],
+    },
+    "Medical Unit": {
+        "model": SupportOffice,
+        "role_name": "Medical Unit",
+        "field": "medical_unit_approval",
+        "scope": None,
+        "queue_extra": {},
+        "feedback_key": "medical_unit",
+        "resets": ["hod_approval", "account_approval"],
+    },
+    "NAD Cell": {
+        "model": SupportOffice,
+        "role_name": "NAD Cell",
+        "field": "nad_cell_approval",
+        "scope": None,
+        "queue_extra": {},
+        "feedback_key": "nad_cell",
         "resets": ["hod_approval", "account_approval"],
     },
     "Account": {
-        "model": Account, "field": "account_approval", "scope": None,
+        "model": Account,
+        "field": "account_approval",
+        "scope": None,
         "queue_extra": {"hod_approval": True},
+        "feedback_key": "account",
         "resets": [],
     },
 }
 
-# Roles handled with bespoke logic
-SPECIAL_ROLES = {"Student", "Faculty", "Lab", "HOD"}
-
-ALL_ROLES = ["Student"] + list(ROLE_CONFIG.keys()) + ["Faculty", "Lab", "HOD"]
+SPECIAL_ROLES = {"Student", "Faculty", "HOD", "Account"}
+HOSTEL_SUPPORT_ROLES = {"BH1 Support", "BH2 Support", "BH3 Support", "BH5 Support"}
+ALL_ROLES = ["Student", "Faculty", "HOD", "Account", "Hostel Support"] + list(ROLE_CONFIG.keys())
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -96,27 +148,31 @@ def _student_dict(stud):
         "dept": stud.dept,
         "hostel": stud.hostel,
         "sections": {
-            "caretaker": stud.caretaker_approval,
-            "gymkhana": stud.gymkhana_approval,
-            "online_cc": stud.online_cc_approval,
             "department": stud.dept_status(),
             "labs": stud.lab_status(),
-            "warden": stud.warden_approval,
+            "bh1_support": stud.bh1_approval,
+            "bh2_support": stud.bh2_approval,
+            "bh3_support": stud.bh3_approval,
+            "bh5_support": stud.bh5_approval,
             "library": stud.library_approval,
-            "cc": stud.cc_approval,
-            "thesis": stud.submit_thesis,
-            "assistant_registrar": stud.assistant_registrar_approval,
+            "store_release": stud.store_release_approval,
+            "lucs": stud.lucs_approval,
+            "sports": stud.sports_approval,
+            "medical_unit": stud.medical_unit_approval,
+            "nad_cell": stud.nad_cell_approval,
             "hod": stud.hod_approval,
             "account": stud.account_approval,
         },
         "intake": {
             "submitted": getattr(stud, "intake_submitted", False),
+            "hostel_block": getattr(stud, "hostel", "") or "BH1",
             "vacant_room_no": getattr(stud, "vacant_room_no", "") or "A110",
             "btp_doc_title": getattr(stud, "btp_doc_title", "") or "Development of Online No-Dues Portal",
             "btp_form_no": getattr(stud, "btp_form_no", "") or "CL/LB/IR/2026/042",
             "btp_plagiarism": getattr(stud, "btp_plagiarism", "") or "8%",
             "offer_letter_name": getattr(stud, "offer_letter_name", "") or "Offer_Letter_2026.pdf",
         },
+        "feedbacks": getattr(stud, "section_feedback", {}) or {},
     }
 
 
@@ -124,15 +180,16 @@ def _profile_for(role, webmail):
     """Return the officer profile row that authorises `role` for `webmail`."""
     if role in ROLE_CONFIG:
         model = ROLE_CONFIG[role]["model"]
-    elif role == "Faculty":
-        model = Faculty
-    elif role == "Lab":
-        model = Lab
-    elif role == "HOD":
-        model = HOD
-    else:
-        return None
-    return model.objects.filter(webmail=webmail).first()
+        if model is SupportOffice:
+            return model.objects.filter(webmail=webmail, office_role=ROLE_CONFIG[role]["role_name"]).first()
+        return model.objects.filter(webmail=webmail).first()
+    if role == "Faculty":
+        return Faculty.objects.filter(webmail=webmail).first()
+    if role == "HOD":
+        return HOD.objects.filter(webmail=webmail).first()
+    if role == "Account":
+        return Account.objects.filter(webmail=webmail).first()
+    return None
 
 
 def _acting_role(request):
@@ -153,7 +210,6 @@ def _json_body(request):
 @ensure_csrf_cookie
 @require_http_methods(["GET"])
 def csrf(request):
-    """Set the csrftoken cookie so the SPA can send X-CSRFToken on writes."""
     return JsonResponse({"detail": "ok"})
 
 
@@ -173,20 +229,23 @@ def login_api(request):
     if user is None or not user.is_active:
         return JsonResponse({"detail": "Invalid credentials"}, status=401)
 
-    # Verify the selected role matches a profile row for this webmail (username).
-    if role == "Student":
-        profile = Student.objects.filter(webmail=username).first()
+    if role == "Hostel Support":
+        profile = SupportOffice.objects.filter(webmail=username, office_role__in=HOSTEL_SUPPORT_ROLES).first()
+        if profile is None:
+            return JsonResponse({"detail": "Invalid role for this account"}, status=403)
+        actual_role = profile.office_role
     else:
-        profile = _profile_for(role, username)
+        profile = Student.objects.filter(webmail=username).first() if role == "Student" else _profile_for(role, username)
+        actual_role = role
     if profile is None:
         return JsonResponse({"detail": "Invalid role for this account"}, status=403)
 
     login(request, user)
-    request.session["role"] = role
+    request.session["role"] = actual_role
 
     return JsonResponse({
         "username": username,
-        "role": role,
+        "role": actual_role,
         "name": getattr(profile, "name", username),
     })
 
@@ -234,7 +293,6 @@ def student_status(request):
 @login_required
 @require_http_methods(["GET"])
 def student_dept_detail(request):
-    """Per-faculty approval breakdown for the logged-in student's department."""
     stud = Student.objects.filter(webmail=request.user.username).first()
     if stud is None:
         return JsonResponse({"detail": "Student record not found"}, status=404)
@@ -249,7 +307,6 @@ def student_dept_detail(request):
 @login_required
 @require_http_methods(["GET"])
 def student_lab_detail(request):
-    """Per-lab approval breakdown for the logged-in student."""
     stud = Student.objects.filter(webmail=request.user.username).first()
     if stud is None:
         return JsonResponse({"detail": "Student record not found"}, status=404)
@@ -265,13 +322,12 @@ def student_lab_detail(request):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _queue_students(role, username):
-    """Return the scoped student queryset for an officer role."""
     if role in ROLE_CONFIG:
         cfg = ROLE_CONFIG[role]
         qs = Student.objects.all()
         if cfg["scope"] == "hostel":
-            profile = cfg["model"].objects.filter(webmail=username).first()
-            qs = qs.filter(hostel=profile.hostel) if profile else Student.objects.none()
+            profile = _profile_for(role, username)
+            qs = qs.filter(hostel=getattr(profile, "hostel", "")) if profile else Student.objects.none()
         if cfg["queue_extra"]:
             qs = qs.filter(**cfg["queue_extra"])
         return qs.order_by("roll")
@@ -281,16 +337,22 @@ def _queue_students(role, username):
         if hod is None:
             return Student.objects.none()
         return Student.objects.filter(
-            dept=hod.dept, assistant_registrar_approval=True,
-            library_approval=True, cc_approval=True,
+            dept=hod.dept,
+            bh1_approval=True,
+            bh2_approval=True,
+            bh3_approval=True,
+            bh5_approval=True,
+            library_approval=True,
+            store_release_approval=True,
+            lucs_approval=True,
+            sports_approval=True,
+            medical_unit_approval=True,
+            nad_cell_approval=True,
         ).order_by("roll")
 
     if role == "Faculty":
         fac = Faculty.objects.filter(webmail=username).first()
         return Student.objects.filter(dept=fac.dept).order_by("roll") if fac else Student.objects.none()
-
-    if role == "Lab":
-        return Student.objects.all().order_by("roll")
 
     return Student.objects.none()
 
@@ -312,19 +374,13 @@ def section_queue(request):
             st = StudFacStatus.objects.filter(student=s, faculty=fac).first()
             rows.append({"id": s.id, "roll": s.roll, "name": s.name,
                          "webmail": s.webmail, "approved": bool(st and st.approval)})
-    elif role == "Lab":
-        lab = Lab.objects.filter(webmail=username).first()
-        for s in students:
-            st = StudLabStatus.objects.filter(student=s, lab=lab).first()
-            rows.append({"id": s.id, "roll": s.roll, "name": s.name,
-                         "webmail": s.webmail, "approved": bool(st and st.approval)})
     elif role == "HOD":
         for s in students:
-            if s.dept_status() and s.lab_status():
-                rows.append({"id": s.id, "roll": s.roll, "name": s.name,
-                             "webmail": s.webmail, "approved": s.hod_approval})
+            rows.append({"id": s.id, "roll": s.roll, "name": s.name,
+                         "webmail": s.webmail, "approved": s.hod_approval})
     elif role in ROLE_CONFIG:
         field = ROLE_CONFIG[role]["field"]
+        feedback_key = ROLE_CONFIG[role]["feedback_key"]
         for s in students:
             rows.append({
                 "id": s.id,
@@ -332,19 +388,20 @@ def section_queue(request):
                 "name": s.name,
                 "webmail": s.webmail,
                 "hostel": s.hostel,
+                "feedback": (getattr(s, "section_feedback", {}) or {}).get(feedback_key, ""),
                 "vacant_room_no": getattr(s, "vacant_room_no", "") or "A110",
                 "btp_doc_title": getattr(s, "btp_doc_title", "") or "Development of Online No-Dues Portal",
                 "btp_form_no": getattr(s, "btp_form_no", "") or "CL/LB/IR/2026/042",
                 "btp_plagiarism": getattr(s, "btp_plagiarism", "") or "8%",
                 "offer_letter_name": getattr(s, "offer_letter_name", "") or "Offer_Letter_2026.pdf",
-                "approved": getattr(s, field)
+                "approved": getattr(s, field),
             })
     else:
         return JsonResponse({"detail": "Unknown role"}, status=400)
 
     heading = "Students"
     if role in ROLE_CONFIG and ROLE_CONFIG[role]["scope"] == "hostel":
-        profile = ROLE_CONFIG[role]["model"].objects.filter(webmail=username).first()
+        profile = _profile_for(role, username)
         heading = f"Students of {profile.hostel}" if profile else "Students"
     elif role == "HOD":
         hod = HOD.objects.filter(webmail=username).first()
@@ -362,7 +419,7 @@ def section_save(request):
     role = _acting_role(request)
     username = request.user.username
     body = _json_body(request)
-    approvals = body.get("approvals", {})  # { webmail: bool }
+    approvals = body.get("approvals", {})
     if not isinstance(approvals, dict):
         return HttpResponseBadRequest("approvals must be an object")
 
@@ -383,30 +440,14 @@ def section_save(request):
                 s.account_approval = False
                 s.save()
 
-    elif role == "Lab":
-        lab = Lab.objects.filter(webmail=username).first()
-        for s in students:
-            if s.webmail not in approvals:
-                continue
-            st = StudLabStatus.objects.filter(student=s, lab=lab).first()
-            if st is None:
-                continue
-            st.approval = bool(approvals[s.webmail])
-            st.save()
-            if not st.approval:
-                s.hod_approval = False
-                s.account_approval = False
-                s.save()
-
     elif role == "HOD":
         for s in students:
             if s.webmail not in approvals:
                 continue
-            if s.dept_status() and s.lab_status():
-                s.hod_approval = bool(approvals[s.webmail])
-                if not s.hod_approval:
-                    s.account_approval = False
-                s.save()
+            s.hod_approval = bool(approvals[s.webmail])
+            if not s.hod_approval:
+                s.account_approval = False
+            s.save()
 
     elif role in ROLE_CONFIG:
         cfg = ROLE_CONFIG[role]
@@ -414,9 +455,21 @@ def section_save(request):
         for s in students:
             if s.webmail not in approvals:
                 continue
-            value = bool(approvals[s.webmail])
+            decision = approvals[s.webmail]
+            if isinstance(decision, dict):
+                value = bool(decision.get("approved"))
+                feedback = str(decision.get("feedback") or "").strip()
+            else:
+                value = bool(decision)
+                feedback = ""
             setattr(s, field, value)
-            if not value:  # reverse-hierarchy cascade
+            feedbacks = getattr(s, "section_feedback", {}) or {}
+            if feedback:
+                feedbacks[cfg["feedback_key"]] = feedback
+            elif cfg["feedback_key"] in feedbacks:
+                feedbacks.pop(cfg["feedback_key"], None)
+            s.section_feedback = feedbacks
+            if not value:
                 for reset_field in cfg["resets"]:
                     setattr(s, reset_field, False)
             s.save()
@@ -429,7 +482,7 @@ def section_save(request):
 @login_required
 @require_http_methods(["POST"])
 def submit_intake(request):
-    """Persist Page 1 student intake details (hostel block, room, BTP title, offer letter)."""
+    """Persist Page 1 student intake details."""
     username = request.user.username
     stud = Student.objects.filter(webmail=username).first()
     if not stud:

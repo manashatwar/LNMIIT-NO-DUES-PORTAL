@@ -20,6 +20,17 @@ class Lab(models.Model):
 	def __unicode__(self):
 		return self.name
 
+
+class SupportOffice(models.Model):
+	name = models.CharField(max_length=250)
+	webmail = models.CharField(max_length=100, unique=True)
+	password = models.CharField(max_length=250)
+	office_role = models.CharField(max_length=100)
+	hostel = models.CharField(max_length=100, blank=True, default='')
+
+	def __unicode__(self):
+		return self.name
+
 class Student(models.Model):
 	name = models.CharField(max_length=250)
 	roll = models.IntegerField(default=0)
@@ -29,6 +40,15 @@ class Student(models.Model):
 	hostel = models.CharField(max_length=100)
 	faculty_approval = models.ManyToManyField(Faculty, through = 'StudFacStatus')
 	lab_approval = models.ManyToManyField(Lab, through = 'StudLabStatus')
+	bh1_approval = models.BooleanField(default=False)
+	bh2_approval = models.BooleanField(default=False)
+	bh3_approval = models.BooleanField(default=False)
+	bh5_approval = models.BooleanField(default=False)
+	store_release_approval = models.BooleanField(default=False)
+	lucs_approval = models.BooleanField(default=False)
+	sports_approval = models.BooleanField(default=False)
+	medical_unit_approval = models.BooleanField(default=False)
+	nad_cell_approval = models.BooleanField(default=False)
 	caretaker_approval = models.BooleanField(default=False)
 	warden_approval = models.BooleanField(default=False)
 	gymkhana_approval = models.BooleanField(default=False)
@@ -45,6 +65,7 @@ class Student(models.Model):
 	btp_form_no = models.CharField(max_length=100, default='', blank=True)
 	btp_plagiarism = models.CharField(max_length=50, default='', blank=True)
 	offer_letter_name = models.CharField(max_length=250, default='', blank=True)
+	section_feedback = models.JSONField(default=dict, blank=True)
 
 	def dept_status(self):
 		faculty_dept=Faculty.objects.filter(dept=self.dept)

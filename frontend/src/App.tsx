@@ -95,7 +95,7 @@ export function App() {
     }
   };
 
-  const handleSave = async (approvals: Record<string, boolean>) => {
+  const handleSave = async (approvals: Record<string, boolean | { approved: boolean; feedback?: string }>) => {
     setSaving(true);
     try {
       await api.sectionSave(approvals);

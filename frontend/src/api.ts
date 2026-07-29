@@ -67,7 +67,7 @@ export const api = {
 
     sectionQueue: () => request<SectionQueue>('/api/section/queue/'),
 
-    sectionSave: (approvals: Record<string, boolean>) =>
+    sectionSave: (approvals: Record<string, boolean | { approved: boolean; feedback?: string }>) =>
         request<{ detail: string }>('/api/section/save/', {
             method: 'POST',
             body: JSON.stringify({ approvals }),

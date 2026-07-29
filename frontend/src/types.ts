@@ -2,31 +2,35 @@
 
 export type RoleType =
   | 'Student'
-  | 'Caretaker'
-  | 'Warden'
-  | 'Gymkhana'
-  | 'OnlineCC'
-  | 'CC'
-  | 'Thesis Manager'
+  | 'BH1 Support'
+  | 'BH2 Support'
+  | 'BH3 Support'
+  | 'BH5 Support'
+  | 'Hostel Support'
+  | 'Store Release'
+  | 'LUCS'
+  | 'Sports'
+  | 'Medical Unit'
+  | 'NAD Cell'
   | 'Library'
-  | 'Assistant Registrar'
   | 'Faculty'
-  | 'Lab'
   | 'HOD'
   | 'Account';
 
 // Keys returned by the backend for a student's clearance matrix
 export type SectionKey =
-  | 'caretaker'
-  | 'gymkhana'
-  | 'online_cc'
   | 'department'
   | 'labs'
-  | 'warden'
+  | 'bh1_support'
+  | 'bh2_support'
+  | 'bh3_support'
+  | 'bh5_support'
   | 'library'
-  | 'cc'
-  | 'thesis'
-  | 'assistant_registrar'
+  | 'store_release'
+  | 'lucs'
+  | 'sports'
+  | 'medical_unit'
+  | 'nad_cell'
   | 'hod'
   | 'account';
 
@@ -54,6 +58,7 @@ export interface StudentStatus {
     btp_plagiarism?: string;
     offer_letter_name?: string;
   };
+  feedbacks?: Partial<Record<SectionKey, string>>;
   sections: Record<SectionKey, boolean>;
 }
 
@@ -69,6 +74,7 @@ export interface QueueStudent {
   btp_form_no?: string;
   btp_plagiarism?: string;
   offer_letter_name?: string;
+  feedback?: string;
 }
 
 export interface SectionQueue {
