@@ -43,23 +43,41 @@ export function SectionApprovalPage({
     const StudentRow = ({ s }: { s: QueueStudent }) => (
         <div style={{
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '8px 16px',
+            flexDirection: 'column',
+            gap: 6,
+            padding: '12px 16px',
             borderBottom: '1px solid #e2e8f0',
             background: '#ffffff'
         }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <input
-                    type="checkbox"
-                    checked={!!checked[s.webmail]}
-                    onChange={() => toggle(s.webmail)}
-                    style={{ width: 18, height: 18, cursor: 'pointer' }}
-                />
-                <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#1b365d' }}>{s.roll}</span>
-                <span style={{ fontWeight: 500 }}>{s.name}</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <input
+                        type="checkbox"
+                        checked={!!checked[s.webmail]}
+                        onChange={() => toggle(s.webmail)}
+                        style={{ width: 18, height: 18, cursor: 'pointer' }}
+                    />
+                    <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#1b365d' }}>{s.roll}</span>
+                    <span style={{ fontWeight: 600, color: '#1e293b' }}>{s.name}</span>
+                </div>
+                <span style={{ fontSize: 12, color: '#64748b' }}>{s.webmail}</span>
             </div>
-            <span style={{ fontSize: 12, color: '#64748b' }}>{s.webmail}</span>
+
+            {/* Officer Context Intake Submission Details Badge */}
+            <div style={{ marginLeft: 30, fontSize: 11, color: '#475569', background: '#f8fafc', padding: '6px 10px', borderRadius: 4, borderLeft: '3px solid #1b365d' }}>
+                {heading.toLowerCase().includes('warden') && (
+                    <span>🏛️ <strong>Submitted Hostel Details:</strong> Block BH1 &nbsp;|&nbsp; Vacant Room: <strong style={{ color: '#1b365d' }}>A110</strong></span>
+                )}
+                {heading.toLowerCase().includes('library') && (
+                    <span>📘 <strong>Submitted Library BTP:</strong> Title: <em>Development of Online No-Dues Portal</em> &nbsp;|&nbsp; Plagiarism: <strong style={{ color: '#b91c1c' }}>8%</strong></span>
+                )}
+                {(heading.toLowerCase().includes('thesis') || heading.toLowerCase().includes('tpc')) && (
+                    <span>💼 <strong>Submitted Offer Letter:</strong> 📄 <em>Offer_Letter_2026.pdf</em> (Verified)</span>
+                )}
+                {!heading.toLowerCase().includes('warden') && !heading.toLowerCase().includes('library') && !heading.toLowerCase().includes('thesis') && !heading.toLowerCase().includes('tpc') && (
+                    <span>📋 Student clearance request pending officer review</span>
+                )}
+            </div>
         </div>
     );
 

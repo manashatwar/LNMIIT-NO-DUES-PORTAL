@@ -21,6 +21,13 @@ const ROLES: RoleType[] = [
     'Account',
 ];
 
+const EXIT_OPTIONS = [
+    'Graduated',
+    'NEP EXIT',
+    'Withdrawal',
+    'Admission cancel',
+];
+
 /** Generate a random 6-digit numerical captcha code */
 function generateCaptchaCode(): string {
     return Math.floor(100000 + Math.random() * 900000).toString();
@@ -29,14 +36,14 @@ function generateCaptchaCode(): string {
 /**
  * Replicates LNMIIT ERP Login Page (matching user's screenshots):
  *  - Top header + dark navbar
- *  - Left links panel: Parents' Login, Course Registration, Multimedia Studio Booking
- *  - Center: Sign in box with User Type, Username, Password, Captcha & Red Sign In button
+ *  - Center: Sign in box with User Type, Exit Type (for Student), Username, Password, Captcha & Red Sign In button
  *  - Right: Latest News & Notice Board panels
  */
 export function LoginPage({ onLogin }: LoginPageProps) {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [role, setRole] = useState<RoleType | ''>('Student');
+    const [exitType, setExitType] = useState<string>('Graduated');
     const [captchaCode, setCaptchaCode] = useState(generateCaptchaCode());
     const [captchaInput, setCaptchaInput] = useState('');
     const [error, setError] = useState('');
@@ -151,6 +158,30 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                                         ))}
                                     </select>
                                 </div>
+
+                                {role === 'Student' && (
+                                    <div className="erp-field-group" style={{
+                                        background: '#eff6ff',
+                                        padding: '10px 12px',
+                                        borderRadius: 6,
+                                        border: '1px solid #bfdbfe',
+                                        marginBottom: 14,
+                                    }}>
+                                        <label className="erp-label" style={{ color: '#1e40af', fontWeight: 600 }}>
+                                            🎓 Admission Exit Type :
+                                        </label>
+                                        <select
+                                            className="erp-select"
+                                            value={exitType}
+                                            onChange={(e) => setExitType(e.target.value)}
+                                            style={{ borderColor: '#93c5fd', backgroundColor: '#ffffff', fontWeight: 500 }}
+                                        >
+                                            {EXIT_OPTIONS.map((opt) => (
+                                                <option key={opt} value={opt}>{opt}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
 
                                 <div className="erp-field-group">
                                     <label className="erp-label">Username :</label>

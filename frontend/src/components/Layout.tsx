@@ -114,9 +114,7 @@ export function Layout({
                 <div className="lnmiit-breadcrumb-text">
                     <span>🏠</span>
                     <span>&gt;</span>
-                    <span>ACADEMIC</span>
-                    <span>&gt;</span>
-                    <span>Student Section</span>
+                    <span>No Dues Portal</span>
                     <span>&gt;</span>
                     <strong style={{ color: '#1e293b' }}>{title}</strong>
                 </div>
