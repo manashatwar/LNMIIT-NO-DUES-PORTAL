@@ -1,50 +1,65 @@
-# React + TypeScript + Vite
+# No Dues Portal — Frontend (React + TypeScript + Vite)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React single-page app for the LNMIIT No Dues Portal. It replaces the old Django HTML templates and talks to the Django backend over a JSON API.
 
-Currently, two official plugins are available:
+For the full picture of how the frontend connects to the backend, see [`../BACKEND_CONNECTION.md`](../BACKEND_CONNECTION.md).
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Prerequisites
 
-## Expanding the ESLint configuration
+- Node.js 18+
+- The Django backend running at `http://127.0.0.1:8000` (see [`../No-Dues-Portal`](../No-Dues-Portal))
 
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
+## Run
 
-- Configure the top-level `parserOptions` property like this:
-
-```js
-export default tseslint.config({
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```bash
+npm install      # first time only
+npm run dev      # starts Vite at http://localhost:5173
 ```
 
-- Replace `tseslint.configs.recommended` to `tseslint.configs.recommendedTypeChecked` or `tseslint.configs.strictTypeChecked`
-- Optionally add `...tseslint.configs.stylisticTypeChecked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and update the config:
+Open http://localhost:5173.
 
-```js
-// eslint.config.js
-import react from 'eslint-plugin-react'
+> The Django backend must also be running. Requests to `/api/*` are proxied to it (see `vite.config.ts`), so cookies and CSRF work same-origin — no CORS setup needed.
 
-export default tseslint.config({
-  // Set the react version
-  settings: { react: { version: '18.3' } },
-  plugins: {
-    // Add the react plugin
-    react,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended rules
-    ...react.configs.recommended.rules,
-    ...react.configs['jsx-runtime'].rules,
-  },
-})
+## Scripts
+
+| Command | Purpose |
+|---|---|
+| `npm run dev` | Start the dev server with HMR |
+| `npm run build` | Type-check and build for production (`dist/`) |
+| `npm run preview` | Preview the production build |
+| `npm run lint` | Run ESLint |
+
+## Project structure
+
 ```
+src/
+  api.ts                 API client (fetch + CSRF handling)
+  types.ts               Types matching the backend sections
+  App.tsx                Session restore + role-based routing
+  index.css              Bootstrap-3-style CSS
+  components/
+    Layout.tsx           Header + navbar + footer
+  pages/
+    LoginPage.tsx        Login (webmail + password + role)
+    StudentDashboard.tsx Clearance status matrix (clickable panels)
+    StudentDetailPage.tsx Department / Labs breakdown
+    SectionApprovalPage.tsx Officer queue (approve / save)
+    RulesPage.tsx        Rules
+    ContactPage.tsx      Contacts
+vite.config.ts           /api -> Django dev proxy
+```
+
+## Demo logins
+
+Password for every account: **`csepassword`**. Enter the webmail as the username and pick the matching role.
+
+- **Students:** student@ · amit@ · priya@ · arjun@ · neha@ · rohit@ lnmiit.ac.in
+- **Faculty:** prof.verma@ · prof.rao@ · prof.iyer@ lnmiit.ac.in
+- **Labs:** oslab@ · netlab@ · dbmslab@ lnmiit.ac.in
+- **Officers:** caretaker@ · warden@ · gymkhana@ · library@ · onlinecc@ · cc@ · thesis@ · asstreg@ · account@ · hod@ lnmiit.ac.in
+
+Because of the clearance hierarchy, some officer queues start empty (e.g. Library appears only after Thesis Manager clears a student; Account only after HOD). Start with Caretaker / Gymkhana / Faculty / Lab / Thesis to see students immediately.
+
+## Tech
+
+React 18 · TypeScript · Vite · plain Bootstrap-3-style CSS.
