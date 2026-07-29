@@ -21,13 +21,15 @@ export function StudentDashboard({
     onOpenSection,
 }: StudentDashboardProps) {
     const [activeTab, setActiveTab] = useState<'page1' | 'page2'>('page1');
+    const persistedIntake = student.intake;
+    const intakeAlreadySubmitted = !!persistedIntake?.submitted;
 
     // Page 1 State: Library BTP Document & Comprehensive OCR Extraction
     const [btpFile, setBtpFile] = useState<File | null>(null);
     const [ocrProcessing, setOcrProcessing] = useState(false);
     const [docType, setDocType] = useState('BTP Report');
-    const [formNo, setFormNo] = useState('CL/LB/IR/2026/042');
-    const [btpDocTitle, setBtpDocTitle] = useState('Development of Online No-Dues Portal');
+    const [formNo, setFormNo] = useState(persistedIntake?.btp_form_no || 'CL/LB/IR/2026/042');
+    const [btpDocTitle, setBtpDocTitle] = useState(persistedIntake?.btp_doc_title || 'Development of Online No-Dues Portal');
     const [btpAuthor, setBtpAuthor] = useState(student.name || 'Rahul Sharma');
     const [rollNo, setRollNo] = useState(student.roll ? String(student.roll) : '1401001');
     const [department, setDepartment] = useState(student.dept || 'CSE');
@@ -37,19 +39,19 @@ export function StudentDashboard({
     const [mobileNo, setMobileNo] = useState('9876543210');
     const [supervisorName, setSupervisorName] = useState('Prof. Verma');
     const [supervisorCode, setSupervisorCode] = useState('EMP-2041');
-    const [btpPlagiarism, setBtpPlagiarism] = useState('8%');
-    const [btpSubmitted, setBtpSubmitted] = useState(false);
+    const [btpPlagiarism, setBtpPlagiarism] = useState(persistedIntake?.btp_plagiarism || '8%');
+    const [btpSubmitted, setBtpSubmitted] = useState(intakeAlreadySubmitted);
 
     // Page 1 State: Hostel Details
-    const [hostelBlock, setHostelBlock] = useState(student.hostel || 'BH1');
-    const [vacantRoomNo, setVacantRoomNo] = useState('A110');
+    const [hostelBlock, setHostelBlock] = useState(persistedIntake?.hostel_block || student.hostel || 'BH1');
+    const [vacantRoomNo, setVacantRoomNo] = useState(persistedIntake?.vacant_room_no || 'A110');
 
     // Page 1 State: TPC Offer Letter
     const [offerLetterFile, setOfferLetterFile] = useState<File | null>(null);
-    const [tpcSubmitted, setTpcSubmitted] = useState(false);
+    const [tpcSubmitted, setTpcSubmitted] = useState(intakeAlreadySubmitted);
 
     // Intake Pipeline Submission & Locking Screen State
-    const [intakeSubmitted, setIntakeSubmitted] = useState(false);
+    const [intakeSubmitted, setIntakeSubmitted] = useState(intakeAlreadySubmitted);
     const [intakeError, setIntakeError] = useState('');
 
     const handleBtpUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -226,7 +228,7 @@ export function StudentDashboard({
                 </div>
 
                 {/* ─── PAGE 1: STUDENT INTAKE & OFFLINE VERIFICATION UPLOADS ─── */}
-                {activeTab === 'page1' && (
+                {activeTab === 'page1' && !intakeSubmitted && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
                         {/* SECTION 1: Library BTP Document Submission */}
@@ -773,7 +775,7 @@ export function StudentDashboard({
                                         <h4 style={{ margin: 0, color: '#1e293b', fontSize: 15 }}>TPC Check</h4>
                                         <span style={{ fontSize: 12, color: '#64748b' }}>Reviewing your offer letter</span>
                                         <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>
-                                            Offer Letter: 📄 <em>{offerLetterFile ? offerLetterFile.name : 'Offer_Letter_2026.pdf'}</em>
+                                            Offer Letter: 📄 <em>{offerLetterFile ? offerLetterFile.name : (persistedIntake?.offer_letter_name || 'Offer_Letter_2026.pdf')}</em>
                                         </div>
                                     </div>
                                 </div>

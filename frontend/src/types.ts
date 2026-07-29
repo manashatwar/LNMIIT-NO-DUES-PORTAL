@@ -45,6 +45,15 @@ export interface StudentStatus {
   webmail: string;
   dept: string;
   hostel: string;
+  intake?: {
+    submitted: boolean;
+    hostel_block?: string;
+    vacant_room_no?: string;
+    btp_doc_title?: string;
+    btp_form_no?: string;
+    btp_plagiarism?: string;
+    offer_letter_name?: string;
+  };
   sections: Record<SectionKey, boolean>;
 }
 
