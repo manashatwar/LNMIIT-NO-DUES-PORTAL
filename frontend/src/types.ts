@@ -1,85 +1,77 @@
-export type ExitType = 'GRADUATION' | 'NEP_EXIT' | 'WITHDRAWAL' | 'ADMISSION_CANCEL';
+// ─── Types aligned to the existing Django backend (IIT-G section set) ─────────
 
-export type SectionCode = 
-  | 'LIBRARY'
-  | 'TPC'
-  | 'WARDEN'
-  | 'STORE'
-  | 'LUCS'
-  | 'SPORTS'
-  | 'MEDICAL'
-  | 'NAD'
+export type RoleType =
+  | 'Student'
+  | 'Caretaker'
+  | 'Warden'
+  | 'Gymkhana'
+  | 'OnlineCC'
+  | 'CC'
+  | 'Thesis Manager'
+  | 'Library'
+  | 'Assistant Registrar'
+  | 'Faculty'
+  | 'Lab'
   | 'HOD'
-  | 'ACCOUNTS'
-  | 'ADMINISTRATION';
+  | 'Account';
 
-export type ApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+// Keys returned by the backend for a student's clearance matrix
+export type SectionKey =
+  | 'caretaker'
+  | 'gymkhana'
+  | 'online_cc'
+  | 'department'
+  | 'labs'
+  | 'warden'
+  | 'library'
+  | 'cc'
+  | 'thesis'
+  | 'assistant_registrar'
+  | 'hod'
+  | 'account';
 
-export type RoleType = 
-  | 'STUDENT'
-  | 'LIBRARIAN'
-  | 'TPC_STAFF'
-  | 'WARDEN'
-  | 'HOD'
-  | 'ACCOUNTS'
-  | 'ADMINISTRATION';
-
-export interface StudentProfile {
+export interface CurrentUser {
+  username: string;
+  role: RoleType;
   name: string;
-  rollNo: string;
+  dept?: string;
+  hostel?: string;
+}
+
+export interface StudentStatus {
+  id: number;
+  name: string;
+  roll: number;
+  webmail: string;
   dept: string;
   hostel: string;
-  vacantRoom: string;
-  email: string;
+  sections: Record<SectionKey, boolean>;
 }
 
-export interface OCRResult {
-  title: string;
-  author: string;
-  plagiarism: number;
-  publisher: string;
-  year: number;
-  detectedName: string;
-  detectedRoll: string;
-  status: 'SUCCESS' | 'WARNING' | 'FAILED';
-  mismatchWarning?: string;
-}
-
-export interface SectionStatusItem {
-  code: SectionCode;
+export interface QueueStudent {
+  id: number;
+  roll: number;
   name: string;
-  category: 'TRI_GATE' | 'ACADEMIC_FIELD' | 'FINANCIAL' | 'FINAL';
-  status: ApprovalStatus;
-  decidedBy?: string;
-  decidedAt?: string;
-  feedbackComment?: string;
-  documentName?: string;
-  documentUrl?: string;
-  lucsLink?: string;
-  isRequired: boolean;
+  webmail: string;
+  approved: boolean;
 }
 
-export interface PendingStudentRequest {
-  id: string;
+export interface SectionQueue {
+  role: RoleType;
+  heading: string;
+  students: QueueStudent[];
+}
+
+export interface DetailItem {
   name: string;
-  rollNo: string;
+  approved: boolean;
+}
+
+export interface DeptDetail {
   dept: string;
-  hostel: string;
-  exitType: ExitType;
-  submittedAt: string;
-  documents: {
-    name: string;
-    type: string;
-    size: string;
-    url: string;
-    ocrData?: OCRResult;
-  }[];
-  sectionStatuses: Record<SectionCode, ApprovalStatus>;
+  items: DetailItem[];
 }
 
-export interface RefundLedgerState {
-  cautionMoney: number;
-  totalDues: number;
-  voluntaryDonation: number;
-  netRefund: number;
+export interface LabDetail {
+  items: DetailItem[];
 }
