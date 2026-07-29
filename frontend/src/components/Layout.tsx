@@ -12,10 +12,11 @@ interface LayoutProps {
 }
 
 /**
- * Replicates base.html:
- *  - LNMIIT logo + "No Dues Portal" header
- *  - Dark Bootstrap-style navbar (Home | Rules | Contact) + Name | Logout on right
- *  - Footer
+ * Modern high-fidelity layout matching LNMIIT ERP portal:
+ *  - Top header banner with transparent LNMIIT logo, navy title, crimson motto
+ *  - Dark charcoal navbar with crimson accent line (Home | Rules | Contact | Grievance Redressal)
+ *  - Breadcrumb sub-header strip
+ *  - Main content & Footer
  */
 export function Layout({
     title,
@@ -30,127 +31,113 @@ export function Layout({
         document.title = title;
     }, [title]);
 
+    // Extract first initial for user avatar
+    const initial = userName ? userName.trim().charAt(0).toUpperCase() : '?';
+
     return (
-        <>
-            {/* Header: Logo + Title */}
-            <div className="container" style={{ textAlign: 'center', padding: '20px 0 0' }}>
-                <img
-                    src="https://lnmiit.ac.in/wp-content/uploads/2021/07/LNMIIT-Logo.png"
-                    alt="LNMIIT Logo"
-                    style={{ width: 220, height: 'auto', objectFit: 'contain' }}
-                    onError={(e) => {
-                        // fallback if logo doesn't load
-                        (e.target as HTMLImageElement).style.display = 'none';
-                    }}
-                />
-                <h1 style={{ marginTop: 10 }}>No Dues Portal</h1>
-                <p>
-                    <strong>LNM Institute of Information Technology, Jaipur</strong>
-                </p>
+        <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+            {/* Top Branding Header */}
+            <div className="lnmiit-header-banner">
+                <div className="lnmiit-logo-container">
+                    <img
+                        src="/lnmiit-logo.png"
+                        alt="LNMIIT Logo"
+                        className="lnmiit-logo-img"
+                        onError={(e) => {
+                            // Fallback if local logo is loading
+                            (e.target as HTMLImageElement).src =
+                                'https://lnmiit.ac.in/wp-content/uploads/2021/07/LNMIIT-Logo.png';
+                        }}
+                    />
+                </div>
+
+                <div className="lnmiit-title-group">
+                    <h1 className="lnmiit-main-title">The LNM Institute of Information Technology</h1>
+                    <div className="lnmiit-tagline">&quot;EXCELLENCE OUR MOTTO DISCIPLINE OUR WAY&quot;</div>
+                    <span className="lnmiit-portal-badge">ONLINE NO-DUES PORTAL</span>
+                </div>
+
+                {userName ? (
+                    <div className="lnmiit-user-badge">
+                        <div className="lnmiit-user-avatar">{initial}</div>
+                        <div>
+                            <span style={{ fontSize: 11, color: '#64748b', display: 'block', lineHeight: 1 }}>
+                                Welcome
+                            </span>
+                            <strong>{userName}</strong>
+                        </div>
+                    </div>
+                ) : (
+                    <div style={{ width: 140 }}></div>
+                )}
             </div>
 
-            {/* Navbar */}
-            <nav
-                style={{
-                    backgroundColor: '#222',
-                    borderColor: '#080808',
-                    marginBottom: 50,
-                    borderRadius: 0,
-                    borderTop: '1px solid #080808',
-                    borderBottom: '1px solid #080808',
-                }}
-            >
-                <div
-                    style={{
-                        maxWidth: '100%',
-                        padding: '0 15px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        minHeight: 50,
-                    }}
-                >
-                    {/* Left nav links */}
-                    <ul
-                        style={{
-                            display: 'flex',
-                            listStyle: 'none',
-                            margin: 0,
-                            padding: 0,
-                            flex: 1,
-                        }}
-                    >
-                        <li>
-                            <button
-                                onClick={onHome}
-                                style={navLinkStyle}
-                            >
-                                🏠&nbsp;Home
-                            </button>
-                        </li>
-                        <li>
-                            <button
-                                onClick={onRules}
-                                style={navLinkStyle}
-                            >
-                                ℹ️&nbsp;Rules
-                            </button>
-                        </li>
-                        <li>
-                            <button
-                                onClick={onContact}
-                                style={navLinkStyle}
-                            >
-                                📞&nbsp;Contact
-                            </button>
-                        </li>
-                    </ul>
+            {/* Main Dark Navbar */}
+            <nav className="lnmiit-navbar">
+                <ul className="lnmiit-nav-list">
+                    <li>
+                        <button onClick={onHome} className="lnmiit-nav-item">
+                            🏠&nbsp;Home
+                        </button>
+                    </li>
+                    <li>
+                        <button onClick={onRules} className="lnmiit-nav-item">
+                            📋&nbsp;Rules
+                        </button>
+                    </li>
+                    <li>
+                        <button onClick={onContact} className="lnmiit-nav-item">
+                            📞&nbsp;Contact
+                        </button>
+                    </li>
+                    <li>
+                        <button
+                            onClick={() => alert('Grievance Redressal Portal')}
+                            className="lnmiit-nav-item"
+                        >
+                            ⚖️&nbsp;Grievance Redressal
+                        </button>
+                    </li>
 
-                    {/* Right: Name | Logout */}
-                    <ul style={{ display: 'flex', listStyle: 'none', margin: 0, padding: 0 }}>
-                        <li>
-                            <button
-                                onClick={onLogout}
-                                style={{ ...navLinkStyle, color: '#9d9d9d' }}
-                            >
-                                <strong>{userName}</strong>&nbsp;&nbsp;|&nbsp;&nbsp;⏻&nbsp;Logout
+                    {userName && (
+                        <li className="lnmiit-nav-right">
+                            <button onClick={onLogout} className="lnmiit-logout-btn">
+                                ⏻&nbsp;Logout
                             </button>
                         </li>
-                    </ul>
-                </div>
+                    )}
+                </ul>
             </nav>
 
-            {/* Page content */}
-            <div style={{ minHeight: 'calc(100vh - 380px)' }}>
-                {children}
+            {/* Breadcrumb Sub-Header */}
+            <div className="lnmiit-breadcrumb-bar">
+                <div className="lnmiit-breadcrumb-text">
+                    <span>🏠</span>
+                    <span>&gt;</span>
+                    <span>ACADEMIC</span>
+                    <span>&gt;</span>
+                    <span>Student Section</span>
+                    <span>&gt;</span>
+                    <strong style={{ color: '#1e293b' }}>{title}</strong>
+                </div>
+                <div style={{ fontSize: 11, color: '#64748b' }}>
+                    Session: 2025-2026 II
+                </div>
+            </div>
+
+            {/* Main Content Area */}
+            <main style={{ flex: 1, padding: '24px 0' }}>{children}</main>
+
+            {/* Browser Compatibility Bar */}
+            <div className="erp-compatibility-strip">
+                <span>Site Compatible with: 🌐 Google Chrome 70+ &nbsp;|&nbsp; 🦊 Firefox 65+</span>
+                <span>LNMIIT No Dues Management System</span>
             </div>
 
             {/* Footer */}
-            <footer
-                style={{
-                    backgroundColor: '#f2f2f2',
-                    padding: '25px',
-                    textAlign: 'center',
-                    marginTop: 40,
-                    borderTop: '1px solid #ddd',
-                }}
-            >
-                <h4 style={{ margin: 0 }}>
-                    &copy;&nbsp;<strong>LNMIIT Jaipur&nbsp;&nbsp;|&nbsp;&nbsp;2026</strong>
-                </h4>
+            <footer>
+                <strong>&copy;&nbsp;The LNM Institute of Information Technology, Jaipur &nbsp;|&nbsp; 2026</strong>
             </footer>
-        </>
+        </div>
     );
 }
-
-const navLinkStyle: React.CSSProperties = {
-    display: 'block',
-    padding: '15px',
-    color: '#9d9d9d',
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    fontSize: 14,
-    fontFamily: 'inherit',
-    lineHeight: '20px',
-    textDecoration: 'none',
-};
