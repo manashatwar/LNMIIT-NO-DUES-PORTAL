@@ -1,73 +1,57 @@
 from django.contrib import admin
-from .models import *
 
-class StudFacStatusInline(admin.TabularInline):
-	model = StudFacStatus
-	extra = 1
+from .models import (
+    Department, Hostel, Section, UserProfile, Student,
+    ClearanceRequest, SectionStatus, Document, Comment, Certificate,
+)
 
-class StudLabStatusInline(admin.TabularInline):
-	model = StudLabStatus
-	extra = 1
 
+@admin.register(Department)
+class DepartmentAdmin(admin.ModelAdmin):
+    list_display = ("code",)
+
+
+@admin.register(Hostel)
+class HostelAdmin(admin.ModelAdmin):
+    list_display = ("code",)
+
+
+@admin.register(Section)
+class SectionAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "order", "is_upload_section", "is_consolidator")
+    ordering = ("order",)
+
+
+@admin.register(UserProfile)
+class UserProfileAdmin(admin.ModelAdmin):
+    list_display = ("user", "role", "hostel", "department")
+    list_filter = ("role",)
+
+
+@admin.register(Student)
 class StudentAdmin(admin.ModelAdmin):
-	list_display = ('name',)
-	search_field = ['name']
-	inlines = (StudFacStatusInline,StudLabStatusInline,)
-
-class FacultyAdmin(admin.ModelAdmin):
-	list_display = ('name',)
-	search_field = ['name']
-	inlines = (StudFacStatusInline,)
+    list_display = ("roll_no", "name", "department", "hostel", "webmail")
+    search_fields = ("roll_no", "name", "webmail")
 
 
-class CaretakerAdmin(admin.ModelAdmin):
-	list_display = ('name',)
-	search_field = ['name']
+class SectionStatusInline(admin.TabularInline):
+    model = SectionStatus
+    extra = 0
 
-class WardenAdmin(admin.ModelAdmin):
-	list_display = ('name',)
-	search_field = ['name']
 
-class GymkhanaAdmin(admin.ModelAdmin):
-	list_display = ('name',)
+@admin.register(ClearanceRequest)
+class ClearanceRequestAdmin(admin.ModelAdmin):
+    list_display = ("id", "student", "exit_type", "overall_status", "is_active", "created_at")
+    list_filter = ("exit_type", "overall_status", "is_active")
+    inlines = (SectionStatusInline,)
 
-class LibraryAdmin(admin.ModelAdmin):
-	list_display = ('name',)
 
-class OnlineCCAdmin(admin.ModelAdmin):
-	list_display = ('name',)
+@admin.register(SectionStatus)
+class SectionStatusAdmin(admin.ModelAdmin):
+    list_display = ("request", "section", "status", "decided_by", "decided_at")
+    list_filter = ("status", "section")
 
-class SubmitThesisAdmin(admin.ModelAdmin):
-	list_display = ('name',)
 
-class LabAdmin(admin.ModelAdmin):
-	list_display = ('name',)
-	search_field = ['name']
-	inlines = (StudLabStatusInline,)
-
-class CCAdmin(admin.ModelAdmin):
-	list_display = ('name',)
-
-class asstregAdmin(admin.ModelAdmin):
-	list_display = ('name',)
-
-class HODAdmin(admin.ModelAdmin):
-	list_display = ('name',)
-	search_field = ['name']
-
-class AccountAdmin(admin.ModelAdmin):
-	list_display = ('name',)
-	
-admin.site.register(Student,StudentAdmin)
-admin.site.register(Faculty,FacultyAdmin)
-admin.site.register(Caretaker,CaretakerAdmin)
-admin.site.register(Warden,WardenAdmin)
-admin.site.register(Gymkhana,GymkhanaAdmin)
-admin.site.register(Library,LibraryAdmin)
-admin.site.register(Lab,LabAdmin)
-admin.site.register(CC,CCAdmin)
-admin.site.register(asstreg,asstregAdmin)
-admin.site.register(HOD,HODAdmin)
-admin.site.register(Account,AccountAdmin)
-admin.site.register(OnlineCC,OnlineCCAdmin)
-admin.site.register(SubmitThesis,SubmitThesisAdmin)
+admin.site.register(Document)
+admin.site.register(Comment)
+admin.site.register(Certificate)
