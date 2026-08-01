@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("main", "0005_student_btp_doc_title_student_btp_form_no_and_more"),
+        ("main", "0003_sectionstatus_student_confirmed"),
     ]
 
     operations = [
@@ -67,7 +67,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="student",
             name="section_feedback",
-            field=models.JSONField(blank=True, default=dict),
+            field=models.TextField(blank=True, default="{}"),
         ),
         migrations.AddField(
             model_name="student",
