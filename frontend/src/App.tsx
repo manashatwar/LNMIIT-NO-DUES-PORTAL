@@ -1,52 +1,58 @@
 import { useEffect, useState } from 'react';
 import { api } from './api';
-import { CurrentUser, RoleType, StudentStatus, SectionQueue, DetailItem, SectionKey } from './types';
+import { CurrentUser, RoleType, ExitType, StudentRequestResponse, SectionQueue } from './types';
 import { LoginPage } from './pages/LoginPage';
 import { StudentDashboard } from './pages/StudentDashboard';
-import { StudentDetailPage } from './pages/StudentDetailPage';
 import { SectionApprovalPage } from './pages/SectionApprovalPage';
 import { RulesPage } from './pages/RulesPage';
 import { ContactPage } from './pages/ContactPage';
 
-type View = 'HOME' | 'RULES' | 'CONTACT' | 'DETAIL';
+type View = 'HOME' | 'RULES' | 'CONTACT';
+
+const SECTION_ROLES: RoleType[] = [
+  'LIBRARY', 'TPC', 'WARDEN', 'STORE', 'LUCS', 'SPORTS',
+  'MEDICAL', 'NAD', 'DEPT', 'HOD', 'ACCOUNTS', 'ADMINISTRATION',
+];
 
 export function App() {
   const [booting, setBooting] = useState(true);
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [view, setView] = useState<View>('HOME');
 
-  const [studentStatus, setStudentStatus] = useState<StudentStatus | null>(null);
+  const [studentData, setStudentData] = useState<StudentRequestResponse | null>(null);
   const [queue, setQueue] = useState<SectionQueue | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [dataError, setDataError] = useState('');
+  const [error, setError] = useState('');
 
-  // Detail-page state (Department / Labs breakdown)
-  const [detailTitle, setDetailTitle] = useState('');
-  const [detailItems, setDetailItems] = useState<DetailItem[]>([]);
+  // Ensure a student has an active request; create one (with the chosen exit type) if not.
+  const ensureStudentRequest = async (exitType?: ExitType) => {
+    let data = await api.studentRequest();
+    if (!data.has_request && exitType) {
+      data = await api.initiate(exitType, 0, '');
+    }
+    setStudentData(data);
+    setQueue(null);
+  };
 
-  // Load the role-specific data for a logged-in user.
-  const loadData = async (u: CurrentUser) => {
-    setDataError('');
+  const loadData = async (u: CurrentUser, exitType?: ExitType) => {
+    setError('');
     try {
-      if (u.role === 'Student') {
-        setStudentStatus(await api.studentStatus());
-        setQueue(null);
-      } else {
+      if (u.role === 'STUDENT') {
+        await ensureStudentRequest(exitType);
+      } else if (SECTION_ROLES.includes(u.role)) {
         setQueue(await api.sectionQueue());
-        setStudentStatus(null);
+        setStudentData(null);
       }
-    } catch (err) {
-      setDataError(err instanceof Error ? err.message : 'Failed to load data');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load');
     }
   };
 
-  // Restore an existing session on first load.
   useEffect(() => {
     (async () => {
       try {
         const u = await api.me();
         setUser(u);
-        await loadData(u);
+        await loadData(u);           // resume existing session (no exit type needed)
       } catch {
         setUser(null);
       } finally {
@@ -55,126 +61,75 @@ export function App() {
     })();
   }, []);
 
-  const handleLogin = async (username: string, password: string, role: RoleType) => {
+  const handleLogin = async (username: string, password: string, role: RoleType, exitType: ExitType) => {
     const u = await api.login(username, password, role);
     setUser(u);
     setView('HOME');
-    await loadData(u);
+    await loadData(u, exitType);
   };
 
   const handleLogout = async () => {
-    try {
-      await api.logout();
-    } finally {
-      setUser(null);
-      setStudentStatus(null);
-      setQueue(null);
-      setView('HOME');
+    try { await api.logout(); } finally {
+      setUser(null); setStudentData(null); setQueue(null); setView('HOME');
     }
   };
 
-  // Open a section's detail page. Department & Labs show the full per-faculty /
-  // per-lab breakdown; every other section shows its single approval status.
-  const openSection = async (section: SectionKey, label: string) => {
-    try {
-      if (section === 'department') {
-        const d = await api.deptDetail();
-        setDetailTitle(`Department (${d.dept}) — Faculty Details`);
-        setDetailItems(d.items);
-      } else if (section === 'labs') {
-        const d = await api.labDetail();
-        setDetailTitle('Lab Details');
-        setDetailItems(d.items);
-      } else {
-        setDetailTitle(`${label} — Details`);
-        setDetailItems([{ name: label, approved: !!studentStatus?.sections[section] }]);
-      }
-      setView('DETAIL');
-    } catch (err) {
-      setDataError(err instanceof Error ? err.message : 'Failed to load details');
-    }
-  };
+  const reloadStudent = async () => { if (user) setStudentData(await api.studentRequest()); };
+  const reloadQueue = async () => { if (user) setQueue(await api.sectionQueue()); };
 
-  const handleSave = async (approvals: Record<string, boolean>) => {
-    setSaving(true);
-    try {
-      await api.sectionSave(approvals);
-      setQueue(await api.sectionQueue());
-    } catch (err) {
-      setDataError(err instanceof Error ? err.message : 'Failed to save');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // ── Render ──
   if (booting) {
-    return (
-      <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center' }}>
-        <p className="text-muted">Loading…</p>
-      </div>
-    );
+    return <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center' }}><p>Loading…</p></div>;
   }
 
-  if (!user) {
-    return <LoginPage onLogin={handleLogin} />;
-  }
+  if (!user) return <LoginPage onLogin={handleLogin} />;
 
   const goHome = () => setView('HOME');
+  if (view === 'RULES') return <RulesPage onHome={goHome} onLogout={handleLogout} />;
+  if (view === 'CONTACT') return <ContactPage onHome={goHome} onLogout={handleLogout} />;
 
-  if (view === 'RULES') {
-    return <RulesPage onHome={goHome} onLogout={handleLogout} />;
-  }
-  if (view === 'CONTACT') {
-    return <ContactPage onHome={goHome} onLogout={handleLogout} />;
-  }
-  if (view === 'DETAIL' && user.role === 'Student') {
-    return (
-      <StudentDetailPage
-        title={detailTitle}
-        studentName={user.name}
-        items={detailItems}
-        onHome={goHome}
-        onBack={goHome}
-        onLogout={handleLogout}
-      />
-    );
-  }
-
-  // HOME
-  if (user.role === 'Student') {
-    if (!studentStatus) {
+  // ── Student: Page 1 (intake) until submitted, then Page 2 (dashboard) ──
+  if (user.role === 'STUDENT') {
+    if (!studentData || !studentData.has_request || !studentData.request) {
       return (
         <div style={{ padding: 40, textAlign: 'center' }}>
-          <p className="text-danger">{dataError || 'No student record found.'}</p>
+          <p className="text-danger">{error || 'Preparing your clearance request…'}</p>
           <button className="btn btn-primary" onClick={handleLogout}>Back to login</button>
         </div>
       );
     }
     return (
       <StudentDashboard
-        student={studentStatus}
-        onHome={goHome}
+        request={studentData.request}
+        onReload={reloadStudent}
         onLogout={handleLogout}
         onRules={() => setView('RULES')}
         onContact={() => setView('CONTACT')}
-        onOpenSection={openSection}
       />
     );
   }
 
-  // Officer roles
+  // ── Officer ──
+  if (SECTION_ROLES.includes(user.role)) {
+    return (
+      <SectionApprovalPage
+        officerName={user.name}
+        heading={queue?.heading ?? 'Officer Desk'}
+        rows={queue?.students ?? []}
+        onReload={reloadQueue}
+        onLogout={handleLogout}
+        onRules={() => setView('RULES')}
+        onContact={() => setView('CONTACT')}
+      />
+    );
+  }
+
+  // ── Admin / other ──
   return (
-    <SectionApprovalPage
-      officerName={user.name}
-      heading={queue?.heading ?? 'Students'}
-      students={queue?.students ?? []}
-      saving={saving}
-      onSave={handleSave}
-      onLogout={handleLogout}
-      onRules={() => setView('RULES')}
-      onContact={() => setView('CONTACT')}
-    />
+    <div style={{ padding: 40, textAlign: 'center' }}>
+      <p>Logged in as <strong>{user.username}</strong> ({user.role}).</p>
+      <p className="text-muted">Use the Django admin at <code>/admin</code> for administrative tasks.</p>
+      <button className="btn btn-primary" onClick={handleLogout}>Logout</button>
+    </div>
   );
 }
 
