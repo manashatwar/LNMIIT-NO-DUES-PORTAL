@@ -1,11 +1,12 @@
 """
 Seed reference data + demo users for the redesigned (Design.md) schema.
 
-Run:  python manage.py seed_demo
+Run: python manage.py seed_demo
 
 All accounts use password: csepassword
 Login with the webmail as username and pick the matching role.
 """
+
 from django.contrib.auth.models import User
 from django.core.management.base import BaseCommand
 

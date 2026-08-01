@@ -18,7 +18,7 @@ export function RulesPage({ onLogout, onHome }: RulesPageProps) {
         'Any rejected section requires re-submission by the student with the corrected document.',
         'The No-Dues certificate is issued only when all required sections have approved.',
         'Hostel clearance is specific to the student\'s assigned hostel.',
-        'HOD clearance depends on prior clearance of Store, LUCS, Sports, Medical, NAD, and Department form.',
+        'HOD clearance depends on prior clearance of Store Release, LUCS, Sports, Medical Unit, NAD Cell, and Department form.',
     ];
 
     return (
