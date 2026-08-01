@@ -1,167 +1,169 @@
+"""
+Data models for the LNMIIT No Dues Portal — aligned to Design.md.
+
+Reference data (Department, Hostel, Section) + identity/request entities
+(UserProfile, Student, ClearanceRequest, SectionStatus, Document, Comment,
+Certificate). Roll numbers are TEXT, never integers.
+"""
+from django.conf import settings
+from django.contrib.auth.models import User
 from django.db import models
 
-# Create your models here.
+# ─── Domain constants ─────────────────────────────────────────────────────────
 
-class Faculty(models.Model):
-	name = models.CharField(max_length=250)
-	webmail = models.CharField(max_length=100,unique=True)
-	password = models.CharField(max_length=250)
-	dept = models.CharField(max_length=100)
-	#approval = models.BooleanField(default=False)
+DEPARTMENT_CODES = ["CCE", "CSE", "ECE", "MME"]
+HOSTEL_CODES = ["BH1", "BH2", "BH3", "BH4", "BH5", "GH1"]
 
-	def __unicode__(self):
-		return self.name
+EXIT_TYPES = ["GRADUATION", "NEP_EXIT", "WITHDRAWAL", "ADMISSION_CANCEL"]
 
-class Lab(models.Model):
-	name = models.CharField(max_length=250,default="Lab")
-	webmail = models.CharField(max_length=100,unique=True)
-	password = models.CharField(max_length=250)
+# Section codes (see Design.md § Approval Engine / Section Flow)
+SECTION_LIBRARY = "LIBRARY"
+SECTION_TPC = "TPC"
+SECTION_WARDEN = "WARDEN"
+SECTION_STORE = "STORE"
+SECTION_LUCS = "LUCS"
+SECTION_SPORTS = "SPORTS"
+SECTION_MEDICAL = "MEDICAL"
+SECTION_NAD = "NAD"
+SECTION_DEPT = "DEPT"            # Department-Purpose (No-Dues form upload)
+SECTION_HOD = "HOD"
+SECTION_ACCOUNTS = "ACCOUNTS"
+SECTION_ADMINISTRATION = "ADMINISTRATION"
 
-	def __unicode__(self):
-		return self.name
+STATUS_PENDING = "PENDING"
+STATUS_APPROVED = "APPROVED"
+STATUS_REJECTED = "REJECTED"
+
+OVERALL_IN_PROGRESS = "IN_PROGRESS"
+OVERALL_CLEARED = "CLEARED"
+
+
+# ─── Reference entities ─────────────────────────────────────────────────────────
+
+class Department(models.Model):
+    code = models.CharField(max_length=8, unique=True)   # CCE | CSE | ECE | MME
+
+    def __str__(self):
+        return self.code
+
+
+class Hostel(models.Model):
+    code = models.CharField(max_length=8, unique=True)   # BH1..BH5 | GH1
+
+    def __str__(self):
+        return self.code
+
+
+class Section(models.Model):
+    code = models.CharField(max_length=32, unique=True)
+    name = models.CharField(max_length=120)
+    order = models.PositiveIntegerField(default=0)
+    is_upload_section = models.BooleanField(default=False)
+    is_consolidator = models.BooleanField(default=False)  # HOD, Administration
+
+    class Meta:
+        ordering = ["order"]
+
+    def __str__(self):
+        return self.code
+
+
+# ─── Identity and request entities ──────────────────────────────────────────────
+
+class UserProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
+    role = models.CharField(max_length=32)  # STUDENT | LIBRARY | ... | ADMIN
+    hostel = models.ForeignKey(Hostel, null=True, blank=True, on_delete=models.PROTECT)
+    department = models.ForeignKey(Department, null=True, blank=True, on_delete=models.PROTECT)
+
+    def __str__(self):
+        return f"{self.user.username} ({self.role})"
+
 
 class Student(models.Model):
-	name = models.CharField(max_length=250)
-	roll = models.IntegerField(default=0)
-	webmail = models.CharField(max_length=100,unique=True)
-	password = models.CharField(max_length=250)
-	dept = models.CharField(max_length=100)
-	hostel = models.CharField(max_length=100)
-	faculty_approval = models.ManyToManyField(Faculty, through = 'StudFacStatus')
-	lab_approval = models.ManyToManyField(Lab, through = 'StudLabStatus')
-	caretaker_approval = models.BooleanField(default=False)
-	warden_approval = models.BooleanField(default=False)
-	gymkhana_approval = models.BooleanField(default=False)
-	library_approval = models.BooleanField(default=False)
-	online_cc_approval = models.BooleanField(default=False)
-	cc_approval = models.BooleanField(default=False)
-	assistant_registrar_approval = models.BooleanField(default=False)
-	submit_thesis = models.BooleanField(default=False)
-	hod_approval = models.BooleanField(default=False)
-	account_approval = models.BooleanField(default=False)
-	intake_submitted = models.BooleanField(default=False)
-	vacant_room_no = models.CharField(max_length=50, default='', blank=True)
-	btp_doc_title = models.CharField(max_length=250, default='', blank=True)
-	btp_form_no = models.CharField(max_length=100, default='', blank=True)
-	btp_plagiarism = models.CharField(max_length=50, default='', blank=True)
-	offer_letter_name = models.CharField(max_length=250, default='', blank=True)
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="student")
+    name = models.CharField(max_length=120)
+    roll_no = models.CharField(max_length=16)            # TEXT — e.g. 24UCC174
+    department = models.ForeignKey(Department, on_delete=models.PROTECT)
+    hostel = models.ForeignKey(Hostel, on_delete=models.PROTECT)
+    webmail = models.EmailField()
 
-	def dept_status(self):
-		faculty_dept=Faculty.objects.filter(dept=self.dept)
-		for fac in faculty_dept:
-			st = StudFacStatus.objects.filter(faculty=fac, student=self).first()
-			if not st or not st.approval:
-				return False
-		return True
-
-	def lab_status(self):
-		labs=Lab.objects.all()
-		for lab in labs:
-			st = StudLabStatus.objects.filter(lab=lab, student=self).first()
-			if not st or not st.approval:
-				return False
-		return True
+    def __str__(self):
+        return f"{self.roll_no} {self.name}"
 
 
-	def __unicode__(self):
-		return self.webmail
+class ClearanceRequest(models.Model):
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="requests")
+    exit_type = models.CharField(max_length=20)
+    overall_status = models.CharField(max_length=16, default=OVERALL_IN_PROGRESS)
+    fund_us_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    is_active = models.BooleanField(default=True)
+    vacant_room_no = models.CharField(max_length=50, blank=True, default="")
+    intake_submitted = models.BooleanField(default=False)   # Page 1 completed
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Request #{self.pk} — {self.student.roll_no} ({self.exit_type})"
 
 
-class StudFacStatus(models.Model):
-	faculty = models.ForeignKey(Faculty,on_delete=models.CASCADE)
-	student = models.ForeignKey(Student,on_delete=models.CASCADE)
-	approval = models.BooleanField(default = False)
+class SectionStatus(models.Model):
+    request = models.ForeignKey(ClearanceRequest, on_delete=models.CASCADE, related_name="section_statuses")
+    section = models.ForeignKey(Section, on_delete=models.PROTECT)
+    status = models.CharField(max_length=12, default=STATUS_PENDING)
+    decided_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
+    decided_at = models.DateTimeField(null=True, blank=True)
+    # Basic (name/roll) sections only reach the officer's queue after the student confirms.
+    student_confirmed = models.BooleanField(default=True)
 
-	def __unicode__(self):
-		return self.student.webmail
+    class Meta:
+        unique_together = ("request", "section")
 
-class StudLabStatus(models.Model):
-	lab = models.ForeignKey(Lab,on_delete=models.CASCADE)
-	student = models.ForeignKey(Student,on_delete=models.CASCADE)
-	approval = models.BooleanField(default = False)
+    def __str__(self):
+        return f"{self.request_id}:{self.section.code}={self.status}"
 
-	def __unicode__(self):
-		return self.student.webmail
 
-class Caretaker(models.Model):
-	name = models.CharField(max_length=250)
-	webmail = models.CharField(max_length=100,unique=True)
-	password = models.CharField(max_length=250)
-	hostel = models.CharField(max_length=100)
+class Document(models.Model):
+    section_status = models.ForeignKey(SectionStatus, on_delete=models.CASCADE, related_name="documents")
+    file = models.FileField(upload_to="secure/", null=True, blank=True)
+    event_report_url = models.URLField(null=True, blank=True)   # LUCS link mode
+    original_name = models.CharField(max_length=255, blank=True, default="")
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    ocr_text = models.TextField(blank=True, default="")
+    ocr_fields_json = models.TextField(blank=True, default="{}")  # JSON string (SQLite has no JSONField)
 
-	def __unicode__(self):
-		return self.name
+    @property
+    def ocr_fields(self):
+        import json
+        try:
+            return json.loads(self.ocr_fields_json or "{}")
+        except ValueError:
+            return {}
 
-class Warden(models.Model):
-	name = models.CharField(max_length=250)
-	webmail = models.CharField(max_length=100,unique=True)
-	password = models.CharField(max_length=250)
-	hostel = models.CharField(max_length=100)
+    @ocr_fields.setter
+    def ocr_fields(self, value):
+        import json
+        self.ocr_fields_json = json.dumps(value or {})
 
-	def __unicode__(self):
-		return self.name
+    def __str__(self):
+        return f"Doc #{self.pk} for {self.section_status_id}"
 
-class Gymkhana(models.Model):
-	name = models.CharField(max_length=250,default="Gymkhana")
-	webmail = models.CharField(max_length=100,unique=True)
-	password = models.CharField(max_length=250)
 
-	def __unicode__(self):
-		return self.name
+class Comment(models.Model):
+    section_status = models.ForeignKey(SectionStatus, on_delete=models.CASCADE, related_name="comments")
+    author = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    body = models.TextField()
+    is_system = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
 
-class Library(models.Model):
-	name = models.CharField(max_length=250,default="Library")
-	webmail = models.CharField(max_length=100,unique=True)
-	password = models.CharField(max_length=250)
+    def __str__(self):
+        return f"Comment #{self.pk}"
 
-	def __unicode__(self):
-		return self.name
 
-class OnlineCC(models.Model):
-	name = models.CharField(max_length=250,default="OnlineCC")
-	webmail = models.CharField(max_length=100,unique=True)
-	password = models.CharField(max_length=250)
+class Certificate(models.Model):
+    request = models.OneToOneField(ClearanceRequest, on_delete=models.CASCADE, related_name="certificate")
+    pdf_file = models.FileField(upload_to="certificates/", null=True, blank=True)
+    fund_us_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    generated_at = models.DateTimeField(auto_now_add=True)
 
-	def __unicode__(self):
-		return self.name
-
-class CC(models.Model):
-	name = models.CharField(max_length=250,default="CC")
-	webmail = models.CharField(max_length=100,unique=True)
-	password = models.CharField(max_length=250)
-
-	def __unicode__(self):
-		return self.name
-
-class SubmitThesis(models.Model):
-	name = models.CharField(max_length=250,default="Submit Thesis")
-	webmail = models.CharField(max_length=100,unique=True)
-	password = models.CharField(max_length=250)
-
-	def __unicode__(self):
-		return self.name
-
-class asstreg(models.Model):
-	name = models.CharField(max_length=250)
-	webmail = models.CharField(max_length=100,unique=True)
-	password = models.CharField(max_length=250)
-
-	def __unicode__(self):
-		return self.name
-
-class HOD(models.Model):
-	name = models.CharField(max_length=250)
-	webmail = models.CharField(max_length=100,unique=True)
-	password = models.CharField(max_length=250)
-	dept = models.CharField(max_length=100)
-
-	def __unicode__(self):
-		return self.name
-
-class Account(models.Model):
-	name = models.CharField(max_length=250,default="Account")
-	webmail = models.CharField(max_length=100,unique=True)
-	password = models.CharField(max_length=250)
-
-	def __unicode__(self):
-		return self.name
+    def __str__(self):
+        return f"Certificate for request #{self.request_id}"
