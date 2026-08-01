@@ -1,4 +1,7 @@
 .venv/
+venv/
 __pycache__/
 db.sqlite3
 .DS_Store
+uploaded_media/
+.vscode/
