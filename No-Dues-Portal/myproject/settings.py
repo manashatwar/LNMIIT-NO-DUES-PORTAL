@@ -133,3 +133,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
 # Session cookie works same-origin via the Vite dev proxy (/api -> :8000).
 SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_SAMESITE = 'Lax'
+
+# Uploaded documents (kept out of the static web root; served via access-checked views).
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'uploaded_media')
