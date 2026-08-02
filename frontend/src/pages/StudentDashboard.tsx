@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Layout } from '../components/Layout';
-import { ClearanceRequest, SectionInfo } from '../types';
+import { ClearanceRequest, SectionInfo, CertificateData } from '../types';
 import { api } from '../api';
 
 interface StudentDashboardProps {
@@ -174,21 +174,73 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
         finally { setBusy(null); }
     };
 
+    const buildCertificateMarkup = (c: CertificateData) => {
+        const rows = c.sections.map((s) => `
+            <tr>
+                <td style="padding:8px 12px;border-bottom:1px solid #dbe3ee;">${s.name}</td>
+                <td style="padding:8px 12px;border-bottom:1px solid #dbe3ee;">${s.approved_by || '—'}</td>
+                <td style="padding:8px 12px;border-bottom:1px solid #dbe3ee;">${s.decided_at ? new Date(s.decided_at).toLocaleDateString() : '—'}</td>
+            </tr>`).join('');
+        return `
+            <div style="width:760px;padding:40px;font-family:Arial,Helvetica,sans-serif;color:#0f2748;background:#ffffff;border:6px solid #1b365d;">
+                <div style="text-align:center;border-bottom:3px solid #1b365d;padding-bottom:16px;margin-bottom:24px;">
+                    <div style="font-size:22px;font-weight:bold;letter-spacing:1px;">THE LNM INSTITUTE OF INFORMATION TECHNOLOGY</div>
+                    <div style="font-size:16px;color:#475569;margin-top:4px;">No-Dues Certificate</div>
+                </div>
+                <table style="width:100%;font-size:14px;margin-bottom:20px;">
+                    <tr><td style="padding:4px 0;color:#475569;width:160px;">Student Name</td><td style="font-weight:bold;">${c.student}</td></tr>
+                    <tr><td style="padding:4px 0;color:#475569;">Roll Number</td><td style="font-weight:bold;">${c.roll_no}</td></tr>
+                    <tr><td style="padding:4px 0;color:#475569;">Exit Type</td><td style="font-weight:bold;">${EXIT_LABELS[c.exit_type] || c.exit_type}</td></tr>
+                    <tr><td style="padding:4px 0;color:#475569;">Fund-Us Contribution</td><td style="font-weight:bold;">₹${c.fund_us_amount}</td></tr>
+                </table>
+                <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:24px;">
+                    <thead>
+                        <tr style="background:#eef4ff;">
+                            <th style="text-align:left;padding:8px 12px;border-bottom:2px solid #1b365d;">Section</th>
+                            <th style="text-align:left;padding:8px 12px;border-bottom:2px solid #1b365d;">Approved By</th>
+                            <th style="text-align:left;padding:8px 12px;border-bottom:2px solid #1b365d;">Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+                <div style="font-size:12px;color:#64748b;display:flex;justify-content:space-between;border-top:1px solid #dbe3ee;padding-top:12px;">
+                    <span>Certificate ID: NDC-${c.request_id}</span>
+                    <span>Generated: ${new Date(c.generated_at).toLocaleString()}</span>
+                </div>
+            </div>`;
+    };
+
     const downloadCertificate = async () => {
         try {
             const { certificate: c } = await api.certificate();
-            const lines = [
-                'LNMIIT — NO DUES CERTIFICATE', '================================',
-                `Student : ${c.student} (${c.roll_no})`,
-                `Exit Type : ${EXIT_LABELS[c.exit_type] || c.exit_type}`,
-                `Fund-Us : ₹${c.fund_us_amount}`,
-                `Generated : ${new Date(c.generated_at).toLocaleString()}`, '',
-                'Sections cleared:',
-                ...c.sections.map((s) => `  - ${s.name}: ${s.approved_by || '—'}`),
-            ];
-            const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-            a.download = `NoDues_${c.roll_no}.txt`; a.click(); URL.revokeObjectURL(a.href);
+
+            // Loaded on demand (not in the main bundle) — most students never click this,
+            // so nobody pays the ~200 KB jsPDF/html2canvas cost on initial page load.
+            const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+                import('jspdf'), import('html2canvas'),
+            ]);
+
+            // Render the certificate off-screen, rasterize it, then embed it in a PDF.
+            const holder = document.createElement('div');
+            holder.style.position = 'fixed';
+            holder.style.left = '-9999px';
+            holder.style.top = '0';
+            holder.innerHTML = buildCertificateMarkup(c);
+            document.body.appendChild(holder);
+
+            try {
+                const canvas = await html2canvas(holder.firstElementChild as HTMLElement, { scale: 2, backgroundColor: '#ffffff' });
+                const imgData = canvas.toDataURL('image/png');
+                const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+                const pageWidth = pdf.internal.pageSize.getWidth();
+                const imgWidth = pageWidth - 80;
+                const imgHeight = (canvas.height * imgWidth) / canvas.width;
+                pdf.addImage(imgData, 'PNG', 40, 40, imgWidth, imgHeight);
+                pdf.save(`NoDues_${c.roll_no}.pdf`);
+            } finally {
+                document.body.removeChild(holder);
+            }
+
             onReload();
         } catch (e) { setMsg(e instanceof Error ? e.message : 'Certificate not available'); }
     };

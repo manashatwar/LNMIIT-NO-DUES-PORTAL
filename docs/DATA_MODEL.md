@@ -1,0 +1,107 @@
+# Data Model
+
+Source: `No-Dues-Portal/main/models.py`. This mirrors [`DESIGN.md`](./DESIGN.md#data-models) closely — differences from that spec are called out below.
+
+## Entity relationship diagram
+
+```mermaid
+erDiagram
+    DEPARTMENT ||--o{ STUDENT : has
+    HOSTEL ||--o{ STUDENT : houses
+    STUDENT ||--o{ CLEARANCEREQUEST : initiates
+    CLEARANCEREQUEST ||--|{ SECTIONSTATUS : contains
+    SECTION ||--o{ SECTIONSTATUS : tracked_in
+    SECTIONSTATUS ||--o{ DOCUMENT : has
+    SECTIONSTATUS ||--o{ COMMENT : has
+    CLEARANCEREQUEST ||--o| CERTIFICATE : yields
+    USERPROFILE }o--o| HOSTEL : scoped_to
+    USERPROFILE }o--o| DEPARTMENT : scoped_to
+    USERPROFILE ||--|| USER : extends
+
+    DEPARTMENT {
+        string code "CCE | CSE | ECE | MME, unique"
+    }
+    HOSTEL {
+        string code "BH1..BH5 | GH1, unique"
+    }
+    SECTION {
+        string code "LIBRARY | TPC | ... unique"
+        string name
+        int order "stage ordering"
+        bool is_upload_section
+        bool is_consolidator "HOD, Administration"
+    }
+    USERPROFILE {
+        fk user "OneToOne -> auth.User"
+        string role "STUDENT | LIBRARY | ... | ADMIN"
+        fk hostel "nullable, wardens only"
+        fk department "nullable, HODs only"
+    }
+    STUDENT {
+        fk user "OneToOne -> auth.User"
+        string name
+        string roll_no "CharField — TEXT, e.g. 24UCC174"
+        fk department
+        fk hostel
+        string webmail
+    }
+    CLEARANCEREQUEST {
+        fk student
+        string exit_type "GRADUATION | NEP_EXIT | WITHDRAWAL | ADMISSION_CANCEL"
+        string overall_status "IN_PROGRESS | CLEARED"
+        decimal fund_us_amount
+        bool is_active "true = the one active request"
+        string vacant_room_no
+        bool intake_submitted "page-1 lock"
+        datetime created_at
+    }
+    SECTIONSTATUS {
+        fk request
+        fk section
+        string status "PENDING | APPROVED | REJECTED"
+        fk decided_by "nullable -> auth.User"
+        datetime decided_at
+        bool student_confirmed "gate before officer sees it"
+    }
+    DOCUMENT {
+        fk section_status
+        file file "nullable — LUCS link mode has none"
+        string event_report_url "nullable, LUCS link mode"
+        string original_name
+        datetime uploaded_at
+        text ocr_text
+        text ocr_fields_json "JSON string — SQLite has no JSONField"
+    }
+    COMMENT {
+        fk section_status
+        fk author "nullable -> auth.User; null = system comment"
+        text body
+        bool is_system
+        datetime created_at
+    }
+    CERTIFICATE {
+        fk request "OneToOne"
+        file pdf_file "nullable — currently never populated, see KNOWN_GAPS.md"
+        decimal fund_us_amount
+        datetime generated_at
+    }
+```
+
+## Notable implementation details vs. `DESIGN.md`
+
+| DESIGN.md says | Code actually does | Why |
+|---|---|---|
+| `Document.ocr_fields` is a `JSONField` | `ocr_fields_json` is a `TextField` with a `ocr_fields` property that (de)serializes JSON | SQLite (the dev database) has no native `JSONField` support in older Django versions used here |
+| One `ClearanceRequest` per student, full stop | `ClearanceRequest.is_active` flags the current one; `_active_request()` filters on it | Lets history (past exit attempts) stay in the table instead of being deleted |
+| — | `ClearanceRequest.intake_submitted` and `SectionStatus.student_confirmed` | Not in `DESIGN.md` — added so "basic" (name/roll-only) sections and the Library/TPC/Warden "tri-gate" only reach an officer's queue after the student explicitly confirms, matching the actual multi-page frontend flow (see `docs/images/ui-wireframe.png`) |
+| `Certificate.pdf_file` holds the generated PDF | Never populated — the PDF is generated **client-side** and never uploaded back to the server | See [KNOWN_GAPS.md](./KNOWN_GAPS.md) — means there's no server-retained copy of an issued certificate |
+
+## Validation invariants (enforced in `engine.py` / `api.py`, not database constraints)
+
+- `roll_no` round-trips as text — never cast to `int` anywhere in the codebase (`DESIGN.md` Property 1).
+- `(request, section)` is unique per `SectionStatus` (`Meta.unique_together`).
+- A `REJECTED` `SectionStatus` always has an associated `Comment` written in the same request (`engine.reject`).
+- `approve()` refuses to run unless every prerequisite section for that section is `APPROVED` (`engine.actionable`).
+- Reopening any `APPROVED` section deletes the request's `Certificate` if one exists (`engine._invalidate_certificate`).
+
+None of the above are currently exercised by an automated test suite — see [KNOWN_GAPS.md](./KNOWN_GAPS.md).

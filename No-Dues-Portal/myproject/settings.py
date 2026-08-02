@@ -20,18 +20,31 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # See https://docs.djangoproject.com/en/1.9/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'z=dqu984s9ps!l(2s)xqj!53852bc5%_+e3ayui#85z!j+a%%z'
+# In production, set the DJANGO_SECRET_KEY environment variable — never commit
+# a real production key. The fallback below is a dev-only placeholder.
+SECRET_KEY = os.environ.get(
+    'DJANGO_SECRET_KEY',
+    'z=dqu984s9ps!l(2s)xqj!53852bc5%_+e3ayui#85z!j+a%%z',  # dev-only default
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# Set DJANGO_DEBUG=False in production. Defaults to True to keep local
+# `python manage.py runserver` working with no setup.
+DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = ['*']
+# Comma-separated list, e.g. DJANGO_ALLOWED_HOSTS=nodues.lnmiit.ac.in,10.0.0.5
+# Defaults to '*' only for local development convenience.
+ALLOWED_HOSTS = [
+    h.strip() for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '*').split(',') if h.strip()
+]
 
+# Comma-separated list of scheme+host origins allowed to submit CSRF-protected
+# requests, e.g. DJANGO_CSRF_TRUSTED_ORIGINS=https://nodues.lnmiit.ac.in
 CSRF_TRUSTED_ORIGINS = [
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-    'http://localhost:8000',
-    'http://127.0.0.1:8000',
+    o.strip() for o in os.environ.get(
+        'DJANGO_CSRF_TRUSTED_ORIGINS',
+        'http://localhost:5173,http://127.0.0.1:5173,http://localhost:8000,http://127.0.0.1:8000',
+    ).split(',') if o.strip()
 ]
 
 

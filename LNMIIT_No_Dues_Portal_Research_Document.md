@@ -110,7 +110,7 @@ For each section below we answer three questions: **What does it do? · What doe
 
 ## 3. Design
 
-**See [`Design.md`](./Design.md)** for the full design.
+**See [`docs/DESIGN.md`](./docs/DESIGN.md)** for the full design.
 
 ---
 

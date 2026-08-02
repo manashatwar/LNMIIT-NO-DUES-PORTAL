@@ -1,35 +1,21 @@
-# Design Document: LNMIIT No Dues Portal
+# Domain Design: LNMIIT No Dues Portal
+
+This is the authoritative **domain design** — section flow, approval engine, routing/scoping rules, OCR pipeline, upload handling, certificate rules, and the correctness properties the implementation is expected to satisfy. It was originally written as a coordination document between the developers building this out; now that the build is done, it lives here as the lasting reference for *why the rules are what they are*, folded in alongside the rest of the documentation set.
+
+For **what's actually running** (the React SPA + Django JSON API split, request lifecycle, sequence diagrams), see [`ARCHITECTURE.md`](./ARCHITECTURE.md) — this document predates that implementation and its own architecture description (server-rendered templates) was superseded by the SPA approach. For the concrete model fields and how they differ from what's described here, see [`DATA_MODEL.md`](./DATA_MODEL.md).
 
 ## Overview
 
-The LNMIIT No Dues Portal is a Django web application that digitizes the institute's student clearance ("No Dues") process end to end. A student initiates a request, selects an exit type, uploads the proof each section requires, and every institutional section independently approves or rejects with a mandatory written reason. Approvals follow a fixed dependency hierarchy; a reverse-hierarchy cascade keeps the final status trustworthy by resetting downstream approvals when an upstream section reopens. Once every required section is cleared, the student downloads a server-generated No-Dues certificate.
+The LNMIIT No Dues Portal digitizes the institute's student clearance ("No Dues") process end to end. A student initiates a request, selects an exit type, uploads the proof each section requires, and every institutional section independently approves or rejects with a mandatory written reason. Approvals follow a fixed dependency hierarchy; a reverse-hierarchy cascade keeps the final status trustworthy by resetting downstream approvals when an upstream section reopens. Once every required section is cleared, the student downloads a No-Dues certificate.
 
-The system is purpose-built around LNMIIT's own clearance order and section responsibilities — four departments (CCE, CSE, ECE, MME), six hostels (BH1–BH5, GH1), and alphanumeric roll numbers (e.g. `24UCC174`). It uses server-rendered Django templates plus the Django admin for staff data management, Tesseract OCR (via `pytesseract`) as an advisory review aid, and server-side PDF generation for certificates.
-
-This document defines the architecture, domain model, approval engine, routing and scoping rules, OCR pipeline, upload handling, certificate generation, screen flows, access control, and correctness properties suitable for property-based testing.
-
-## Architecture
-
-A single Django project serves both the server-rendered pages and the application logic. OCR runs server-side in Python on upload. Documents are stored outside the web root and served through an access-checked download view.
-
-```mermaid
-flowchart LR
-    U[Browser<br/>Student / Section officers / Admin] -->|HTTPS| W[Django app<br/>views + templates]
-    W --> AUTH[Auth & role+scope guard]
-    W --> ENG[Approval engine<br/>hierarchy + reverse cascade]
-    W --> OCR[OCR service<br/>Tesseract / pytesseract + Pillow]
-    W --> PDF[Certificate generator<br/>server-side PDF]
-    W --> DB[(Relational DB<br/>SQLite dev / PostgreSQL prod)]
-    W --> FS[(Document storage<br/>outside web root)]
-    AUTH -. Django admin .-> DB
-```
+The system is purpose-built around LNMIIT's own clearance order and section responsibilities — four departments (CCE, CSE, ECE, MME), six hostels (BH1–BH5, GH1), and alphanumeric roll numbers (e.g. `24UCC174`). OCR (via `pytesseract`) is used as an advisory review aid.
 
 **Stack**
 
-- **Language / framework:** Python + Django (server-rendered templates; Django admin for staff data management).
-- **Database:** SQLite for development; PostgreSQL for production.
+- **Language / framework:** Python + Django (JSON API — see [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the actual split with the React frontend), Django admin for staff data management.
+- **Database:** SQLite for development; PostgreSQL recommended for production (see [`SCALING.md`](./SCALING.md)).
 - **OCR:** Tesseract engine via the `pytesseract` wrapper, with Pillow for image preprocessing.
-- **PDF:** a server-side PDF library (e.g. ReportLab / WeasyPrint) for certificate generation.
+- **Certificate:** generated client-side (jsPDF + html2canvas) — see [`KNOWN_GAPS.md`](./KNOWN_GAPS.md) for why, and what's not yet done about persisting it server-side.
 - **Auth:** Django's built-in authentication and session framework; passwords hashed by Django, never stored in plain text.
 
 ## Section Flow
@@ -39,7 +25,7 @@ The clearance follows the institute's "Order of No Dues." Independent sections r
 ```mermaid
 flowchart TD
     A([Student logs in]) --> B[Initiate: select exit type<br/>Graduation / NEP Exit / Withdrawal / Admission Cancel<br/>+ optional Fund Us amount]
-    B --> C[Upload required documents per section<br/>max 50 KB · JPG/PNG/PDF · OCR extracts name & roll]
+    B --> C[Upload required documents per section<br/>JPG/PNG/PDF · OCR extracts name & roll]
 
     C --> LIB[Central Library]
     C --> TPC[TPC / Placement]
@@ -145,123 +131,19 @@ class OcrService:
 **Purpose**: Validate and store uploads, and serve them only to authorized reviewers.
 
 **Responsibilities**:
-- Enforce type (JPG/PNG/PDF) and 50 KB size limit on both client and server.
+- Enforce type (JPG/PNG/PDF) and size limit on both client and server (the implemented limit is 150 KB — see [`KNOWN_GAPS.md`](./KNOWN_GAPS.md) for the mismatch with this document's original 50 KB figure).
 - Store originals outside the web root; serve via an access-checked download view.
 - Support LUCS link-mode submission (URL instead of file); OCR applies only when a file is provided.
 - Always retain the original uploaded file and keep it downloadable by authorized reviewers.
 
 ### Component 5: Certificate Generator
 
-**Purpose**: Produce the final No-Dues PDF once the request is cleared.
+**Purpose**: Produce the final No-Dues certificate once the request is cleared.
 
 **Responsibilities**:
-- Generate a PDF only when `overall_status == CLEARED`.
+- Available only when `overall_status == CLEARED`.
 - List student identity, exit type, each section with approver and timestamp, and the Fund-Us contribution.
 - Be idempotent; invalidate the certificate if a reverse cascade reopens any section.
-
-## Data Models
-
-### Reference entities
-
-```python
-class Department(models.Model):
-    code = models.CharField(max_length=8, unique=True)   # CCE | CSE | ECE | MME
-
-class Hostel(models.Model):
-    code = models.CharField(max_length=8, unique=True)   # BH1..BH5 | GH1
-
-class Section(models.Model):
-    code = models.CharField(max_length=32, unique=True)  # LIBRARY, TPC, LUCS, STORE, ...
-    name = models.CharField(max_length=120)
-    order = models.PositiveIntegerField()                # stage ordering
-    is_upload_section = models.BooleanField(default=False)
-    is_consolidator = models.BooleanField(default=False) # HOD, Administration
-```
-
-**Validation Rules**:
-- `Department.code` restricted to {CCE, CSE, ECE, MME}.
-- `Hostel.code` restricted to {BH1, BH2, BH3, BH4, BH5, GH1}.
-- `Section.code` unique; upload-enabled sections: Library, TPC, LUCS, HOD (department-purpose form), Accounts (cancelled cheque).
-
-### Identity and request entities
-
-```python
-class UserProfile(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
-    role = models.CharField(max_length=32)               # STUDENT | LIBRARY | ... | ADMIN
-    hostel = models.ForeignKey(Hostel, null=True, blank=True, on_delete=models.PROTECT)   # wardens
-    department = models.ForeignKey(Department, null=True, blank=True, on_delete=models.PROTECT)  # HODs
-
-class Student(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
-    name = models.CharField(max_length=120)
-    roll_no = models.CharField(max_length=16)            # TEXT — e.g. 24UCC174, never integer
-    department = models.ForeignKey(Department, on_delete=models.PROTECT)
-    hostel = models.ForeignKey(Hostel, on_delete=models.PROTECT)
-    webmail = models.EmailField()
-
-class ClearanceRequest(models.Model):
-    student = models.ForeignKey(Student, on_delete=models.CASCADE)
-    exit_type = models.CharField(max_length=20)          # GRADUATION | NEP_EXIT | WITHDRAWAL | ADMISSION_CANCEL
-    overall_status = models.CharField(max_length=16, default="IN_PROGRESS")  # IN_PROGRESS | CLEARED
-    fund_us_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-class SectionStatus(models.Model):
-    request = models.ForeignKey(ClearanceRequest, on_delete=models.CASCADE)
-    section = models.ForeignKey(Section, on_delete=models.PROTECT)
-    status = models.CharField(max_length=12, default="PENDING")  # PENDING | APPROVED | REJECTED
-    decided_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
-    decided_at = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        unique_together = ("request", "section")
-
-class Document(models.Model):
-    section_status = models.ForeignKey(SectionStatus, on_delete=models.CASCADE)
-    file = models.FileField(upload_to="secure/")         # stored outside web root
-    event_report_url = models.URLField(null=True, blank=True)   # LUCS link mode
-    uploaded_at = models.DateTimeField(auto_now_add=True)
-    ocr_text = models.TextField(blank=True)
-    ocr_fields = models.JSONField(default=dict)
-
-class Comment(models.Model):
-    section_status = models.ForeignKey(SectionStatus, on_delete=models.CASCADE)
-    author = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
-    body = models.TextField()                            # non-empty; required on rejection
-    created_at = models.DateTimeField(auto_now_add=True)
-
-class Certificate(models.Model):
-    request = models.OneToOneField(ClearanceRequest, on_delete=models.CASCADE)
-    pdf_file = models.FileField(upload_to="certificates/")
-    fund_us_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    generated_at = models.DateTimeField(auto_now_add=True)
-```
-
-**Validation Rules**:
-- `roll_no` is a `CharField` (text), never numeric.
-- `exit_type ∈ {GRADUATION, NEP_EXIT, WITHDRAWAL, ADMISSION_CANCEL}`.
-- `status ∈ {PENDING, APPROVED, REJECTED}`; `(request, section)` unique.
-- A `REJECTED` `SectionStatus` must have an associated non-empty `Comment` written in the same transaction.
-- One active `ClearanceRequest` per student.
-
-### Entity relationships
-
-```mermaid
-erDiagram
-    STUDENT ||--o{ CLEARANCE_REQUEST : initiates
-    DEPARTMENT ||--o{ STUDENT : has
-    HOSTEL ||--o{ STUDENT : houses
-    CLEARANCE_REQUEST ||--|{ SECTION_STATUS : contains
-    SECTION ||--o{ SECTION_STATUS : tracked_in
-    SECTION_STATUS ||--o{ DOCUMENT : has
-    SECTION_STATUS ||--o{ COMMENT : has
-    CLEARANCE_REQUEST ||--o| CERTIFICATE : yields
-    USERPROFILE }o--o| HOSTEL : scoped_to
-    USERPROFILE }o--o| DEPARTMENT : scoped_to
-```
-
-When a `ClearanceRequest` is created, the system generates one `SectionStatus` row per required Section (all `PENDING`). The required set varies with `exit_type`.
 
 ## Approval Engine
 
@@ -367,7 +249,7 @@ Each officer sees only rows for their own section (and scope). Administration se
 
 ### Exit-type rules
 
-`exit_type` determines the required section set for a request. Graduation uses the full set; NEP Exit, Withdrawal, and Admission Cancel may omit sections that do not apply (configurable per section via a required-for-exit-types mapping). The required set is resolved once at request creation, and one `SectionStatus` row is created per required section.
+`exit_type` determines the required section set for a request. Graduation uses the full set; NEP Exit, Withdrawal, and Admission Cancel omit TPC (no placement obligation applies). The required set is resolved once at request creation, and one `SectionStatus` row is created per required section.
 
 ## OCR Pipeline
 
@@ -375,7 +257,7 @@ On upload to an upload-enabled section:
 
 ```python
 def process_upload(uploaded_file, section_status, student):
-    # 1. Validate: type in {jpg, png, pdf}, size <= 50 KB — else reject.
+    # 1. Validate: type in {jpg, png, pdf}, size within limit — else reject.
     validate_upload(uploaded_file)
 
     # 2. Store original outside web root (always retained).
@@ -398,18 +280,19 @@ def process_upload(uploaded_file, section_status, student):
 
 - The officer UI shows the extracted fields **and** a download link to the original.
 - OCR is advisory: a mismatch raises a warning; it does not auto-reject. The original file is the source of truth.
+- In practice this degrades to a no-op if Tesseract isn't installed on the machine running Django — see [`KNOWN_GAPS.md`](./KNOWN_GAPS.md).
 
 ## Upload Handling
 
-- **Limit:** 50 KB per file, enforced both client-side (pre-check) and server-side (hard validation).
+- **Limit:** enforced both client-side (pre-check) and server-side (hard validation). See [`KNOWN_GAPS.md`](./KNOWN_GAPS.md) for the actual configured value.
 - **Types:** JPG, PNG, PDF.
-- **Quality guidance:** the upload control advises submitting the highest quality that fits under 50 KB; files too degraded for OCR are flagged.
+- **Quality guidance:** the upload control advises submitting the highest quality that fits the limit; files too degraded for OCR are flagged.
 - **LUCS link mode:** LUCS additionally accepts an event-report URL instead of a file; OCR applies only when a file is provided.
 - **Storage:** files stored outside the web root; served to authorized reviewers through an access-checked download view, not by direct static URL.
 
 ## Certificate & Fund Us
 
-- When `overall_status == CLEARED`, a "Download Certificate" action generates a PDF listing the student, exit type, and every section with its approver and timestamp.
+- When `overall_status == CLEARED`, a "Download Certificate" action produces a document listing the student, exit type, and every section with its approver and timestamp.
 - The **Fund Us** amount captured at initiation is stored on the request; Accounts deducts it from the refund and it appears on the certificate/refund ledger.
 - Certificate generation is idempotent and is invalidated if a reverse cascade reopens any section.
 
@@ -426,7 +309,7 @@ def process_upload(uploaded_file, section_status, student):
 | `/hod/queue` | HOD | Department-scoped consolidated queue |
 | `/accounts/queue` | Accounts | Refund + cancelled-cheque review |
 | `/admin-office/queue` | Administration | Final all-green approval |
-| `/certificate/<id>` | Student | Download final PDF |
+| `/certificate/<id>` | Student | Download final certificate |
 
 ```mermaid
 flowchart TD
@@ -446,7 +329,7 @@ flowchart TD
 
 ## Correctness Properties
 
-These properties are stated for property-based testing (e.g. Hypothesis). Each holds for all valid inputs over the domain described.
+These properties are stated for property-based testing (e.g. Hypothesis). Each should hold for all valid inputs over the domain described. **None of these are currently covered by an automated test** — see [`KNOWN_GAPS.md`](./KNOWN_GAPS.md).
 
 ### Property 1: Roll number is always text
 
@@ -520,7 +403,7 @@ assert section_status.status != "REJECTED"
 
 ### Property 8: Certificate gating
 
-A `Certificate` exists for a request only if `overall_status == CLEARED`, which holds only if Administration is `APPROVED` and (by P3) all required sections are `APPROVED`.
+A certificate exists for a request only if `overall_status == CLEARED`, which holds only if Administration is `APPROVED` and (by P3) all required sections are `APPROVED`.
 
 ```python
 if Certificate.objects.filter(request=req).exists():
@@ -546,7 +429,7 @@ assert Document.objects.get(section_status=section_status).file  # original reta
 
 ### Property 11: Upload validation
 
-Any file exceeding 50 KB or of a disallowed type is rejected and no `Document` is created; any accepted file is exactly one of JPG/PNG/PDF and ≤ 50 KB.
+Any file exceeding the configured size limit or of a disallowed type is rejected and no `Document` is created; any accepted file is exactly one of JPG/PNG/PDF and within the limit.
 
 ### Property 12: Single active request
 
@@ -574,7 +457,7 @@ At most one active `ClearanceRequest` exists per student at any time; re-initiat
 
 ### Oversized or unreadable upload
 
-**Condition**: File > 50 KB, wrong type, or too degraded for OCR.
+**Condition**: File over the size limit, wrong type, or too degraded for OCR.
 **Response**: Oversized/wrong-type files rejected at validation with a clear message; degraded-but-valid files accepted with an OCR-quality warning (not an auto-reject).
 **Recovery**: Student re-uploads a compliant file.
 
@@ -620,8 +503,8 @@ Focus areas: hierarchy invariants (P2–P4), scoping (P5–P6), certificate gati
 - **Django** — web framework, ORM, auth, admin, CSRF/XSS/SQLi protections.
 - **pytesseract** + **Tesseract OCR engine** — advisory text extraction from uploads.
 - **Pillow** — image preprocessing for OCR.
-- **PDF library** (ReportLab or WeasyPrint) — server-side certificate generation.
-- **Database**: SQLite (development), PostgreSQL (production).
+- **jsPDF + html2canvas** — client-side certificate PDF generation.
+- **Database**: SQLite (development), PostgreSQL (production — see [`SCALING.md`](./SCALING.md)).
 
 ## Implementation Notes (non-negotiable)
 
