@@ -19,7 +19,7 @@ flowchart LR
     end
 
     ORM[(Django ORM)]
-    DB[(SQLite dev /<br/>PostgreSQL prod)]
+    DB[(PostgreSQL)]
     MEDIA[(uploaded_media/<br/>outside web root)]
 
     SPA <-->|"fetch('/api/...')<br/>same-origin via Vite proxy"| URLS

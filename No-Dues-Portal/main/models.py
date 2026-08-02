@@ -129,20 +129,7 @@ class Document(models.Model):
     original_name = models.CharField(max_length=255, blank=True, default="")
     uploaded_at = models.DateTimeField(auto_now_add=True)
     ocr_text = models.TextField(blank=True, default="")
-    ocr_fields_json = models.TextField(blank=True, default="{}")  # JSON string (SQLite has no JSONField)
-
-    @property
-    def ocr_fields(self):
-        import json
-        try:
-            return json.loads(self.ocr_fields_json or "{}")
-        except ValueError:
-            return {}
-
-    @ocr_fields.setter
-    def ocr_fields(self, value):
-        import json
-        self.ocr_fields_json = json.dumps(value or {})
+    ocr_fields = models.JSONField(blank=True, default=dict)  # native Postgres jsonb
 
     def __str__(self):
         return f"Doc #{self.pk} for {self.section_status_id}"

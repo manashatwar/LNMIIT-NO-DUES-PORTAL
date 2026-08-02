@@ -70,7 +70,7 @@ erDiagram
         string original_name
         datetime uploaded_at
         text ocr_text
-        text ocr_fields_json "JSON string — SQLite has no JSONField"
+        json ocr_fields "native Postgres jsonb"
     }
     COMMENT {
         fk section_status
@@ -91,7 +91,6 @@ erDiagram
 
 | DESIGN.md says | Code actually does | Why |
 |---|---|---|
-| `Document.ocr_fields` is a `JSONField` | `ocr_fields_json` is a `TextField` with a `ocr_fields` property that (de)serializes JSON | SQLite (the dev database) has no native `JSONField` support in older Django versions used here |
 | One `ClearanceRequest` per student, full stop | `ClearanceRequest.is_active` flags the current one; `_active_request()` filters on it | Lets history (past exit attempts) stay in the table instead of being deleted |
 | — | `ClearanceRequest.intake_submitted` and `SectionStatus.student_confirmed` | Not in `DESIGN.md` — added so "basic" (name/roll-only) sections and the Library/TPC/Warden "tri-gate" only reach an officer's queue after the student explicitly confirms, matching the actual multi-page frontend flow (see `docs/images/ui-wireframe.png`) |
 | `Certificate.pdf_file` holds the generated PDF | Never populated — the PDF is generated **client-side** and never uploaded back to the server | See [KNOWN_GAPS.md](./KNOWN_GAPS.md) — means there's no server-retained copy of an issued certificate |

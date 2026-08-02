@@ -378,7 +378,7 @@ def upload_document(request):
         "department": stud.department.code,
     }
     doc.ocr_fields = {**fields, "review": autofill, "confirmed": False}
-    doc.save(update_fields=["ocr_text", "ocr_fields_json"])
+    doc.save(update_fields=["ocr_text", "ocr_fields"])
 
     return JsonResponse({"detail": "uploaded", "warnings": warnings,
                          "document_id": doc.id, "autofill": autofill,
@@ -494,7 +494,7 @@ def confirm_review(request):
     merged["review"] = review
     merged["confirmed"] = True
     doc.ocr_fields = merged
-    doc.save(update_fields=["ocr_fields_json"])
+    doc.save(update_fields=["ocr_fields"])
 
     # If the section was rejected, confirming re-sends a fresh request → PENDING.
     if ss.status == STATUS_REJECTED:

@@ -13,7 +13,7 @@ The system is purpose-built around LNMIIT's own clearance order and section resp
 **Stack**
 
 - **Language / framework:** Python + Django (JSON API — see [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the actual split with the React frontend), Django admin for staff data management.
-- **Database:** SQLite for development; PostgreSQL recommended for production (see [`SCALING.md`](./SCALING.md)).
+- **Database:** PostgreSQL — the only supported database, in every environment (see [`SCALING.md`](./SCALING.md)).
 - **OCR:** Tesseract engine via the `pytesseract` wrapper, with Pillow for image preprocessing.
 - **Certificate:** generated client-side (jsPDF + html2canvas) — see [`KNOWN_GAPS.md`](./KNOWN_GAPS.md) for why, and what's not yet done about persisting it server-side.
 - **Auth:** Django's built-in authentication and session framework; passwords hashed by Django, never stored in plain text.
@@ -504,7 +504,7 @@ Focus areas: hierarchy invariants (P2–P4), scoping (P5–P6), certificate gati
 - **pytesseract** + **Tesseract OCR engine** — advisory text extraction from uploads.
 - **Pillow** — image preprocessing for OCR.
 - **jsPDF + html2canvas** — client-side certificate PDF generation.
-- **Database**: SQLite (development), PostgreSQL (production — see [`SCALING.md`](./SCALING.md)).
+- **Database**: PostgreSQL — the only supported database, in every environment (see [`SCALING.md`](./SCALING.md)).
 
 ## Implementation Notes (non-negotiable)
 

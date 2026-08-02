@@ -1,0 +1,7 @@
+# Force LF regardless of core.autocrlf — these get COPY'd straight into Linux
+# Docker images; a CRLF shebang line breaks the container at startup.
+*.sh text eol=lf
+Dockerfile text eol=lf
+Dockerfile.* text eol=lf
+docker-entrypoint.sh text eol=lf
+*.conf text eol=lf

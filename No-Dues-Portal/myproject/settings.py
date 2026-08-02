@@ -12,6 +12,8 @@ https://docs.djangoproject.com/en/1.9/ref/settings/
 
 import os
 
+import dj_database_url
+
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -63,6 +65,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # serves Django's own static files (admin CSS/JS) without nginx needing a shared volume
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -94,12 +97,20 @@ WSGI_APPLICATION = 'myproject.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/1.9/ref/settings/#databases
+#
+# PostgreSQL only — see docs/SCALING.md. `docker-compose.yml` sets DATABASE_URL
+# for you against its own `db` service. Running outside Compose (e.g. plain
+# `manage.py runserver`)? Start a local Postgres first — the quickest way is
+# `docker compose up -d db`, which matches the default below — then override
+# DATABASE_URL if your credentials differ.
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
-    }
+    'default': dj_database_url.config(
+        # dj_database_url.config() reads DATABASE_URL itself; `default` below
+        # only applies if that env var isn't set.
+        default='postgres://nodues:nodues@localhost:5432/nodues',
+        conn_max_age=600,  # persistent connections — avoids reconnecting every request under load
+    )
 }
 
 
@@ -140,6 +151,14 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/1.9/howto/static-files/
 
 STATIC_URL = '/static/'
+# Only used by `collectstatic` (Docker/production) — served by WhiteNoise from
+# the Django process itself, so nginx doesn't need a shared static volume.
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STORAGES = {
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
 
 DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
 

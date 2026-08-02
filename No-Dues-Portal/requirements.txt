@@ -1,4 +1,4 @@
-Django>=3.2
+Django>=4.2
 asgiref>=3.4
 sqlparse>=0.4
 tzdata
@@ -9,3 +9,8 @@ pytesseract>=0.3.10
 # (Certificates are generated client-side with jsPDF/html2canvas instead. Kept
 # here only if a future server-side certificate path is built.)
 reportlab>=3.6
+# PostgreSQL (the only supported database — see docs/SCALING.md) + deployment
+dj-database-url>=2.1
+psycopg2-binary>=2.9
+whitenoise>=6.6
+gunicorn>=22.0

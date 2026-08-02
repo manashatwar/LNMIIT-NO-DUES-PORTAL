@@ -1,0 +1,61 @@
+# Production-shaped local stack: PostgreSQL + gunicorn (Django) + nginx (React SPA).
+# See docs/SCALING.md for why each piece is here, and README.md for the quickstart.
+#
+# Usage:
+#   cp .env.example .env      # then edit DJANGO_SECRET_KEY and POSTGRES_PASSWORD
+#   docker compose up --build
+#   docker compose exec backend python manage.py seed_demo   # demo data, first run only
+#
+# Open http://localhost — nginx serves the SPA and proxies /api, /admin, /static
+# to the backend, so the browser only ever talks to one origin (no CORS setup,
+# same property the Vite dev proxy gives you locally).
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-nodues}
+      POSTGRES_USER: ${POSTGRES_USER:-nodues}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      # Published for local tooling (psql, a DB client, running `manage.py`
+      # straight from your host during development) — not required by the
+      # other services, which talk to `db:5432` over the compose network.
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nodues}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./No-Dues-Portal
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?set DJANGO_SECRET_KEY in .env}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-False}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost}
+      DATABASE_URL: postgres://${POSTGRES_USER:-nodues}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-nodues}
+    volumes:
+      - media:/app/uploaded_media
+    expose:
+      - "8000"
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${HTTP_PORT:-80}:80"
+
+volumes:
+  pgdata:
+  media:

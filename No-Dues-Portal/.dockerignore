@@ -1,8 +1,10 @@
 .venv/
 venv/
 __pycache__/
-.DS_Store
+*.pyc
 uploaded_media/
 staticfiles/
-.env
+.git/
 .vscode/
+.DS_Store
+*.pdf
