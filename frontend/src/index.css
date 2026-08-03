@@ -611,6 +611,12 @@ footer strong {
 .btn-secondary { color: #fff; background-color: #6c757d; border-color: #6c757d; }
 .btn-secondary:hover { background-color: #5a6268; }
 
+.btn-danger { color: #fff; background-color: var(--status-unapproved); }
+.btn-danger:hover { background-color: var(--lnmiit-red-hover); }
+.btn-warning { color: #fff; background-color: #b45309; }
+.btn-warning:hover { background-color: #92400e; }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
 .alert { padding: 12px 16px; border: 1px solid transparent; border-radius: 6px; }
 .alert-danger { color: #7f1d1d; background-color: #fef2f2; border-color: #fca5a5; }
 .alert-success { color: #14532d; background-color: #f0fdf4; border-color: #86efac; }

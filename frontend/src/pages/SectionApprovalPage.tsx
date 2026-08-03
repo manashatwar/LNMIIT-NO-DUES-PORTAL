@@ -13,18 +13,35 @@ interface SectionApprovalPageProps {
     onContact: () => void;
 }
 
+type Tab = 'incoming' | 'approved' | 'rejected';
+
 /**
- * Officer desk: scoped queue of requests for this section.
- * Approve is disabled until prerequisites are met (backend also enforces it).
- * Reject requires a written reason. Expand a row to see documents + OCR.
+ * Officer desk: scoped queue of requests for this section, split into
+ * Incoming / Approved / Rejected tabs so cleared and reopened requests don't
+ * clutter the actionable queue. Approve is disabled until prerequisites are
+ * met (backend also enforces it). Reject requires a written reason, entered
+ * inline (not a browser prompt) — the same comment mechanism Feedback uses,
+ * since both are "leave a note for the student," just with or without a
+ * status change. Expand a row (View) to see documents + OCR.
  */
 export function SectionApprovalPage({ officerName, heading, rows, onReload, onLogout, onRules, onContact }: SectionApprovalPageProps) {
+    const [tab, setTab] = useState<Tab>('incoming');
     const [busy, setBusy] = useState<number | null>(null);
     const [msg, setMsg] = useState('');
     const [expanded, setExpanded] = useState<number | null>(null);
     const [review, setReview] = useState<SectionReview | null>(null);
     const [feedbackDraft, setFeedbackDraft] = useState('');
     const [msgOpen, setMsgOpen] = useState(false);
+    const [rejectingId, setRejectingId] = useState<number | null>(null);
+    const [rejectReason, setRejectReason] = useState('');
+
+    const counts = {
+        incoming: rows.filter((r) => r.status === 'PENDING').length,
+        approved: rows.filter((r) => r.status === 'APPROVED').length,
+        rejected: rows.filter((r) => r.status === 'REJECTED').length,
+    };
+    const filteredRows = rows.filter((r) =>
+        tab === 'incoming' ? r.status === 'PENDING' : tab === 'approved' ? r.status === 'APPROVED' : r.status === 'REJECTED');
 
     const sendFeedback = async (requestId: number) => {
         if (!feedbackDraft.trim()) return;
@@ -42,13 +59,16 @@ export function SectionApprovalPage({ officerName, heading, rows, onReload, onLo
         finally { setBusy(null); }
     };
 
-    const reject = async (row: QueueRow) => {
-        const reason = window.prompt(`Reason for rejecting ${row.name} (${row.roll_no}):`);
-        if (reason === null) return;
-        if (!reason.trim()) { setMsg('A reason is required to reject.'); return; }
+    const startReject = (row: QueueRow) => { setRejectingId(row.request_id); setRejectReason(''); };
+    const cancelReject = () => { setRejectingId(null); setRejectReason(''); };
+
+    const submitReject = async (row: QueueRow) => {
+        if (!rejectReason.trim()) return;
         setBusy(row.request_id); setMsg('');
-        try { await api.reject(row.request_id, reason.trim()); setMsg(`Rejected ${row.roll_no}`); onReload(); }
-        catch (e) { setMsg(e instanceof Error ? e.message : 'Reject failed'); }
+        try {
+            await api.reject(row.request_id, rejectReason.trim());
+            setMsg(`Rejected ${row.roll_no}`); cancelReject(); onReload();
+        } catch (e) { setMsg(e instanceof Error ? e.message : 'Reject failed'); }
         finally { setBusy(null); }
     };
 
@@ -58,9 +78,25 @@ export function SectionApprovalPage({ officerName, heading, rows, onReload, onLo
         try { setReview(await api.sectionReview(row.request_id)); } catch { /* ignore */ }
     };
 
+    // Feedback is a first-class action alongside Approve/Reject — opens (or
+    // reuses) the same detail panel with the message box already expanded,
+    // rather than requiring the officer to open View then hunt for Messages.
+    const openFeedback = async (row: QueueRow) => {
+        setMsgOpen(true);
+        if (expanded === row.request_id && review) return;
+        setExpanded(row.request_id); setReview(null);
+        try { setReview(await api.sectionReview(row.request_id)); } catch { /* ignore */ }
+    };
+
     const badge = (status: string) => {
         const c = status === 'APPROVED' ? '#16a34a' : status === 'REJECTED' ? '#dc2626' : '#b45309';
         return <span style={{ color: c, fontWeight: 700 }}>{status}</span>;
+    };
+
+    const TAB_META: Record<Tab, { label: string; icon: string }> = {
+        incoming: { label: 'Incoming', icon: '📥' },
+        approved: { label: 'Approved', icon: '✅' },
+        rejected: { label: 'Rejected', icon: '❌' },
     };
 
     return (
@@ -73,18 +109,28 @@ export function SectionApprovalPage({ officerName, heading, rows, onReload, onLo
 
                 {msg && <div className="well" style={{ padding: '8px 12px', marginBottom: 16, fontSize: 13 }}>{msg}</div>}
 
+                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                    {(Object.keys(TAB_META) as Tab[]).map((t) => (
+                        <button key={t} onClick={() => setTab(t)}
+                            className={tab === t ? 'btn btn-primary' : 'btn btn-secondary'}
+                            style={{ fontSize: 13, padding: '6px 14px', fontWeight: tab === t ? 700 : 400 }}>
+                            {TAB_META[t].icon} {TAB_META[t].label} ({counts[t]})
+                        </button>
+                    ))}
+                </div>
+
                 <div className="well" style={{ padding: 0, overflow: 'hidden' }}>
                     <table className="table" style={{ marginBottom: 0 }}>
                         <thead>
                             <tr>
-                                <th>Roll No</th><th>Name</th><th>Dept</th><th>Hostel</th><th>Status</th><th style={{ width: 260 }}>Action</th>
+                                <th>Roll No</th><th>Name</th><th>Dept</th><th>Hostel</th><th>Status</th><th style={{ width: 280 }}>Action</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {rows.length === 0 && (
-                                <tr><td colSpan={6} style={{ textAlign: 'center', color: '#94a3b8' }}>No requests in your queue.</td></tr>
+                            {filteredRows.length === 0 && (
+                                <tr><td colSpan={6} style={{ textAlign: 'center', color: '#94a3b8' }}>No {TAB_META[tab].label.toLowerCase()} requests.</td></tr>
                             )}
-                            {rows.map((row) => (
+                            {filteredRows.map((row) => (
                                 <Fragment key={row.request_id}>
                                     <tr>
                                         <td style={{ fontFamily: 'monospace' }}>{row.roll_no}</td>
@@ -93,15 +139,38 @@ export function SectionApprovalPage({ officerName, heading, rows, onReload, onLo
                                         <td>{row.hostel}</td>
                                         <td>{badge(row.status)}</td>
                                         <td>
-                                            <button className="btn btn-success" style={{ fontSize: 12, padding: '3px 8px', marginRight: 4 }}
-                                                disabled={busy === row.request_id || !row.actionable || row.status === 'APPROVED'}
-                                                title={!row.actionable ? 'Prerequisites not yet approved' : ''}
-                                                onClick={() => approve(row)}>Approve</button>
-                                            <button className="btn btn-danger" style={{ fontSize: 12, padding: '3px 8px', marginRight: 4 }}
-                                                disabled={busy === row.request_id}
-                                                onClick={() => reject(row)}>Reject</button>
-                                            <button className="btn btn-primary" style={{ fontSize: 12, padding: '3px 8px' }}
-                                                onClick={() => toggleReview(row)}>{expanded === row.request_id ? 'Hide' : 'View'}</button>
+                                            {rejectingId === row.request_id ? (
+                                                <div style={{ display: 'flex', gap: 4 }}>
+                                                    <input autoFocus type="text" value={rejectReason}
+                                                        onChange={(e) => setRejectReason(e.target.value)}
+                                                        onKeyDown={(e) => { if (e.key === 'Enter') submitReject(row); if (e.key === 'Escape') cancelReject(); }}
+                                                        placeholder="Reason for rejecting (required)…"
+                                                        style={{ flex: 1, fontSize: 12, padding: '3px 6px', border: '1px solid #cbd5e1', borderRadius: 4 }} />
+                                                    <button className="btn btn-danger" style={{ fontSize: 11, padding: '3px 8px' }}
+                                                        disabled={busy === row.request_id || !rejectReason.trim()}
+                                                        onClick={() => submitReject(row)}>Confirm</button>
+                                                    <button className="btn btn-secondary" style={{ fontSize: 11, padding: '3px 8px' }}
+                                                        onClick={cancelReject}>Cancel</button>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    {tab === 'incoming' && (
+                                                        <>
+                                                            <button className="btn btn-success" style={{ fontSize: 12, padding: '3px 8px', marginRight: 4 }}
+                                                                disabled={busy === row.request_id || !row.actionable}
+                                                                title={!row.actionable ? 'Prerequisites not yet approved' : ''}
+                                                                onClick={() => approve(row)}>Approve</button>
+                                                            <button className="btn btn-danger" style={{ fontSize: 12, padding: '3px 8px', marginRight: 4 }}
+                                                                disabled={busy === row.request_id}
+                                                                onClick={() => startReject(row)}>Reject</button>
+                                                        </>
+                                                    )}
+                                                    <button className="btn btn-warning" style={{ fontSize: 12, padding: '3px 8px', marginRight: 4 }}
+                                                        onClick={() => openFeedback(row)}>💬 Feedback</button>
+                                                    <button className="btn btn-primary" style={{ fontSize: 12, padding: '3px 8px' }}
+                                                        onClick={() => toggleReview(row)}>{expanded === row.request_id ? 'Hide' : 'View'}</button>
+                                                </>
+                                            )}
                                         </td>
                                     </tr>
                                     {expanded === row.request_id && (
