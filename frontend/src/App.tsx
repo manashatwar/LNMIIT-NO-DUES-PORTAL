@@ -11,7 +11,7 @@ type View = 'HOME' | 'RULES' | 'CONTACT';
 
 const SECTION_ROLES: RoleType[] = [
   'LIBRARY', 'TPC', 'WARDEN', 'STORE', 'LUCS', 'SPORTS',
-  'MEDICAL', 'NAD', 'DEPT', 'HOD', 'ACCOUNTS', 'ADMINISTRATION',
+  'MEDICAL', 'NAD', 'HOD', 'ACCOUNTS', 'ADMINISTRATION',
 ];
 
 export function App() {

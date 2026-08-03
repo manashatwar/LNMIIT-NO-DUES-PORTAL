@@ -31,18 +31,16 @@ flowchart TD
     C --> TPC[TPC / Placement]
     C --> WAR[Warden — own hostel only<br/>BH1..BH5 / GH1 · needs vacant room no.]
     C --> STO[Store]
-    C --> LUCS[LUCS — event report link/file]
+    C --> LUCS[LUCS]
     C --> SPO[Sports + GSAC Gen. Secretary]
     C --> MED[Medical Cell]
     C --> NAD[NAD Cell]
-    C --> DEP[Department Purpose<br/>No Dues Form upload]
 
     STO --> HOD{HOD — CCE/CSE/ECE/MME<br/>consolidates sub-sections}
     LUCS --> HOD
     SPO --> HOD
     MED --> HOD
     NAD --> HOD
-    DEP --> HOD
 
     LIB --> ACC[Accounts<br/>cancelled cheque + refund]
     TPC --> ACC
@@ -57,10 +55,12 @@ flowchart TD
     classDef sec fill:#e8f1ff,stroke:#1f6feb,color:#0f2748;
     classDef gate fill:#fdf3e2,stroke:#b7791f,color:#0f2748;
     classDef done fill:#e4f6ec,stroke:#1a8f4c,color:#0f2748;
-    class LIB,TPC,WAR,STO,LUCS,SPO,MED,NAD,DEP,ACC sec;
+    class LIB,TPC,WAR,STO,LUCS,SPO,MED,NAD,ACC sec;
     class HOD,ADM gate;
     class CERT done;
 ```
+
+> **Department-Purpose (a dedicated "HOD form" upload) was removed** as a mandatory gate — HOD no longer requires its own document upload to consolidate. LUCS was also converted from an upload section to a confirm-only one (name/roll, like Store/Sports/Medical/NAD). If an HOD genuinely needs something from a student, they ask for it via the existing section comment thread (`main/api.py::officer_comment` / `student_comment`) rather than a blocking upload requirement — see [`KNOWN_GAPS.md`](./KNOWN_GAPS.md).
 
 ## Components and Interfaces
 
@@ -133,7 +133,7 @@ class OcrService:
 **Responsibilities**:
 - Enforce type (JPG/PNG/PDF) and size limit on both client and server — **10 MB** (`main/api.py::MAX_UPLOAD_BYTES`), matching the original UI design (`docs/images/ui-wireframe.png`); see [`KNOWN_GAPS.md`](./KNOWN_GAPS.md) for how this number was arrived at.
 - Store originals outside the web root; serve via an access-checked download view.
-- Support LUCS link-mode submission (URL instead of file); OCR applies only when a file is provided.
+- Support link-mode submission (a URL instead of a file) as a generic capability of the upload endpoint; OCR applies only when a file is provided. Not currently used by any section — LUCS was the original use case but was converted to a confirm-only section (no upload at all, see the note under [Section Flow](#section-flow)).
 - Always retain the original uploaded file and keep it downloadable by authorized reviewers.
 
 ### Component 5: Certificate Generator
@@ -151,8 +151,8 @@ class OcrService:
 
 Sections are grouped into stages. A section becomes actionable only when its prerequisites are `APPROVED`.
 
-- **Independent sections** (actionable immediately after submission): Library, TPC, Warden, Store, LUCS, Sports, Medical, NAD, Department-Purpose.
-- **HOD** depends on: Store, LUCS, Sports, Medical, NAD, Department-Purpose.
+- **Independent sections** (actionable immediately after submission): Library, TPC, Warden, Store, LUCS, Sports, Medical, NAD.
+- **HOD** depends on: Store, LUCS, Sports, Medical, NAD.
 - **Accounts** depends on: Library, TPC, Warden, HOD.
 - **Administration** depends on: Accounts and, transitively, everything upstream.
 
@@ -163,7 +163,6 @@ flowchart TD
     SPO[Sports] --> HOD
     MED[Medical] --> HOD
     NAD[NAD] --> HOD
-    DEP[Dept-Purpose] --> HOD
     LIB[Library] --> ACC[Accounts]
     TPC[TPC] --> ACC
     WAR[Warden] --> ACC
@@ -287,7 +286,7 @@ def process_upload(uploaded_file, section_status, student):
 - **Limit:** enforced both client-side (pre-check) and server-side (hard validation). See [`KNOWN_GAPS.md`](./KNOWN_GAPS.md) for the actual configured value.
 - **Types:** JPG, PNG, PDF.
 - **Quality guidance:** the upload control advises submitting the highest quality that fits the limit; files too degraded for OCR are flagged.
-- **LUCS link mode:** LUCS additionally accepts an event-report URL instead of a file; OCR applies only when a file is provided.
+- **Link mode:** the upload endpoint generically also accepts a URL instead of a file (originally used by LUCS; no section currently uses it — see [Section Flow](#section-flow)); OCR applies only when a file is provided.
 - **Storage:** files stored outside the web root; served to authorized reviewers through an access-checked download view, not by direct static URL.
 
 ## Certificate & Fund Us
@@ -302,7 +301,7 @@ def process_upload(uploaded_file, section_status, student):
 |---|---|---|
 | `/login` | all | Role-based login |
 | `/student/initiate` | Student | Select exit type, set Fund-Us amount |
-| `/student/upload` | Student | Upload per-section documents / LUCS link |
+| `/student/upload` | Student | Upload per-section documents (Library, TPC, Accounts) |
 | `/student/dashboard` | Student | Per-section status matrix, comments, re-upload, certificate |
 | `/section/<code>/queue` | Section officer | Scoped queue of pending requests |
 | `/section/<code>/review/<id>` | Section officer | View docs + OCR, approve/reject with comment |

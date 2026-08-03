@@ -2,6 +2,22 @@
 
 A running list of everything found to be missing, stale, inconsistent, or ambiguous during the documentation pass, what (if anything) was done about it, and why. Keep this updated as the project evolves — it's the single place to check "is this actually still true?" before trusting an older doc.
 
+## Officer review had no visibility into Page-2 intake docs; Department-Purpose removed; LUCS upload removed (eighth pass)
+
+Reported directly: a Store/LUCS officer reviewing a student had no way to see what that student had already submitted at intake (the Library BTP form, the TPC offer letter, the vacated room) — `GET /api/section/review/` only attached other sections' documents for HOD/Administration (the two actual consolidator roles), so every other officer saw only their own section, with no student context at all.
+
+| Change | Detail | Where |
+|---|---|---|
+| **Bug fix:** every officer now sees the student's Page-2 intake documents | Added an `intake` key to the `section_review` response — Library + TPC's documents/OCR/status, populated for every role (previously `prerequisites` only existed for HOD/Administration). Vacant room was already shown for everyone; this closes the same gap for the uploaded documents themselves | `No-Dues-Portal/main/api.py::section_review`, `frontend/src/types.ts` (`SectionReview.intake`), `frontend/src/pages/SectionApprovalPage.tsx` (new "🎒 Student Intake" panel) |
+| **Removed Department-Purpose as a mandatory HOD gate** | HOD's prerequisites no longer include a dedicated department-purpose form upload. If an HOD genuinely needs a document from a student, they ask via the existing section comment thread (already built — `student_comment`/`officer_comment`) instead of a blocking upload requirement | `main/engine.py` (`PREREQUISITES`, `INDEPENDENT_SECTIONS`), `main/models.py` (removed `SECTION_DEPT`), `main/management/commands/seed_demo.py` (removed the `DEPT` section def and `dept.cse@` officer account), `frontend/src/{types,App,pages/LoginPage,pages/StudentDashboard}.tsx` |
+| **LUCS converted to a confirm-only section** | Was an upload section (file or event-report link); now confirm-only (name/roll), same flow as Store/Sports/Medical/NAD | `seed_demo.py` (`is_upload_section: False`), `main/api.py` (`BASIC_CONFIRM_SECTIONS` now includes `SECTION_LUCS`), `frontend/src/pages/StudentDashboard.tsx` (`UPLOAD_SECTION_CONFIG` no longer has a `LUCS` entry, so it renders through the generic confirm flow) |
+
+**Not a migration concern:** neither change touches the database schema. `Section.is_upload_section` is just a field value (reseeded via `seed_demo`), and no longer creating `DEPT` `SectionStatus` rows for *new* requests doesn't require deleting the old `DEPT` `Section` reference row or any already-existing `SectionStatus` rows tied to it — they just become inert. Reset demo data (`manage.py seed_demo --reset`) for a clean slate if you have existing test requests with a `DEPT` step from before this change.
+
+**Verified:** `manage.py check` passes; `tsc -b` typechecks clean; confirmed via `docs/DESIGN.md`'s dependency graph that Accounts' prerequisites (Library, TPC, Warden, HOD) are unaffected — removing DEPT only changes HOD's own prerequisite list, nothing downstream of HOD.
+
+**Docs updated:** `docs/DESIGN.md` (Section Flow diagram, dependency graph, Upload Handling, Screen Flow & Routes), `docs/API.md` (roles list, `section_review` response shape), `README.md` (section list, demo logins table), `LNMIIT_No_Dues_Portal_Research_Document.md` (LUCS and HOD entries annotated — the original research findings are kept, with a note on where the implementation deviates from them).
+
 ## Fixed in this pass
 
 | Gap | Fix | Where |

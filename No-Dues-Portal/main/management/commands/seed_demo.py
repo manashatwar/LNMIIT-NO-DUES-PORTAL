@@ -16,23 +16,25 @@ from main.models import (
     ClearanceRequest, SectionStatus,
     DEPARTMENT_CODES, HOSTEL_CODES,
     SECTION_LIBRARY, SECTION_TPC, SECTION_WARDEN, SECTION_STORE, SECTION_LUCS,
-    SECTION_SPORTS, SECTION_MEDICAL, SECTION_NAD, SECTION_DEPT, SECTION_HOD,
+    SECTION_SPORTS, SECTION_MEDICAL, SECTION_NAD, SECTION_HOD,
     SECTION_ACCOUNTS, SECTION_ADMINISTRATION,
 )
 
 PASSWORD = "csepassword"
 
 # code, name, order, is_upload_section, is_consolidator
+# Department-Purpose was removed (HOD no longer requires a dedicated form
+# upload — see main/engine.py). LUCS is no longer an upload section either;
+# it's a confirm-only section like Store/Sports/Medical/NAD.
 SECTION_DEFS = [
     (SECTION_LIBRARY,        "Central Library",       10, True,  False),
     (SECTION_TPC,            "TPC / Placement",       11, True,  False),
     (SECTION_WARDEN,         "Warden / Hostel",       12, False, False),
     (SECTION_STORE,          "Store",                 13, False, False),
-    (SECTION_LUCS,           "LUCS",                  14, True,  False),
+    (SECTION_LUCS,           "LUCS",                  14, False, False),
     (SECTION_SPORTS,         "Sports / GSAC",         15, False, False),
     (SECTION_MEDICAL,        "Medical Cell",          16, False, False),
     (SECTION_NAD,            "NAD Cell",              17, False, False),
-    (SECTION_DEPT,           "Department-Purpose",    18, True,  False),
     (SECTION_HOD,            "HOD / Department",      20, False, True),
     (SECTION_ACCOUNTS,       "Accounts",              30, True,  False),
     (SECTION_ADMINISTRATION, "Administration",        40, False, True),
@@ -89,7 +91,6 @@ class Command(BaseCommand):
             ("sports@lnmiit.ac.in",    SECTION_SPORTS,         None,  None),
             ("medical@lnmiit.ac.in",   SECTION_MEDICAL,        None,  None),
             ("nad@lnmiit.ac.in",       SECTION_NAD,            None,  None),
-            ("dept.cse@lnmiit.ac.in",  SECTION_DEPT,           None,  None),
             ("hod.cse@lnmiit.ac.in",   SECTION_HOD,            None,  "CSE"),
             ("accounts@lnmiit.ac.in",  SECTION_ACCOUNTS,       None,  None),
             ("admin.office@lnmiit.ac.in", SECTION_ADMINISTRATION, None, None),
@@ -134,7 +135,7 @@ class Command(BaseCommand):
             "  Students : student@ / amit@ (CSE,BH1) · priya@ (ECE,GH1) · arjun@ (CCE,BH2)  role STUDENT\n"
             "  Officers (role = section code):\n"
             "    library@=LIBRARY  tpc@=TPC  store@=STORE  lucs@=LUCS  sports@=SPORTS\n"
-            "    medical@=MEDICAL  nad@=NAD  dept.cse@=DEPT  hod.cse@=HOD  accounts@=ACCOUNTS\n"
+            "    medical@=MEDICAL  nad@=NAD  hod.cse@=HOD  accounts@=ACCOUNTS\n"
             "    warden.bh1@ / warden.gh1@ = WARDEN   admin.office@=ADMINISTRATION\n"
             "  Admin    : admin (Django /admin)"
         ))

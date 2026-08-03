@@ -32,7 +32,7 @@ This section reflects what's actually in the code today, verified directly again
 |---|---|---|
 | React SPA connected to Django over a JSON API | ✅ Done | Session auth + CSRF via a same-origin Vite proxy — see [Architecture](#architecture) |
 | LNMIIT data model (`Department`, `Hostel`, `Section`, `ClearanceRequest`, `SectionStatus`, `Document`, `Comment`, `Certificate`) | ✅ Done | `No-Dues-Portal/main/models.py` |
-| LNMIIT section set (Library, TPC, Warden, Store, LUCS, Sports, Medical, NAD, Dept-Purpose, HOD, Accounts, Administration) | ✅ Done | `main/management/commands/seed_demo.py` |
+| LNMIIT section set (Library, TPC, Warden, Store, LUCS, Sports, Medical, NAD, HOD, Accounts, Administration) | ✅ Done | `main/management/commands/seed_demo.py` — Department-Purpose was removed as a mandatory gate; see [Known gaps](#known-gaps) |
 | Roll number stored as text (e.g. `24UCC174`) | ✅ Done | `models.py` |
 | Exit types (Graduation / NEP Exit / Withdrawal / Admission Cancel) with per-type required sections | ✅ Done | `main/engine.py::REQUIRED_SECTIONS` |
 | Prerequisite gating + transactional reverse-hierarchy cascade | ✅ Done | `main/engine.py::approve/reject/_on_status_change` |
@@ -197,7 +197,6 @@ Password for every account: **`csepassword`**.
 |---|---|
 | Student | `student@` · `amit@` (CSE, BH1) · `priya@` (ECE, GH1) · `arjun@` (CCE, BH2) `lnmiit.ac.in` |
 | Library / TPC / Store / LUCS / Sports / Medical / NAD | `library@` · `tpc@` · `store@` · `lucs@` · `sports@` · `medical@` · `nad@ lnmiit.ac.in` |
-| Department-Purpose (dept form) | `dept.cse@lnmiit.ac.in` |
 | HOD (CSE) | `hod.cse@lnmiit.ac.in` |
 | Warden (per hostel) | `warden.bh1@` · `warden.gh1@ lnmiit.ac.in` |
 | Accounts | `accounts@lnmiit.ac.in` |

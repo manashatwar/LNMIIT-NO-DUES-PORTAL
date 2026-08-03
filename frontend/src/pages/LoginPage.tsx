@@ -23,7 +23,6 @@ const ROLE_OPTIONS: { value: RoleType; label: string }[] = [
     { value: 'SPORTS', label: 'Sports / GSAC' },
     { value: 'MEDICAL', label: 'Medical Cell' },
     { value: 'NAD', label: 'NAD Cell' },
-    { value: 'DEPT', label: 'Department (No-Dues Form)' },
     { value: 'HOD', label: 'HOD' },
     { value: 'ACCOUNTS', label: 'Accounts' },
     { value: 'ADMINISTRATION', label: 'Administration' },

@@ -33,7 +33,7 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
 
     // Stage groupings (mirror the Design.md dependency graph / the reference flow)
     const triGate = ['LIBRARY', 'TPC', 'WARDEN'].filter(has);
-    const deptField = ['STORE', 'LUCS', 'SPORTS', 'MEDICAL', 'NAD', 'DEPT', 'HOD'].filter(has);
+    const deptField = ['STORE', 'LUCS', 'SPORTS', 'MEDICAL', 'NAD', 'HOD'].filter(has);
     const triGateApproved = triGate.length > 0 && triGate.every(approved);
     const accountsUnlock = ['LIBRARY', 'TPC', 'WARDEN', 'HOD'].filter(has).every(approved);
     const accountsApproved = approved('ACCOUNTS');
@@ -304,27 +304,10 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
     };
 
     // Upload-enabled Page-3 sections: which fields their review form has + the downloadable form.
+    // Department-Purpose was removed (HOD no longer requires a dedicated form
+    // upload) and LUCS is no longer an upload section — both are now confirm-only,
+    // same as Store/Sports/Medical/NAD (see main/engine.py, main/api.py).
     const UPLOAD_SECTION_CONFIG: Record<string, { formUrl?: string; formLabel?: string; allowLink?: boolean; fields: { key: string; label: string }[] }> = {
-        DEPT: {
-            formUrl: '/Noduesform_departmentPurpose.pdf',
-            formLabel: 'Department No-Dues Form',
-            fields: [
-                { key: 'name', label: 'Student Name' },
-                { key: 'roll_no', label: 'Roll No' },
-                { key: 'department', label: 'Department' },
-                { key: 'programme', label: 'Programme' },
-                { key: 'purpose', label: 'Purpose of No-Dues' },
-            ],
-        },
-        LUCS: {
-            allowLink: true,
-            fields: [
-                { key: 'event_name', label: 'Event Name' },
-                { key: 'event_date', label: 'Event Date' },
-                { key: 'name', label: 'Name' },
-                { key: 'roll_no', label: 'Roll No' },
-            ],
-        },
         ACCOUNTS: {
             formLabel: 'Cancelled Cheque',
             fields: [
@@ -340,11 +323,10 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
     // Section metadata for stage pages
     const SECTION_META: Record<string, { icon: string; subtitle: string }> = {
         STORE: { icon: '📦', subtitle: 'Outstanding store material check' },
-        LUCS: { icon: '📅', subtitle: 'Event report (file or link)' },
+        LUCS: { icon: '📅', subtitle: 'Event / activity clearance check' },
         SPORTS: { icon: '🏅', subtitle: 'Sports equipment & records' },
         MEDICAL: { icon: '🏥', subtitle: 'Medical-cell dues' },
         NAD: { icon: '🎓', subtitle: 'NAD-related verification' },
-        DEPT: { icon: '📄', subtitle: 'Department No-Dues form' },
         HOD: { icon: '🏛️', subtitle: 'Departmental consolidation' },
         ACCOUNTS: { icon: '💰', subtitle: 'Refund & cancelled cheque' },
         ADMINISTRATION: { icon: '🏢', subtitle: 'Final all-green approval' },
@@ -570,7 +552,7 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                 {activeTab === 'page3' && !openStageSection && (
                     <div>
                         <p style={{ fontSize: 13, color: '#64748b', marginTop: 0 }}>
-                            Click a section to open it. LUCS and Department-Purpose need a document upload; the rest are verified by their office from your name &amp; roll number.
+                            Click a section to open it. Each is verified by their office from your name &amp; roll number — confirm your details to send your request.
                         </p>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
                             {deptField.map((code) => {

@@ -24,12 +24,13 @@ from .models import (
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB — matches the original UI design (docs/images/ui-wireframe.png)
 
 # Basic (name/roll) sections that require an explicit student "Confirm & Send" before
-# the request reaches the officer's queue.
+# the request reaches the officer's queue. LUCS moved here (no longer an
+# upload section) — same confirm-only flow as Store/Sports/Medical/NAD.
 from .models import (  # noqa: E402
-    SECTION_STORE, SECTION_SPORTS, SECTION_MEDICAL, SECTION_NAD, SECTION_ADMINISTRATION,
+    SECTION_STORE, SECTION_LUCS, SECTION_SPORTS, SECTION_MEDICAL, SECTION_NAD, SECTION_ADMINISTRATION,
 )
 BASIC_CONFIRM_SECTIONS = {
-    SECTION_STORE, SECTION_SPORTS, SECTION_MEDICAL, SECTION_NAD, SECTION_ADMINISTRATION,
+    SECTION_STORE, SECTION_LUCS, SECTION_SPORTS, SECTION_MEDICAL, SECTION_NAD, SECTION_ADMINISTRATION,
 }
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "application/pdf"}
 ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".pdf"}
@@ -569,6 +570,21 @@ def section_review(request):
     if not _scope_ok(profile, ss.request, role):
         return JsonResponse({"detail": "Out of scope"}, status=403)
 
+    # Every officer sees what the student already submitted at intake (the
+    # Library BTP form + TPC offer letter, Page 2 of the student dashboard),
+    # regardless of their own section. Previously this was only attached for
+    # HOD/Administration (the consolidators below) — meaning e.g. a Store or
+    # LUCS officer had no visibility at all into a student's intake uploads
+    # when reviewing them. Vacant room is already shown for everyone above;
+    # this closes the same gap for the intake documents themselves.
+    intake_docs = []
+    for code in engine.INTAKE_UPLOAD_SECTIONS:
+        if code == role:
+            continue  # already shown as the officer's own section below
+        pss = ss.request.section_statuses.filter(section__code=code).select_related("section").first()
+        if pss is not None:
+            intake_docs.append(_section_dict(pss, ss.request))
+
     data = {
         "request_id": ss.request_id,
         "student": {
@@ -577,6 +593,7 @@ def section_review(request):
         },
         "vacant_room_no": ss.request.vacant_room_no,
         "section": _section_dict(ss, ss.request),
+        "intake": intake_docs,
     }
 
     # Consolidator sections (HOD, Administration) see the sections they depend on —

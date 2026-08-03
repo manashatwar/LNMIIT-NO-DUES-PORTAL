@@ -66,9 +66,9 @@ For each section below we answer three questions: **What does it do? · What doe
 - *Found:* only relevant for students who went through placement, so it clears quickly for everyone else.
 
 **LUCS**
-- *Does:* 
-- *Needs:* an event report, submitted either as a file upload **or** a link.
-- *Found:* 
+- *Does:* verifies no outstanding LUCS-related obligation (event/activity clearance).
+- *Needs:* name and roll number.
+- *Found:* originally scoped to accept an event report as a file upload or a link; implemented instead as a confirm-only check (name/roll, like Store/Sports/Medical/NAD) — no upload requirement. See `docs/KNOWN_GAPS.md` for the implementation decision.
 
 **Store**
 - *Does:* checks for any outstanding store material.
@@ -94,8 +94,8 @@ For each section below we answer three questions: **What does it do? · What doe
 
 **HOD / Department**
 - *Does:* acts as a departmental checkpoint, confirming departmental clearance.
-- *Needs:* the [department-purpose no-dues form](./LNMIIT_DOCUMENTS/IMG-20260628-WA0008.jpg) uploaded by the student.
-- *Found:* the HOD's approval depends on the linked subordinate clearances — Store, LUCS, Sports, Medical Cell, NAD Cell, and the department form — so the HOD is not re-doing each office's work, only confirming it after those steps are satisfied.
+- *Needs:* nothing directly from the student — consolidates the sub-sections below.
+- *Found:* the HOD's approval depends on the linked subordinate clearances — Store, LUCS, Sports, Medical Cell, and NAD Cell — so the HOD is not re-doing each office's work, only confirming it after those steps are satisfied. A dedicated [department-purpose no-dues form](./LNMIIT_DOCUMENTS/IMG-20260628-WA0008.jpg) upload was originally scoped here too, but implemented instead as optional: if an HOD needs something specific from a student, they request it through the section's comment thread rather than a blocking upload gate. See `docs/KNOWN_GAPS.md` for the implementation decision.
 
 **Accounts**
 - *Does:* handles the financial clearance and refund stage.

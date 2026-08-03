@@ -10,7 +10,6 @@ export type RoleType =
   | 'SPORTS'
   | 'MEDICAL'
   | 'NAD'
-  | 'DEPT'
   | 'HOD'
   | 'ACCOUNTS'
   | 'ADMINISTRATION'
@@ -116,6 +115,7 @@ export interface SectionReview {
   student: { name: string; roll_no: string; department: string; hostel: string };
   vacant_room_no: string;
   section: SectionInfo;
+  intake: SectionInfo[];           // Page-2 intake docs (Library/TPC) — shown to every officer
   prerequisites?: SectionInfo[];   // for consolidators (HOD, Administration)
 }
 

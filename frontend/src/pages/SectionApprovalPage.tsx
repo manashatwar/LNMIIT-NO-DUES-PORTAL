@@ -111,6 +111,33 @@ export function SectionApprovalPage({ officerName, heading, rows, onReload, onLo
                                                     <div style={{ fontSize: 12 }}>
                                                         <div><strong>Vacated Room:</strong> {review.vacant_room_no || '—'}</div>
 
+                                                        {review.intake && review.intake.length > 0 && (
+                                                            <div style={{ marginTop: 8, border: '1px solid #cbd5e1', borderRadius: 6, padding: 10, background: '#eef4ff' }}>
+                                                                <strong style={{ fontSize: 12, color: '#1b365d' }}>🎒 Student Intake (Page 2 — submitted before reaching your queue)</strong>
+                                                                <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                                                    {review.intake.map((sec) => {
+                                                                        const c = sec.status === 'APPROVED' ? '#15803d' : sec.status === 'REJECTED' ? '#b91c1c' : '#b45309';
+                                                                        return (
+                                                                            <div key={sec.code} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: 8 }}>
+                                                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                                    <strong style={{ fontSize: 12 }}>{sec.name}</strong>
+                                                                                    <span style={{ fontSize: 11, fontWeight: 700, color: c }}>{sec.status}</span>
+                                                                                </div>
+                                                                                {sec.documents.length === 0 ? (
+                                                                                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>No document submitted.</div>
+                                                                                ) : sec.documents.map((d) => (
+                                                                                    <div key={d.id} style={{ fontSize: 11, marginTop: 4 }}>
+                                                                                        📎 {d.original_name || d.event_report_url || `Doc #${d.id}`}
+                                                                                        {d.download_url && <a href={d.download_url} target="_blank" rel="noreferrer" style={{ marginLeft: 6, color: '#2563eb' }}>👁 Open</a>}
+                                                                                    </div>
+                                                                                ))}
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
                                                         {review.section.documents.length === 0 ? (
                                                             <div style={{ marginTop: 6 }} className="text-muted">No documents / links submitted.</div>
                                                         ) : review.section.documents.map((d) => {
