@@ -131,7 +131,7 @@ class OcrService:
 **Purpose**: Validate and store uploads, and serve them only to authorized reviewers.
 
 **Responsibilities**:
-- Enforce type (JPG/PNG/PDF) and size limit on both client and server (the implemented limit is 150 KB — see [`KNOWN_GAPS.md`](./KNOWN_GAPS.md) for the mismatch with this document's original 50 KB figure).
+- Enforce type (JPG/PNG/PDF) and size limit on both client and server — **10 MB** (`main/api.py::MAX_UPLOAD_BYTES`), matching the original UI design (`docs/images/ui-wireframe.png`); see [`KNOWN_GAPS.md`](./KNOWN_GAPS.md) for how this number was arrived at.
 - Store originals outside the web root; serve via an access-checked download view.
 - Support LUCS link-mode submission (URL instead of file); OCR applies only when a file is provided.
 - Always retain the original uploaded file and keep it downloadable by authorized reviewers.

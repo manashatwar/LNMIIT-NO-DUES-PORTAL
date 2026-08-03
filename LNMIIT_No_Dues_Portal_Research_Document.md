@@ -126,7 +126,7 @@ Each decision solves a concrete LNMIIT problem.
 
 - **Routing is scoped.** A warden sees only their own hostel; an HOD sees only their own department. This keeps each queue clean and makes wrong-desk action impossible ,so hostel and department are routing keys in the design, not just labels.
 
-- **OCR reads the document; the original is always kept.** On upload, OCR pulls the name and roll number so officers verify at a glance instead of opening every file. Because OCR is only as good as the scan, the original file stays the source of truth and remains downloadable. Uploads are capped at 50 KB to keep the portal fast, with guidance to submit the clearest scan that fits.
+- **OCR reads the document; the original is always kept.** On upload, OCR pulls the name and roll number so officers verify at a glance instead of opening every file. Because OCR is only as good as the scan, the original file stays the source of truth and remains downloadable. Uploads are capped at 10 MB — enough for a legible phone-camera scan of a signed form without ballooning storage per student.
 
 ## Why Python + Django (and not another stack)
 

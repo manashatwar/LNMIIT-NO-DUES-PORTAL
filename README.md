@@ -88,7 +88,8 @@ For the full request lifecycle (login, approval, reverse cascade, certificate) s
 │
 ├── frontend/                      React + TypeScript + Vite SPA
 │   ├── Dockerfile                   Multi-stage: npm build -> nginx serve
-│   ├── nginx.conf                    Serves the SPA, proxies /api, /admin, /static to Django
+│   ├── nginx.conf.template           Serves the SPA, proxies /api, /admin, /static to Django
+│   │                                 (BACKEND_HOST/BACKEND_PORT/PORT are env-driven — see docs/DEPLOY.md)
 │   └── src/
 │       ├── api.ts                     Typed API client (fetch + CSRF handling)
 │       ├── types.ts                    Types matching the Django API
@@ -114,6 +115,7 @@ For the full request lifecycle (login, approval, reverse cascade, certificate) s
 │   ├── API.md                        Every JSON API endpoint
 │   ├── DATA_MODEL.md                 ER diagram + field-by-field notes
 │   ├── SCALING.md                    Production readiness + load testing plan
+│   ├── DEPLOY.md                     Deploying to Railway (+ alternatives) step by step
 │   ├── KNOWN_GAPS.md                 Everything found missing/stale, and why
 │   ├── loadtest/locustfile.py        Ready-to-run load test
 │   └── images/
@@ -132,7 +134,7 @@ cp .env.example .env    # defaults are fine for local dev — just needs to exis
 docker compose up -d db
 ```
 
-> **Port 5432 already in use?** Some machines already run a local Postgres install on the default port. Set `POSTGRES_PORT=<something free, e.g. 55432>` in `.env` and point `DATABASE_URL` at that port below — `docker compose up -d db` picks it up automatically.
+> **Port 5432 already in use?** Some machines already run a local Postgres install on that port (or another Docker project does). Set `POSTGRES_PORT=<something free, e.g. 55432>` in `.env` — `docker compose up -d db` and the steps below both pick it up automatically, nothing else to change.
 
 **1. Backend (Django) — Terminal 1**
 
@@ -140,11 +142,12 @@ docker compose up -d db
 cd No-Dues-Portal
 python -m venv .venv && .venv\Scripts\activate      # Windows; use `source .venv/bin/activate` on macOS/Linux
 pip install -r requirements.txt
-export DATABASE_URL=postgres://nodues:nodues@localhost:5432/nodues   # match .env's POSTGRES_* + POSTGRES_PORT
 python manage.py migrate
 python manage.py seed_demo                            # creates demo users/students/sections
 python manage.py runserver 8000
 ```
+
+No `DATABASE_URL` to export by hand: `myproject/settings.py` loads the repo-root `.env` automatically (`python-dotenv`) and, if `DATABASE_URL` itself isn't set, builds one from `.env`'s `POSTGRES_*` values against `localhost` — the same credentials `docker compose up -d db` above just started listening with. Change `POSTGRES_PASSWORD`/`POSTGRES_PORT` in `.env` and both the container and `manage.py` stay in sync automatically — there's only one place to edit.
 
 **2. Frontend (React) — Terminal 2**
 
@@ -184,6 +187,8 @@ This is also the setup to point [`docs/loadtest/locustfile.py`](./docs/loadtest/
 
 **Verified working end to end** (not just written): all three containers build and start healthy, `/`, `/api/csrf/`, and `/admin/` all respond correctly through nginx, and a full login (`POST /api/login/` with CSRF) succeeds against the containerized Postgres.
 
+**Ready to put this somewhere reachable?** `frontend/nginx.conf.template` and both Dockerfiles are already parameterized for that — `BACKEND_HOST`/`BACKEND_PORT` (where nginx finds Django) and `PORT` (what port nginx itself listens on, matching whatever a given platform injects) are all environment-driven, not hardcoded. **[docs/DEPLOY.md](./docs/DEPLOY.md)** walks through deploying this exact setup to Railway step by step (managed Postgres + a private backend + a public frontend, over Railway's private networking — no CORS needed, same as here), plus notes for Render/Fly.io/a plain VPS, and how to load-test a real deployment without surprising your hosting bill or the students actually using it.
+
 ## Demo logins
 
 Password for every account: **`csepassword`**.
@@ -212,6 +217,7 @@ Everything beyond this README lives in [`docs/`](./docs) — one folder, no scat
 | [`docs/API.md`](./docs/API.md) | Every JSON API endpoint: method, auth, request/response shape |
 | [`docs/DATA_MODEL.md`](./docs/DATA_MODEL.md) | ER diagram + field-by-field notes on every model |
 | [`docs/SCALING.md`](./docs/SCALING.md) | Production readiness and handling high concurrent traffic (thousands of students) |
+| [`docs/DEPLOY.md`](./docs/DEPLOY.md) | Deploying to Railway step by step (+ Render/Fly.io/VPS notes), and load-testing a real deployment safely |
 | [`docs/KNOWN_GAPS.md`](./docs/KNOWN_GAPS.md) | Everything found to be missing, stale, or inconsistent, and why |
 | [`LNMIIT_No_Dues_Portal_Research_Document.md`](./LNMIIT_No_Dues_Portal_Research_Document.md) | Research behind the section list and design choices (kept at root — it's background research, not implementation reference) |
 

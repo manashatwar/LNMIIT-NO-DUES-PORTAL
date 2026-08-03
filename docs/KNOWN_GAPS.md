@@ -63,6 +63,32 @@ The third pass added Postgres as the recommended/production database while quiet
 - A full HTTP round trip through nginx succeeds: `GET /` (SPA, 200), `GET /api/csrf/` (200), `GET /admin/` (302, correct unauthenticated redirect), and a complete `POST /api/login/` (CSRF cookie → token → login) returning the logged-in student's profile.
 - The test stack (containers, volumes, the throwaway `.env` used to drive this) was torn down (`docker compose down`) after verification — nothing from this test run is left running or committed.
 
+## Local `.env` not actually read by `manage.py`, and deploy-target portability (fifth pass)
+
+While trying `manage.py runserver` directly against a real `.env` (Postgres password changed to a custom value, port changed to avoid the local collision from the fourth pass), it failed with `password authentication failed for user "nodues"` — a real, reproduced bug, not a hypothetical:
+
+| Gap | Fix | Where |
+|---|---|---|
+| `.env` is only read by **Docker Compose** — a plain `python manage.py runserver` never sees it at all, so it always fell back to the hardcoded default (`nodues:nodues@localhost:5432`) regardless of what `.env` actually said | `myproject/settings.py` now calls `load_dotenv()` on the repo-root `.env` at import time (via `python-dotenv`), so `manage.py`/gunicorn/anything reading `os.environ` sees the same values Compose does. Never overrides a real env var that's already set (e.g. the ones Compose injects directly into a container) | `No-Dues-Portal/myproject/settings.py` |
+| Even with `.env` loaded, there's no literal `DATABASE_URL` key in it — Compose *builds* one internally from `POSTGRES_*` using the Docker-internal hostname `db`, which a process running outside Docker can't resolve | The local-dev fallback in `DATABASES` now builds its own URL from the same `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_PORT`/`POSTGRES_DB` values in `.env`, against `localhost` instead of `db`. One set of credentials in one file now drives both the containerized and the bare-metal path — nothing to keep in sync by hand anymore | `No-Dues-Portal/myproject/settings.py` |
+| Diagnosing this also surfaced that the local Postgres volume from the fourth pass's testing had gone stale (initialized once with an old password, `POSTGRES_PASSWORD` changed in `.env` afterward without recreating the volume — Postgres only applies that variable on first init) | Not a code bug — documented here because it's a real gotcha: changing `POSTGRES_PASSWORD` in `.env` after the volume already exists does nothing until you `docker compose down` + remove the `pgdata` volume so Postgres reinitializes | — (operational note, not a code change) |
+| The frontend's nginx config hardcoded the backend's docker-compose service name (`backend:8000`) and listened on a fixed port 80 — fine for Compose, not portable to a platform like Railway where the backend's address and the port nginx must listen on are both assigned externally | `frontend/nginx.conf` → `frontend/nginx.conf.template`, using `${BACKEND_HOST}`, `${BACKEND_PORT}`, and `${PORT}` — substituted by the official nginx image's built-in `envsubst`-on-templates mechanism at container startup. `frontend/Dockerfile` sets defaults (`BACKEND_HOST=backend`, `BACKEND_PORT=8000`, `PORT=80`) matching `docker-compose.yml` exactly, so nothing changes for the Compose path; a platform like Railway just overrides those three variables | `frontend/nginx.conf.template`, `frontend/Dockerfile` |
+| No deployment walkthrough existed for an actual hosting platform | Added [`docs/DEPLOY.md`](./DEPLOY.md) — Railway step by step (service layout, private networking, the `ALLOWED_HOSTS`-vs-`CSRF_TRUSTED_ORIGINS` domain gotcha, the ephemeral-filesystem-needs-a-volume gotcha for `uploaded_media/`), plus brief Render/Fly.io/VPS notes and guidance on load-testing a real deployment without surprising the hosting bill | `docs/DEPLOY.md` |
+
+**Verified, not just written:** removed the stale `pgdata` volume and confirmed a *genuinely* fresh Postgres container actually reinitializes (checked the container's own boot log for "PostgreSQL Database directory appears to contain a database; Skipping initialization" being *absent*, not just assumed). With the fix in place and zero environment variables set by hand: `manage.py migrate`, `manage.py seed_demo`, and `manage.py runserver 8000` (backgrounded, curled, killed) all succeeded reading only `.env`. Rebuilt the frontend image after the template change and re-ran the full `docker compose up --build -d` → login round trip from the fourth pass again — still 200/200/302/200, and confirmed by inspecting the *rendered* `/etc/nginx/conf.d/default.conf` inside the running container that `${BACKEND_HOST}:${BACKEND_PORT}` and `${PORT}` were substituted correctly (`backend:8000`, `80`) while nginx's own `$host`/`$scheme` variables were left untouched. The Railway-specific steps in `docs/DEPLOY.md` are instructions, not something verified against a live Railway account in this pass.
+
+## Self-inflicted regression: `.env` auto-load broke local CSRF (sixth pass)
+
+Loading `.env` for local `manage.py runserver` (the fifth pass, above) fixed one problem and immediately caused another: logging in through the actual local dev flow (Vite on `:5173` → Django on `:8000`) started failing with `POST /api/login/ 403`.
+
+| Gap | Fix | Where |
+|---|---|---|
+| `DJANGO_CSRF_TRUSTED_ORIGINS` in `.env.example`/`.env` is `http://localhost` — the right value for the single-domain Docker/production setup. Once `.env` started being loaded locally too (fifth pass), that one value *replaced* `settings.py`'s previous hardcoded local-dev default (which listed `:5173` and `:8000` explicitly), instead of adding to it. The result: Django only trusted `http://localhost` with no port, so any CSRF-protected request arriving with `Origin: http://localhost:5173` (exactly what the Vite dev proxy sends) was rejected with a 403 — a direct regression introduced by the fifth pass's own fix | `CSRF_TRUSTED_ORIGINS` now **always** includes the local dev origins (`:5173` and `:8000`, both `localhost` and `127.0.0.1`) and *adds* whatever `DJANGO_CSRF_TRUSTED_ORIGINS` specifies on top, rather than the env var replacing them. Trusting `localhost`/`127.0.0.1` costs nothing in a real deployment — a real attacker's browser can't be made to send `Origin: http://localhost` to a server that isn't actually their own machine | `No-Dues-Portal/myproject/settings.py` |
+
+**Verified:** started `manage.py runserver 8000` and sent a request carrying `Origin: http://localhost:5173` + `Referer: http://localhost:5173/` (reproducing exactly what the Vite proxy forwards) through the full CSRF-cookie → token → `POST /api/login/` sequence — `403` before the fix, `200` with the correct user payload after.
+
+**Why this one slipped through:** the fourth and fifth passes both verified login *through the Docker Compose stack* (single origin, nginx in front), which never exercises this specific cross-port CSRF path — only the bare `runserver` + separately-running Vite combination does. Worth remembering: the two local dev paths (Docker Compose vs. plain `manage.py runserver` + `npm run dev`) are different enough in origin/CSRF terms that passing one doesn't guarantee the other.
+
 ## Still open — flagged, not fixed (need a decision, not just docs)
 
 | Gap | Detail | Why it wasn't just fixed here |
@@ -77,6 +103,38 @@ The third pass added Postgres as the recommended/production database while quiet
 | OCR quietly no-ops without Tesseract (locally) | By design (`main/ocr.py` catches the import error and returns empty results) — a dev machine without Tesseract will never see OCR warnings, which can look like "OCR is broken" when it's just absent. The Docker image installs Tesseract, so this only affects local (non-Docker) dev | Documented so it isn't mistaken for a bug during a demo |
 | Two `.venv` folders exist (`./.venv` and `No-Dues-Portal/.venv`) | Both are correctly gitignored (root `.gitignore`'s `.venv/` pattern matches at every directory depth), so this isn't a repo-hygiene bug — just possible confusion about which one has Django installed | Not touched — deleting either could be someone's in-progress environment |
 
+## Every document upload was silently broken with a 500 (seventh pass) — found while raising the size limit
+
+While verifying the upload-size increase below, **every single document upload — of any size, going back to whenever `STORAGES` was first added to `settings.py` (the Docker/PostgreSQL passes) — was failing with an unhandled 500.** Not caught earlier because none of the previous "verified end-to-end" passes actually exercised `POST /api/student/upload/`; they tested login, csrf, admin, and migrations, but never a real file upload.
+
+**Root cause:** Django 4.2+ treats `STORAGES` as a complete replacement for both the old `STATICFILES_STORAGE` *and* `DEFAULT_FILE_STORAGE` settings — defining the dict at all means you must supply **both** a `'staticfiles'` key **and** a `'default'` key, not just the one you actually meant to change. `settings.py` only defined `'staticfiles'` (for WhiteNoise). That left `Document.file` — and any other `FileField`/`ImageField` in the project — with **no file storage backend configured at all**, raising `InvalidStorageError: Could not find config for 'default' in settings.STORAGES` on every save.
+
+| Fix | Where |
+|---|---|
+| Added `'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'}` to `STORAGES`, alongside the existing `'staticfiles'` entry | `No-Dues-Portal/myproject/settings.py` |
+
+**Verified, not just written** — twice, since a bug this basic deserved more than one confirmation:
+1. Reproduced directly (Django test client, in-process, so the real traceback was visible instead of a generic DEBUG=False error page): a 1 MB upload failed with `InvalidStorageError` before the fix, succeeded (`200`, real `document_id`) after.
+2. Reproduced again through the **actual deployed shape** — a fully isolated Docker Compose stack (separate project name/ports, so it never touched your running dev environment or `.env`): login → upload through nginx → gunicorn → Postgres, `200` with a real `document_id`. Oversized (11 MB) correctly rejected with `400` and the right message. Isolated stack (containers + volumes) torn down completely afterward.
+
+**Why this matters beyond just this bug:** it's a reminder that "the login flow works" and "the whole app works" are different claims — the previous passes' Docker verification was real but narrower than it read. Uploads (Library/TPC/LUCS/Dept-Purpose/Accounts — half the sections in the design) were the one major user-facing action never actually exercised end-to-end until now.
+
+## Upload size limit: resolved to 10 MB (same pass)
+
+This was previously listed below as an ambiguity — `docs/DESIGN.md` said `50 KB`, the code enforced `150 KB`, and neither actually held up against a real scanned/photographed signed document (the Library BTP form, the Department-Purpose form): both figures are closer to a thumbnail than a legible scan, and a low-resolution image also hurts OCR accuracy. Asked directly, and resolved by decision rather than guesswork — **10 MB**, which also happens to match what the original UI wireframe (`docs/images/ui-wireframe.png`) already showed ("Max 10MB" in its upload widget), so this isn't a new number so much as the codebase catching up to its own original design.
+
+| Change | Where |
+|---|---|
+| `MAX_UPLOAD_BYTES = 10 * 1024 * 1024` (was `150 * 1024`), error message updated to match | `No-Dues-Portal/main/api.py` |
+| `FILE_UPLOAD_MAX_MEMORY_SIZE` set to match (Django's 2.5 MB default wouldn't reject anything, but would push every upload through a temp-file round trip instead of staying in memory) | `No-Dues-Portal/myproject/settings.py` |
+| Client-side pre-check + both UI hint labels updated (previously hardcoded to 150 KB in two places, plus a *third*, independently stale "50 KB" hint on the Rules page that had never matched the 150 KB actually enforced) | `frontend/src/pages/StudentDashboard.tsx`, `frontend/src/pages/RulesPage.tsx` |
+| `client_max_body_size` raised to `15m` (10 MB + headroom for multipart overhead) — otherwise nginx would 413 a right-at-the-limit upload before Django ever saw it | `frontend/nginx.conf.template` |
+| Docs updated: `docs/DESIGN.md`, `docs/ARCHITECTURE.md`, `docs/API.md`, `LNMIIT_No_Dues_Portal_Research_Document.md` | — |
+
+**Verified together with the storage fix above** — the 1 MB/11 MB test cases in both verification rounds already exercise this limit, not just the storage backend.
+
+**Worth knowing at scale:** this raises the storage ceiling per student — worst case, a few thousand students each uploading several documents at up to 10 MB is real disk space (tens of GB), not the few MB the old limit implied. Not a blocker, just a number to factor into whatever volume/storage sizing you plan for the deployment in `docs/DEPLOY.md`.
+
 ## Ambiguities worth a human decision
 
-- **`docs/DESIGN.md` vs. reality**: the document describes a `50 KB` upload limit; the code enforces `150 KB` (`main/api.py::MAX_UPLOAD_BYTES`, deliberately relaxed per its own comment). Worth deciding whether to update the doc's number or revert the code — left alone here since both are internally consistent, just mismatched with each other.
+*(none open right now — check back here first before assuming something is settled)*

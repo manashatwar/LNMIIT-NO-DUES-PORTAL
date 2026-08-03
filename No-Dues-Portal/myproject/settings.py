@@ -13,9 +13,17 @@ https://docs.djangoproject.com/en/1.9/ref/settings/
 import os
 
 import dj_database_url
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Load the repo-root .env for plain `manage.py runserver` / local tooling, so it
+# sees the same values docker-compose.yml passes into the containers — no more
+# manually exporting DATABASE_URL and it drifting out of sync with .env.
+# No-op if the file doesn't exist; never overrides a real env var that's
+# already set (e.g. the ones docker-compose injects directly into the container).
+load_dotenv(os.path.join(BASE_DIR, os.pardir, '.env'))
 
 
 # Quick-start development settings - unsuitable for production
@@ -42,12 +50,24 @@ ALLOWED_HOSTS = [
 
 # Comma-separated list of scheme+host origins allowed to submit CSRF-protected
 # requests, e.g. DJANGO_CSRF_TRUSTED_ORIGINS=https://nodues.lnmiit.ac.in
-CSRF_TRUSTED_ORIGINS = [
-    o.strip() for o in os.environ.get(
-        'DJANGO_CSRF_TRUSTED_ORIGINS',
-        'http://localhost:5173,http://127.0.0.1:5173,http://localhost:8000,http://127.0.0.1:8000',
-    ).split(',') if o.strip()
+#
+# Always trusts the local dev origins (Vite on :5173, Django on :8000)
+# *in addition to* whatever DJANGO_CSRF_TRUSTED_ORIGINS says, rather than the
+# env var replacing them. Otherwise the same .env used for a Docker/production
+# domain (e.g. just "https://nodues.lnmiit.ac.in") silently breaks local
+# `manage.py runserver` + `npm run dev` with a CSRF 403, since that one value
+# would be the *only* trusted origin instead of an addition to the dev ones.
+# Trusting localhost/127.0.0.1 costs nothing in production — an attacker can't
+# make a real browser's Origin header say "localhost" against a remote server.
+_DEV_CSRF_ORIGINS = [
+    'http://localhost:5173', 'http://127.0.0.1:5173',
+    'http://localhost:8000', 'http://127.0.0.1:8000',
+    'http://localhost', 'http://127.0.0.1',
 ]
+_configured_origins = [
+    o.strip() for o in os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',') if o.strip()
+]
+CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(_DEV_CSRF_ORIGINS + _configured_origins))
 
 
 
@@ -98,17 +118,28 @@ WSGI_APPLICATION = 'myproject.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/1.9/ref/settings/#databases
 #
-# PostgreSQL only — see docs/SCALING.md. `docker-compose.yml` sets DATABASE_URL
-# for you against its own `db` service. Running outside Compose (e.g. plain
-# `manage.py runserver`)? Start a local Postgres first — the quickest way is
-# `docker compose up -d db`, which matches the default below — then override
-# DATABASE_URL if your credentials differ.
+# PostgreSQL only — see docs/SCALING.md. Inside `docker-compose.yml`, the
+# `backend` container gets a real DATABASE_URL (pointing at the `db` service)
+# injected directly by Compose, so the branch below never runs there.
+#
+# Outside Compose (plain `manage.py runserver`, no DATABASE_URL in the actual
+# environment), build one from the same POSTGRES_* values in .env that
+# docker-compose.yml itself uses — via `localhost:POSTGRES_PORT` instead of
+# the Docker-internal `db:5432` — so there's exactly one place (.env) to keep
+# credentials in sync, not two. `docker compose up -d db` gets you a real
+# Postgres at that same host/port with zero extra setup.
+_local_db_url = 'postgres://{user}:{password}@localhost:{port}/{name}'.format(
+    user=os.environ.get('POSTGRES_USER', 'nodues'),
+    password=os.environ.get('POSTGRES_PASSWORD', 'nodues'),
+    port=os.environ.get('POSTGRES_PORT', '5432'),
+    name=os.environ.get('POSTGRES_DB', 'nodues'),
+)
 
 DATABASES = {
     'default': dj_database_url.config(
         # dj_database_url.config() reads DATABASE_URL itself; `default` below
-        # only applies if that env var isn't set.
-        default='postgres://nodues:nodues@localhost:5432/nodues',
+        # only applies if that env var isn't set (i.e. outside Compose).
+        default=_local_db_url,
         conn_max_age=600,  # persistent connections — avoids reconnecting every request under load
     )
 }
@@ -155,6 +186,14 @@ STATIC_URL = '/static/'
 # the Django process itself, so nginx doesn't need a shared static volume.
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STORAGES = {
+    # Required explicitly since Django 4.2: defining STORAGES at all replaces
+    # the old STATICFILES_STORAGE *and* DEFAULT_FILE_STORAGE defaults, not
+    # just the one key you set. Omitting 'default' left Document.file (and
+    # any other FileField/ImageField — i.e. every document upload) with no
+    # storage backend configured at all, failing every upload with a 500.
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
     'staticfiles': {
         'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
     },
@@ -169,3 +208,9 @@ CSRF_COOKIE_SAMESITE = 'Lax'
 # Uploaded documents (kept out of the static web root; served via access-checked views).
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'uploaded_media')
+
+# Match main/api.py::MAX_UPLOAD_BYTES (10 MB) so a normal-sized upload is held
+# in memory instead of round-tripping to a temp file on disk. Django's default
+# here is 2.5 MB, which doesn't reject anything larger — it would just add an
+# unnecessary disk write for every document upload at this size.
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024

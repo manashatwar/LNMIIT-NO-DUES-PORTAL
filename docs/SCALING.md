@@ -2,6 +2,8 @@
 
 This portal needs to survive the real-world traffic pattern of an institute clearance system: near-idle most of the semester, then **thousands of students logging in and refreshing their status within the same few-day window** right before an exit deadline, plus dozens of section officers polling their queues throughout. This document is the concrete plan for that: what's been implemented, what's still just a recommendation, and how to load-test it before trusting it with the real clearance window.
 
+> **Deploying somewhere first?** See [`docs/DEPLOY.md`](./DEPLOY.md) for Railway step-by-step instructions (+ Render/Fly.io/VPS notes) — both Dockerfiles here (`No-Dues-Portal/Dockerfile`, `frontend/Dockerfile`) are already built with that in mind (env-driven backend host/port, no hardcoded service names).
+
 ## 1. Current state vs. what production needs
 
 | Concern | Status | Detail |

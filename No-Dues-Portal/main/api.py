@@ -21,7 +21,7 @@ from .models import (
     OVERALL_CLEARED, SECTION_WARDEN, SECTION_HOD, SECTION_ADMINISTRATION,
 )
 
-MAX_UPLOAD_BYTES = 150 * 1024  # 150 KB (relaxed from Design.md's 50 KB for practical usability)
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB — matches the original UI design (docs/images/ui-wireframe.png)
 
 # Basic (name/roll) sections that require an explicit student "Confirm & Send" before
 # the request reaches the officer's queue.
@@ -340,7 +340,7 @@ def upload_document(request):
 
     # Validate size & type
     if upload.size > MAX_UPLOAD_BYTES:
-        return JsonResponse({"detail": "File exceeds 150 KB limit"}, status=400)
+        return JsonResponse({"detail": "File exceeds 10 MB limit"}, status=400)
     name = upload.name.lower()
     ext_ok = any(name.endswith(e) for e in ALLOWED_EXTS)
     if not ext_ok and upload.content_type not in ALLOWED_CONTENT_TYPES:

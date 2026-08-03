@@ -12,7 +12,7 @@ export function RulesPage({ onLogout, onHome }: RulesPageProps) {
     const rules = [
         'Students must clear all pending dues before applying for No-Dues.',
         'Each section must be cleared independently. The order of clearance follows the institute circular.',
-        'Upload documents in JPG, PNG, or PDF format. Maximum file size: 50 KB.',
+        'Upload documents in JPG, PNG, or PDF format. Maximum file size: 10 MB.',
         'LUCS may submit either a file or an event-report URL.',
         'A cancelled cheque is required for refund processing by the Accounts section.',
         'Any rejected section requires re-submission by the student with the corrected document.',

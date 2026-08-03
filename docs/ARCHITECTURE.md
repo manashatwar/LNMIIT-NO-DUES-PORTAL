@@ -123,7 +123,7 @@ All of this runs inside a single `transaction.atomic()` block (`engine.py::appro
 | Auth + role/scope guard | `main/api.py::_scope_ok`, `_profile`, `@login_required` | Every state-changing view re-checks role AND hostel/department scope server-side — never trusts client-supplied role claims |
 | Approval engine | `main/engine.py` | Owns `PREREQUISITES`, `actionable()`, `approve()`/`reject()`, `downstream_closure()`, `recompute_overall()` |
 | OCR service | `main/ocr.py` | Best-effort text extraction; returns `("", {}, [])` if Tesseract/Pillow aren't available — never blocks the upload |
-| Upload handling | `main/api.py::upload_document` | Type/size validation (150 KB; JPG/PNG/PDF), stores outside web root (`MEDIA_ROOT`), re-opens rejected sections on re-upload |
+| Upload handling | `main/api.py::upload_document` | Type/size validation (10 MB; JPG/PNG/PDF), stores outside web root (`MEDIA_ROOT`), re-opens rejected sections on re-upload |
 | Certificate | `frontend/src/pages/StudentDashboard.tsx::downloadCertificate` | Client-side PDF via jsPDF/html2canvas (lazy-loaded); backend only supplies the JSON payload — see [KNOWN_GAPS.md](./KNOWN_GAPS.md) |
 | SPA session bootstrap | `frontend/src/App.tsx` | Calls `GET /api/me/` on load to restore an existing Django session before rendering routes |
 

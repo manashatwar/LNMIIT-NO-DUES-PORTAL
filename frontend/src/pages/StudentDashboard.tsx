@@ -115,8 +115,8 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
     const upload = async (code: string, file: File | null) => {
         if (!file) return;
         setBusy(code); setMsg(''); setMsgErr(false);
-        if (file.size > 150 * 1024) {
-            setMsgErr(true); setMsg(`File is too large (${Math.round(file.size / 1024)} KB). Maximum allowed is 150 KB.`);
+        if (file.size > 10 * 1024 * 1024) {
+            setMsgErr(true); setMsg(`File is too large (${(file.size / (1024 * 1024)).toFixed(1)} MB). Maximum allowed is 10 MB.`);
             setOcrProcessing(false); setBusy(null); return;
         }
         try {
@@ -423,7 +423,7 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                                                 <strong style={{ fontSize: 14, color: isRejected ? '#b91c1c' : '#1e293b' }}>
                                                     {isRejected ? 'Rejected — click to re-upload' : isDone ? 'Uploaded ✓ (click to replace)' : 'Upload Signed Document'}
                                                 </strong>
-                                                <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 8 }}>PDF, JPG, PNG · max 150 KB</span>
+                                                <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 8 }}>PDF, JPG, PNG · max 10 MB</span>
                                             </label>
                                         );
                                     })()}
@@ -513,7 +513,7 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                                                 <strong style={{ fontSize: 13, color: tpcRejected ? '#b91c1c' : '#1e293b', display: 'block' }}>
                                                     {tpcRejected ? 'Rejected — click to re-upload' : tpcDone ? 'Offer letter uploaded ✓ (click to replace)' : 'Upload Offer Letter'}
                                                 </strong>
-                                                <span style={{ fontSize: 11, color: '#64748b' }}>PDF, JPG, PNG · max 150 KB</span>
+                                                <span style={{ fontSize: 11, color: '#64748b' }}>PDF, JPG, PNG · max 10 MB</span>
                                             </div>
                                         </label>
                                     );
@@ -834,8 +834,8 @@ function UploadReview({ section, icon, config, student, me, onReload }: {
         if (!file) return;
         setBusy('upload'); setProcessing(true); setConfirmed(false); setNote(''); setNoteErr(false);
         // Client-side size pre-check for an instant, clear message.
-        if (file.size > 150 * 1024) {
-            setNoteErr(true); setNote(`File is too large (${Math.round(file.size / 1024)} KB). Maximum allowed is 150 KB.`);
+        if (file.size > 10 * 1024 * 1024) {
+            setNoteErr(true); setNote(`File is too large (${(file.size / (1024 * 1024)).toFixed(1)} MB). Maximum allowed is 10 MB.`);
             setProcessing(false); setBusy(''); return;
         }
         try {
@@ -891,7 +891,7 @@ function UploadReview({ section, icon, config, student, me, onReload }: {
                         <strong style={{ fontSize: 14, color: rejected ? '#b91c1c' : approvedOk ? '#15803d' : '#1e293b' }}>
                             {rejected ? 'Rejected — click to re-upload' : approvedOk ? 'Approved ✓' : locked ? 'Uploaded ✓' : uploaded ? 'Uploaded ✓ (click to replace)' : 'Upload Document'}
                         </strong>
-                        <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 8 }}>PDF, JPG, PNG · max 150 KB</span>
+                        <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 8 }}>PDF, JPG, PNG · max 10 MB</span>
                     </label>
                     {config.allowLink && (
                         <button className="btn btn-primary" style={{ fontSize: 12, padding: '4px 10px', marginTop: 8 }}

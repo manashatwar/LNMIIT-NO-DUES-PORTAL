@@ -1,0 +1,60 @@
+# Serves the built SPA and proxies everything Django needs to the backend
+# (same origin from the browser's point of view — no CORS needed, same
+# property the Vite dev proxy gives you locally; see docs/ARCHITECTURE.md).
+#
+# This is a *template*: the official nginx image's entrypoint runs it through
+# `envsubst` at container startup (only substituting variables that are
+# actually set in the environment, so nginx's own `$host`/`$scheme`/etc. are
+# left alone) and writes the result to /etc/nginx/conf.d/default.conf.
+#
+# BACKEND_HOST / BACKEND_PORT default to `backend` / `8000` (Dockerfile ENV),
+# matching docker-compose.yml's service name — override them for any other
+# deploy target where the backend lives somewhere else (see docs/DEPLOY.md).
+
+server {
+    # ${PORT} defaults to 80 (Dockerfile ENV) for docker-compose. Most PaaS
+    # platforms (Railway, Render, ...) inject their own PORT env var and
+    # require the app to listen on it — this picks that up automatically.
+    listen ${PORT};
+    server_name _;
+
+    # Matches main/api.py::MAX_UPLOAD_BYTES (10 MB) with headroom for
+    # multipart encoding overhead — otherwise nginx would reject a
+    # right-at-the-limit upload with its own 413 before Django ever sees it.
+    client_max_body_size 15m;
+
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+
+    # Django JSON API (main/urls.py) — includes document downloads.
+    location /api/ {
+        proxy_pass http://${BACKEND_HOST}:${BACKEND_PORT};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Django admin.
+    location /admin/ {
+        proxy_pass http://${BACKEND_HOST}:${BACKEND_PORT};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Django's own static files (admin CSS/JS), served by WhiteNoise inside
+    # the backend container — proxied through so /admin/ works end to end.
+    location /static/ {
+        proxy_pass http://${BACKEND_HOST}:${BACKEND_PORT};
+        proxy_set_header Host $host;
+    }
+
+    # The React SPA. try_files falls back to index.html so client-side
+    # routing (whatever route the user is on) still loads the app on refresh.
+    location / {
+        root /usr/share/nginx/html;
+        try_files $uri $uri/ /index.html;
+    }
+}
