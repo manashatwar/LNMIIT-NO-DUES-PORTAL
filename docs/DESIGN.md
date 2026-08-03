@@ -20,7 +20,7 @@ The system is purpose-built around LNMIIT's own clearance order and section resp
 
 ## Section Flow
 
-The clearance follows the institute's "Order of No Dues." Independent sections review in parallel; the HOD consolidates a group of sections; Accounts handles the refund; Administration gives final approval. Every section supports approve/reject with a mandatory reason and a two-way comment thread (omitted from the diagram for readability).
+The clearance follows the institute's "Order of No Dues." Independent sections — now including HOD — review in parallel; Accounts consolidates Library/TPC/Warden/HOD; Administration gives final approval. Every section supports approve/reject with a mandatory reason and a two-way comment thread (omitted from the diagram for readability).
 
 ```mermaid
 flowchart TD
@@ -35,12 +35,7 @@ flowchart TD
     C --> SPO[Sports + GSAC Gen. Secretary]
     C --> MED[Medical Cell]
     C --> NAD[NAD Cell]
-
-    STO --> HOD{HOD — CCE/CSE/ECE/MME<br/>consolidates sub-sections}
-    LUCS --> HOD
-    SPO --> HOD
-    MED --> HOD
-    NAD --> HOD
+    C --> HOD[HOD — CCE/CSE/ECE/MME<br/>independent, parallel to Store/LUCS/Sports/Medical/NAD]
 
     LIB --> ACC[Accounts<br/>cancelled cheque + refund]
     TPC --> ACC
@@ -50,17 +45,17 @@ flowchart TD
     ACC --> ADM{Administration<br/>final approval — all green?}
     ADM -->|Yes| CERT([Download No-Dues Certificate<br/>+ Fund Us])
     ADM -->|Any section reverts to due| RC[Reverse-hierarchy cascade:<br/>downstream approvals reset to pending]
-    RC -.-> HOD
+    RC -.-> ACC
 
     classDef sec fill:#e8f1ff,stroke:#1f6feb,color:#0f2748;
     classDef gate fill:#fdf3e2,stroke:#b7791f,color:#0f2748;
     classDef done fill:#e4f6ec,stroke:#1a8f4c,color:#0f2748;
-    class LIB,TPC,WAR,STO,LUCS,SPO,MED,NAD,ACC sec;
-    class HOD,ADM gate;
+    class LIB,TPC,WAR,STO,LUCS,SPO,MED,NAD,HOD,ACC sec;
+    class ADM gate;
     class CERT done;
 ```
 
-> **Department-Purpose (a dedicated "HOD form" upload) was removed** as a mandatory gate — HOD no longer requires its own document upload to consolidate. LUCS was also converted from an upload section to a confirm-only one (name/roll, like Store/Sports/Medical/NAD). If an HOD genuinely needs something from a student, they ask for it via the existing section comment thread (`main/api.py::officer_comment` / `student_comment`) rather than a blocking upload requirement — see [`KNOWN_GAPS.md`](./KNOWN_GAPS.md).
+> **HOD is no longer gated on Store/LUCS/Sports/Medical/NAD.** It used to require all five `APPROVED` before HOD could act (a consolidator, shown as a gate node); it's now an independent section like they are, actionable in parallel — HOD's own approval no longer waits on them. The HOD officer still *sees* those five departments' status on their own review screen for their own verification (`main/engine.py::HOD_RELATED_SECTIONS`), it just isn't a blocking prerequisite anymore. Department-Purpose (a dedicated "HOD form" upload) was separately removed as a mandatory gate — HOD no longer requires its own document upload either. LUCS was also converted from an upload section to a confirm-only one (name/roll, like Store/Sports/Medical/NAD). If an HOD genuinely needs something from a student, they ask for it via the existing section comment thread (`main/api.py::officer_comment` / `student_comment`) rather than a blocking upload requirement — see [`KNOWN_GAPS.md`](./KNOWN_GAPS.md).
 
 ## Components and Interfaces
 
@@ -151,23 +146,30 @@ class OcrService:
 
 Sections are grouped into stages. A section becomes actionable only when its prerequisites are `APPROVED`.
 
-- **Independent sections** (actionable immediately after submission): Library, TPC, Warden, Store, LUCS, Sports, Medical, NAD.
-- **HOD** depends on: Store, LUCS, Sports, Medical, NAD.
+- **Independent sections** (actionable immediately after submission): Library, TPC, Warden, Store, LUCS, Sports, Medical, NAD, **HOD**.
 - **Accounts** depends on: Library, TPC, Warden, HOD.
 - **Administration** depends on: Accounts and, transitively, everything upstream.
 
+HOD is independent, not a consolidator — it does not wait on Store/LUCS/Sports/Medical/NAD. Its own review screen still surfaces those five departments' status for the HOD's own verification (`main/engine.py::HOD_RELATED_SECTIONS`), but that's informational only, not a prerequisite. The only thing HOD still gates is **Accounts**, same as Library/TPC/Warden do.
+
 ```mermaid
 flowchart TD
-    STO[Store] --> HOD
-    LUCS[LUCS] --> HOD
-    SPO[Sports] --> HOD
-    MED[Medical] --> HOD
-    NAD[NAD] --> HOD
+    STO[Store]
+    LUCS[LUCS]
+    SPO[Sports]
+    MED[Medical]
+    NAD[NAD]
     LIB[Library] --> ACC[Accounts]
     TPC[TPC] --> ACC
     WAR[Warden] --> ACC
     HOD[HOD] --> ACC
     ACC --> ADM[Administration]
+
+    STO -.->|informational only, not a gate| HOD
+    LUCS -.->|informational only, not a gate| HOD
+    SPO -.->|informational only, not a gate| HOD
+    MED -.->|informational only, not a gate| HOD
+    NAD -.->|informational only, not a gate| HOD
 ```
 
 ### Section-status state machine
@@ -240,7 +242,7 @@ A warden's queue is `SectionStatus` rows where `section = Warden` and `request.s
 
 ### Department-scoped HOD queues
 
-An HOD's queue is filtered by `request.student.department == hod.department`, and further restricted to requests whose HOD-prerequisite sections are all `APPROVED`.
+An HOD's queue is filtered by `request.student.department == hod.department`. Unlike Warden (which is otherwise unrestricted once confirmed), HOD is independent rather than gated on other sections (see [Approval Engine](#approval-engine)), so every department-scoped request appears as soon as it's confirmed — `actionable` is `true` immediately, not dependent on Store/LUCS/Sports/Medical/NAD.
 
 ### Officer visibility
 
@@ -485,7 +487,7 @@ Focus areas: hierarchy invariants (P2–P4), scoping (P5–P6), certificate gati
 
 ### Integration Testing Approach
 
-- End-to-end clearance for each exit type: initiate → upload → parallel section approvals → HOD consolidation → Accounts → Administration → certificate download.
+- End-to-end clearance for each exit type: initiate → upload → parallel section approvals (including HOD, independent) → Accounts → Administration → certificate download.
 - Reverse-cascade scenario: clear through Administration, reopen an upstream section, assert downstream reset and certificate invalidation.
 - Access-control scenarios: cross-hostel and cross-department attempts via direct URLs; unauthorized document download attempts.
 
@@ -509,6 +511,6 @@ Focus areas: hierarchy invariants (P2–P4), scoping (P5–P6), certificate gati
 
 - Store `roll_no` as text, never integer.
 - No cross-hostel or cross-department visibility.
-- No HOD approval before its prerequisite sections are approved; no Administration approval before all required sections are approved.
+- HOD is independent (parallel to Store/LUCS/Sports/Medical/NAD, not gated on them); no Administration approval before all required sections are approved.
 - No rejection without a written reason.
 - OCR never replaces the original document; originals remain downloadable.

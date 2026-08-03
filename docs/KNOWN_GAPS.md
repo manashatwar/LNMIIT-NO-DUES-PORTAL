@@ -2,6 +2,41 @@
 
 A running list of everything found to be missing, stale, inconsistent, or ambiguous during the documentation pass, what (if anything) was done about it, and why. Keep this updated as the project evolves — it's the single place to check "is this actually still true?" before trusting an older doc.
 
+## HOD is no longer gated on Store/LUCS/Sports/Medical/NAD (eleventh pass)
+
+Requested directly: HOD used to be a true consolidator — it could only approve once all five of Store, LUCS, Sports, Medical, and NAD were themselves `APPROVED`. That's removed. HOD is now an independent section, actionable immediately and in parallel with those five, the same way they're already parallel with each other.
+
+| Change | Detail | Where |
+|---|---|---|
+| HOD removed from `PREREQUISITES` | HOD moved into `INDEPENDENT_SECTIONS`; `engine.prerequisites("HOD")` now returns `[]`, so `engine.actionable(request, "HOD")` is `True` regardless of Store/LUCS/Sports/Medical/NAD's status | `No-Dues-Portal/main/engine.py` |
+| HOD's review screen keeps showing those five departments — informational now, not gating | Added `HOD_RELATED_SECTIONS` (the same five codes) purely for `section_review`'s HOD-only detail panel — the HOD officer can still see their documents/OCR/status for their own verification, it just no longer blocks HOD's own approve action | `main/engine.py`, `main/api.py::section_review` |
+| **Bug caught in the same pass:** `document_download`'s HOD-consolidator check still referenced `engine.prerequisites(SECTION_HOD)`, which is now empty — this would have silently reintroduced the "visible but not downloadable" bug from the ninth pass, specifically for HOD viewing Store/LUCS/Sports/Medical/NAD documents | Changed to check `engine.HOD_RELATED_SECTIONS` instead | `main/api.py::document_download` |
+
+**What's unaffected:** Accounts still requires Library, TPC, Warden, *and* HOD to be `APPROVED` — HOD's downstream gate (on Accounts) is untouched, only its upstream gate (from the five departments) was removed. The reverse-cascade example in `docs/ARCHITECTURE.md` used Store→HOD as its worked example; since that link no longer exists, it was rewritten using Library→Accounts→Administration instead (still a real, unaffected dependency chain).
+
+**Verified, not assumed:** rather than reuse Rahul Sharma's data again, created an isolated throwaway request (Amit Kumar, `amit@lnmiit.ac.in`, previously had no active request) — confirmed `HOD.actionable == True` while `STORE.status == "PENDING"` (and by extension LUCS/Sports/Medical/NAD, never touched), then successfully called `POST /api/section/approve/` as `hod.cse@` with none of the five departments approved. Also confirmed the informational panel still returns all five sections' status for HOD's own review. Deleted the test request afterward — Amit is back to having no active request, same as before.
+
+## A standing note on mutating actions during diagnosis
+
+Several passes above (ninth, tenth, eleventh) needed real API calls against the real dev database to actually confirm behavior — a disposable copy wouldn't prove anything about the real system. Each time, prefer an *isolated* target (a demo student with no active request, a throwaway request) over touching whatever the reporter is actively looking at, and say plainly what was done and reverted. The tenth pass's approval-then-revert on Rahul Sharma's HOD status is the example to avoid repeating unnecessarily — the eleventh pass used Amit instead specifically to not touch Rahul's data at all.
+
+## Officer queue only fetched on login — no way to notice a prerequisite clearing elsewhere (tenth pass)
+
+Reported directly: HOD couldn't approve Rahul Sharma's request even though all five prerequisites (Store, LUCS, Sports, Medical, NAD) had already been approved. Confirmed via direct API call that the backend correctly allowed the approval on the first attempt (`200 APPROVED`, `engine.actionable` returned `true`) — so this wasn't a gating bug. The real cause: each officer role is a separate login (Store, LUCS, HOD, etc. can't share one session), so testing multiple sections means multiple tabs/logins. The queue (`GET /api/section/queue/`, including the `actionable` flag the Approve button's `disabled` state depends on) was only ever fetched once, on login — nothing pushed an update to an already-open officer tab when a *different* officer session changed a prerequisite's status. An HOD tab opened before the last prerequisite cleared would show a correctly-disabled Approve button forever, with no indication anything had changed, until a full page reload.
+
+| Fix | Detail | Where |
+|---|---|---|
+| Manual refresh | Added a "↻ Refresh" button next to the Incoming/Approved/Rejected tabs, calling the same `onReload` the tabs already use — no full page reload needed | `frontend/src/pages/SectionApprovalPage.tsx` |
+| Automatic refresh on tab focus | Officer queues (and the student dashboard) now refetch automatically when the browser tab regains focus/visibility (`visibilitychange`/`focus` listeners) — the exact moment stale data would otherwise go unnoticed, e.g. switching back from the tab where you just approved Store | `frontend/src/App.tsx` |
+
+**Verified:** reproduced the reported scenario via direct API calls (all 5 prerequisites `APPROVED`, HOD approve succeeds) to confirm the backend was never the problem. `tsc -b` and a production `vite build` both pass with the new refresh mechanisms. Reverted the one approval consumed during diagnosis (Rahul Sharma's HOD status, set back to `PENDING`) so the reporter could verify the fix by actually clicking Approve themselves rather than finding it already done.
+
+**Still open:** this is pull-based (refresh button, focus refetch), not push-based. A genuinely live update (e.g. WebSockets, or short-interval polling while a tab is open and visible) would close the gap further but wasn't built here — it's real added complexity for a problem that a manual refresh + focus refetch already substantially covers for a system this size.
+
+## Test-script side effects during diagnosis — a standing note
+
+Several of the passes above (ninth, tenth) needed to reproduce a reported problem by calling the real API directly (Django test client) against the real dev database, not a disposable copy. That's the fastest way to get a real traceback or confirm real behavior, but it means the actions taken are real — approvals, uploads, resets. Each time, the change was called out explicitly (not left as a silent side effect), and reverted if it would interfere with the reporter re-testing themselves. If a report investigation seems to need a mutating call, that's still the right call to make — just always say so plainly, the same way this file records it.
+
 ## Intake documents were visible but not actually downloadable (ninth pass)
 
 Reported directly from the Sports section: the Library/TPC documents shown in the "Student Intake" panel (added in the eighth pass, above) couldn't actually be opened — clicking the download link returned `403 Not authorized`. The eighth pass made these documents *visible* to every officer but didn't update `document_download`'s authorization to match, so the link was there but non-functional for anyone who wasn't the document's own section officer or a consolidator (HOD/Administration).

@@ -600,10 +600,14 @@ def section_review(request):
         "intake": intake_docs,
     }
 
-    # Consolidator sections (HOD, Administration) see the sections they depend on —
-    # each with its documents, OCR, status and comment thread — for consolidation.
+    # HOD and Administration see a wider set of sections — each with its
+    # documents, OCR, status and comment thread — for their own verification.
+    # For HOD this is informational only (main/engine.py::HOD_RELATED_SECTIONS):
+    # it does NOT gate HOD's own approve action, which is independent/parallel
+    # to these now, same as Store/LUCS/Sports/Medical/NAD are already parallel
+    # with each other. Administration's list is a true prerequisite gate.
     if role == SECTION_HOD:
-        prereq_codes = engine.prerequisites(SECTION_HOD)
+        prereq_codes = engine.HOD_RELATED_SECTIONS
     elif role == SECTION_ADMINISTRATION:
         prereq_codes = [c for c in engine.ALL_SECTION_CODES if c != SECTION_ADMINISTRATION]
     else:
@@ -713,11 +717,13 @@ def document_download(request, doc_id):
     is_officer = profile is not None and profile.role == section_code and _scope_ok(profile, req, section_code)
 
     # Consolidators may open the documents of the sections they consolidate:
-    #  - HOD → its prerequisite sections, within its department scope
+    #  - HOD → Store/LUCS/Sports/Medical/NAD (informational, not a gate —
+    #    engine.HOD_RELATED_SECTIONS, not engine.prerequisites), within its
+    #    department scope
     #  - Administration → any section
     is_consolidator = False
     if profile is not None:
-        if profile.role == SECTION_HOD and section_code in engine.prerequisites(SECTION_HOD):
+        if profile.role == SECTION_HOD and section_code in engine.HOD_RELATED_SECTIONS:
             is_consolidator = profile.department_id == req.student.department_id
         elif profile.role == SECTION_ADMINISTRATION:
             is_consolidator = True

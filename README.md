@@ -35,7 +35,7 @@ This section reflects what's actually in the code today, verified directly again
 | LNMIIT section set (Library, TPC, Warden, Store, LUCS, Sports, Medical, NAD, HOD, Accounts, Administration) | ✅ Done | `main/management/commands/seed_demo.py` — Department-Purpose was removed as a mandatory gate; see [Known gaps](#known-gaps) |
 | Roll number stored as text (e.g. `24UCC174`) | ✅ Done | `models.py` |
 | Exit types (Graduation / NEP Exit / Withdrawal / Admission Cancel) with per-type required sections | ✅ Done | `main/engine.py::REQUIRED_SECTIONS` |
-| Prerequisite gating + transactional reverse-hierarchy cascade | ✅ Done | `main/engine.py::approve/reject/_on_status_change` |
+| Prerequisite gating + transactional reverse-hierarchy cascade | ✅ Done | `main/engine.py::approve/reject/_on_status_change` — HOD is independent (parallel to Store/LUCS/Sports/Medical/NAD), not gated on them; see [Known gaps](#known-gaps) |
 | Hostel-scoped Warden queues / department-scoped HOD queues | ✅ Done | `main/api.py::_scope_ok`, `section_queue` |
 | Mandatory rejection reason + two-way comment threads | ✅ Done | `engine.reject`, `student_comment`/`officer_comment` |
 | Document upload (type/size validated) + access-checked download | ✅ Done | `upload_document`, `document_download` |
@@ -203,7 +203,7 @@ Password for every account: **`csepassword`**.
 | Administration | `admin.office@lnmiit.ac.in` |
 | Django admin | `admin` at http://127.0.0.1:8000/admin |
 
-Because of the hierarchy, HOD/Accounts/Administration queues start empty until their prerequisite sections clear — start with Store, Sports, Medical, NAD, or a Warden account to see requests immediately.
+Because of the hierarchy, Accounts/Administration queues start empty until their prerequisite sections clear — start with Store, Sports, Medical, NAD, HOD, or a Warden account to see requests immediately (HOD is independent, not gated on the other four — see [Known gaps](#known-gaps)).
 
 ## Documentation map
 

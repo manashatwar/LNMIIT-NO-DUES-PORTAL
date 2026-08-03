@@ -77,6 +77,28 @@ export function App() {
   const reloadStudent = async () => { if (user) setStudentData(await api.studentRequest()); };
   const reloadQueue = async () => { if (user) setQueue(await api.sectionQueue()); };
 
+  // An officer's queue (prerequisite/actionable status especially) can change
+  // from a completely different login session — e.g. an HOD's tab has no way
+  // to know Store/LUCS/Sports/Medical/NAD just got approved elsewhere. Rather
+  // than only refreshing on an explicit action, also refetch whenever this
+  // tab regains focus (switching back from another tab/window), which is
+  // when stale data actually gets noticed. See docs/KNOWN_GAPS.md.
+  useEffect(() => {
+    if (!user) return;
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (SECTION_ROLES.includes(user.role)) reloadQueue();
+      else if (user.role === 'STUDENT') reloadStudent();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
   if (booting) {
     return <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center' }}><p>Loading…</p></div>;
   }

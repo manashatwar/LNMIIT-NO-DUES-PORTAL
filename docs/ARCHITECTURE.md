@@ -79,7 +79,7 @@ sequenceDiagram
         ENG->>ENG: recompute_overall()
     end
 
-    Note over ENG,DB: HOD becomes actionable once its 6 prerequisites clear;<br/>Accounts once Library+TPC+Warden+HOD clear;<br/>Administration once Accounts clears
+    Note over ENG,DB: HOD is independent — actionable immediately, in parallel with Store/LUCS/Sports/Medical/NAD;<br/>Accounts becomes actionable once Library+TPC+Warden+HOD clear;<br/>Administration once Accounts clears
 
     API-->>SPA: overall_status = CLEARED
     S->>SPA: Download certificate
@@ -94,21 +94,21 @@ The one property worth tracing end to end, since it's what makes the final certi
 
 ```mermaid
 sequenceDiagram
-    participant O as Officer (e.g. Store)
+    participant O as Officer (e.g. Library)
     participant API as Django API
     participant ENG as engine.py
     participant DB as Database
 
-    Note over DB: HOD was already APPROVED, built on Store=APPROVED
+    Note over DB: Accounts and Administration were already APPROVED, built on Library=APPROVED
 
     O->>API: POST /api/section/reject/ {request_id, reason}
     API->>ENG: engine.reject(section_status, actor, reason)
-    ENG->>DB: Store.status = REJECTED (in one transaction)
+    ENG->>DB: Library.status = REJECTED (in one transaction)
     ENG->>ENG: _on_status_change(previous=APPROVED)
-    ENG->>ENG: downstream_closure(STORE) → {HOD, ACCOUNTS, ADMINISTRATION}
+    ENG->>ENG: downstream_closure(LIBRARY) → {ACCOUNTS, ADMINISTRATION}
     loop each downstream section that was APPROVED
         ENG->>DB: status = PENDING, decided_by = None, decided_at = None
-        ENG->>DB: create system Comment "Reset: upstream STORE reopened"
+        ENG->>DB: create system Comment "Reset: upstream LIBRARY reopened"
     end
     ENG->>DB: delete Certificate if one existed
     ENG->>DB: overall_status = IN_PROGRESS

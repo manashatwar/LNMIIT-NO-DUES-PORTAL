@@ -22,20 +22,29 @@ from .models import (
 # longer requires a dedicated form upload. If an HOD needs something from a
 # student, they ask for it via the existing section comment thread instead of
 # a blocking gate (main/api.py::officer_comment / student_comment).
+#
+# HOD is no longer gated on Store/LUCS/Sports/Medical/NAD either — it's an
+# independent section now, actionable in parallel with them (same as they're
+# already parallel with each other), not a consolidator waiting on all five.
+# HOD_RELATED_SECTIONS below is *not* a prerequisite list — it's purely for
+# the HOD officer's own review screen (main/api.py::section_review), so they
+# can still see those five departments' status for their own verification;
+# it just no longer blocks HOD's approve action.
 
 PREREQUISITES = {
-    SECTION_HOD: [SECTION_STORE, SECTION_LUCS, SECTION_SPORTS, SECTION_MEDICAL, SECTION_NAD],
     SECTION_ACCOUNTS: [SECTION_LIBRARY, SECTION_TPC, SECTION_WARDEN, SECTION_HOD],
     SECTION_ADMINISTRATION: [SECTION_ACCOUNTS],
 }
 
+HOD_RELATED_SECTIONS = [SECTION_STORE, SECTION_LUCS, SECTION_SPORTS, SECTION_MEDICAL, SECTION_NAD]
+
 # Independent sections (actionable immediately after submission)
 INDEPENDENT_SECTIONS = [
     SECTION_LIBRARY, SECTION_TPC, SECTION_WARDEN, SECTION_STORE, SECTION_LUCS,
-    SECTION_SPORTS, SECTION_MEDICAL, SECTION_NAD,
+    SECTION_SPORTS, SECTION_MEDICAL, SECTION_NAD, SECTION_HOD,
 ]
 
-ALL_SECTION_CODES = INDEPENDENT_SECTIONS + [SECTION_HOD, SECTION_ACCOUNTS, SECTION_ADMINISTRATION]
+ALL_SECTION_CODES = INDEPENDENT_SECTIONS + [SECTION_ACCOUNTS, SECTION_ADMINISTRATION]
 
 
 class PermissionError_(Exception):

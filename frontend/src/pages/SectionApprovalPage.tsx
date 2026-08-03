@@ -34,6 +34,12 @@ export function SectionApprovalPage({ officerName, heading, rows, onReload, onLo
     const [msgOpen, setMsgOpen] = useState(false);
     const [rejectingId, setRejectingId] = useState<number | null>(null);
     const [rejectReason, setRejectReason] = useState('');
+    const [refreshing, setRefreshing] = useState(false);
+
+    const doRefresh = async () => {
+        setRefreshing(true);
+        try { await onReload(); } finally { setRefreshing(false); }
+    };
 
     const counts = {
         incoming: rows.filter((r) => r.status === 'PENDING').length,
@@ -102,14 +108,24 @@ export function SectionApprovalPage({ officerName, heading, rows, onReload, onLo
 
                 {msg && <div className="well" style={{ padding: '8px 12px', marginBottom: 16, fontSize: 13 }}>{msg}</div>}
 
-                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                    {(Object.keys(TAB_META) as Tab[]).map((t) => (
-                        <button key={t} onClick={() => setTab(t)}
-                            className={tab === t ? 'btn btn-primary' : 'btn btn-secondary'}
-                            style={{ fontSize: 13, padding: '6px 14px', fontWeight: tab === t ? 700 : 400 }}>
-                            {TAB_META[t].icon} {TAB_META[t].label} ({counts[t]})
-                        </button>
-                    ))}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                        {(Object.keys(TAB_META) as Tab[]).map((t) => (
+                            <button key={t} onClick={() => setTab(t)}
+                                className={tab === t ? 'btn btn-primary' : 'btn btn-secondary'}
+                                style={{ fontSize: 13, padding: '6px 14px', fontWeight: tab === t ? 700 : 400 }}>
+                                {TAB_META[t].icon} {TAB_META[t].label} ({counts[t]})
+                            </button>
+                        ))}
+                    </div>
+                    {/* Another officer approving/rejecting elsewhere (a different tab or
+                        account) doesn't push updates here — this queue was only fetched on
+                        login. Refresh pulls current prerequisite/actionable status without
+                        a full page reload; see docs/KNOWN_GAPS.md. */}
+                    <button className="btn btn-secondary" style={{ fontSize: 12, padding: '6px 12px' }}
+                        disabled={refreshing} onClick={doRefresh}>
+                        {refreshing ? '↻ Refreshing…' : '↻ Refresh'}
+                    </button>
                 </div>
 
                 <div className="well" style={{ padding: 0, overflow: 'hidden' }}>
