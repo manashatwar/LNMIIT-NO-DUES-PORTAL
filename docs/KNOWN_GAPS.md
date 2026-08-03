@@ -2,6 +2,23 @@
 
 A running list of everything found to be missing, stale, inconsistent, or ambiguous during the documentation pass, what (if anything) was done about it, and why. Keep this updated as the project evolves — it's the single place to check "is this actually still true?" before trusting an older doc.
 
+## Stale local server, again — and HOD's informational panel explicitly removed (twelfth pass)
+
+Reported: HOD still couldn't approve Rahul Sharma's request, even right after the eleventh pass's fix. Root cause was the *exact* same class of issue as the sixth pass's CSRF regression: a local `manage.py runserver` process (PID checked directly) had been running since before the eleventh pass's `engine.py`/`api.py` edits and was still serving the old code — Python doesn't hot-reload a running process just because the file on disk changed, and this one wasn't using Django's autoreloader in a way that picked it up. Confirmed via the Django test client (which imports current code fresh, bypassing any stale process) that the backend logic was already correct; killed the stale process, started a fresh one, and confirmed the approval succeeded through the actual HTTP server this time — same request, same account.
+
+Also requested in the same message: remove the informational Store/LUCS/Sports/Medical/NAD panel the eleventh pass had kept on HOD's review screen. That panel was a deliberate design choice at the time (visible for HOD's own verification, just not blocking) — but the ask here is for full independence, no residual link at all.
+
+| Change | Detail | Where |
+|---|---|---|
+| Killed and restarted the stale local `manage.py runserver` | Same fix pattern as the sixth pass | — (operational, not a code change) |
+| Removed HOD's informational consolidation panel entirely | `section_review` no longer special-cases `role == SECTION_HOD` at all — only `SECTION_ADMINISTRATION` populates the `prerequisites` key now. HOD's response has no `prerequisites` key, same shape as Store/LUCS/Sports/Medical/NAD's own responses | `No-Dues-Portal/main/api.py::section_review` |
+| Removed `engine.HOD_RELATED_SECTIONS` | It was introduced in the eleventh pass specifically to back that panel; with the panel gone, it was unused everywhere — deleted rather than left as a dead constant | `main/engine.py` |
+| Removed HOD's document-download consolidator access | `document_download`'s `is_consolidator` check no longer special-cases HOD — Administration is the only remaining consolidator for arbitrary-section documents | `main/api.py::document_download` |
+
+**Verified:** through the actual local HTTP server (not just the test client) — fresh login as `hod.cse@`, `GET /api/section/queue/` showed Rahul Sharma `actionable: true`, and `POST /api/section/approve/` returned `200 APPROVED`. Separately confirmed (via an isolated test student, not Rahul's data) that HOD's `section_review` response now has no `prerequisites` key at all, while Administration's still does with all 10 other sections — the removal was scoped to HOD only, Administration's consolidation is untouched. `manage.py check` passes; backend Docker image rebuilt.
+
+**Pattern worth naming:** this is the second time a stale long-running local process has been mistaken for a code bug (sixth pass, now this one). If a fix is verified via test client / direct API call and still doesn't manifest for the reporter, checking for a stale `runserver` (or stale Docker image) before re-diagnosing the logic itself is now the first thing to check, not the last.
+
 ## HOD is no longer gated on Store/LUCS/Sports/Medical/NAD (eleventh pass)
 
 Requested directly: HOD used to be a true consolidator — it could only approve once all five of Store, LUCS, Sports, Medical, and NAD were themselves `APPROVED`. That's removed. HOD is now an independent section, actionable immediately and in parallel with those five, the same way they're already parallel with each other.

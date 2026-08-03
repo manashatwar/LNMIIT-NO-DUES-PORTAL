@@ -55,7 +55,7 @@ flowchart TD
     class CERT done;
 ```
 
-> **HOD is no longer gated on Store/LUCS/Sports/Medical/NAD.** It used to require all five `APPROVED` before HOD could act (a consolidator, shown as a gate node); it's now an independent section like they are, actionable in parallel — HOD's own approval no longer waits on them. The HOD officer still *sees* those five departments' status on their own review screen for their own verification (`main/engine.py::HOD_RELATED_SECTIONS`), it just isn't a blocking prerequisite anymore. Department-Purpose (a dedicated "HOD form" upload) was separately removed as a mandatory gate — HOD no longer requires its own document upload either. LUCS was also converted from an upload section to a confirm-only one (name/roll, like Store/Sports/Medical/NAD). If an HOD genuinely needs something from a student, they ask for it via the existing section comment thread (`main/api.py::officer_comment` / `student_comment`) rather than a blocking upload requirement — see [`KNOWN_GAPS.md`](./KNOWN_GAPS.md).
+> **HOD is fully independent of Store/LUCS/Sports/Medical/NAD.** It used to require all five `APPROVED` before HOD could act (a consolidator, shown as a gate node); it's now an independent section like they are, actionable in parallel — HOD's own approval no longer waits on them. This was tried first as "still visible, just not blocking" (an informational-only panel on HOD's review screen), then explicitly removed too — HOD's review screen now only ever shows its own section, the same as Store/LUCS/Sports/Medical/NAD's screens already show for each other. Department-Purpose (a dedicated "HOD form" upload) was separately removed as a mandatory gate — HOD no longer requires its own document upload either. LUCS was also converted from an upload section to a confirm-only one (name/roll, like Store/Sports/Medical/NAD). If an HOD genuinely needs something from a student, they ask for it via the existing section comment thread (`main/api.py::officer_comment` / `student_comment`) rather than a blocking upload requirement — see [`KNOWN_GAPS.md`](./KNOWN_GAPS.md).
 
 ## Components and Interfaces
 
@@ -150,7 +150,7 @@ Sections are grouped into stages. A section becomes actionable only when its pre
 - **Accounts** depends on: Library, TPC, Warden, HOD.
 - **Administration** depends on: Accounts and, transitively, everything upstream.
 
-HOD is independent, not a consolidator — it does not wait on Store/LUCS/Sports/Medical/NAD. Its own review screen still surfaces those five departments' status for the HOD's own verification (`main/engine.py::HOD_RELATED_SECTIONS`), but that's informational only, not a prerequisite. The only thing HOD still gates is **Accounts**, same as Library/TPC/Warden do.
+HOD is independent, not a consolidator — it does not wait on Store/LUCS/Sports/Medical/NAD, and (as of this pass) doesn't display their status either; its review screen shows only its own section, exactly like Store/LUCS/Sports/Medical/NAD's screens show for each other. There is no remaining link between HOD and those five sections at all. The only thing HOD still gates is **Accounts**, same as Library/TPC/Warden do.
 
 ```mermaid
 flowchart TD
@@ -164,13 +164,9 @@ flowchart TD
     WAR[Warden] --> ACC
     HOD[HOD] --> ACC
     ACC --> ADM[Administration]
-
-    STO -.->|informational only, not a gate| HOD
-    LUCS -.->|informational only, not a gate| HOD
-    SPO -.->|informational only, not a gate| HOD
-    MED -.->|informational only, not a gate| HOD
-    NAD -.->|informational only, not a gate| HOD
 ```
+
+`Store`, `LUCS`, `Sports`, `Medical`, `NAD` are drawn with no connection to `HOD` deliberately — there isn't one, gating or otherwise.
 
 ### Section-status state machine
 

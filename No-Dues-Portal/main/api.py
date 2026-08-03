@@ -600,49 +600,41 @@ def section_review(request):
         "intake": intake_docs,
     }
 
-    # HOD and Administration see a wider set of sections — each with its
-    # documents, OCR, status and comment thread — for their own verification.
-    # For HOD this is informational only (main/engine.py::HOD_RELATED_SECTIONS):
-    # it does NOT gate HOD's own approve action, which is independent/parallel
-    # to these now, same as Store/LUCS/Sports/Medical/NAD are already parallel
-    # with each other. Administration's list is a true prerequisite gate.
-    if role == SECTION_HOD:
-        prereq_codes = engine.HOD_RELATED_SECTIONS
-    elif role == SECTION_ADMINISTRATION:
-        prereq_codes = [c for c in engine.ALL_SECTION_CODES if c != SECTION_ADMINISTRATION]
-    else:
-        prereq_codes = []
-
-    if prereq_codes:
+    # Administration sees every other section's documents/OCR/status — a true
+    # prerequisite gate, since Administration only acts once everything is
+    # green. HOD does NOT get an equivalent panel: it's fully independent now
+    # (main/engine.py — no prerequisites, and no informational consolidation
+    # of Store/LUCS/Sports/Medical/NAD either) — its review screen only ever
+    # shows its own section, same as Store/LUCS/Sports/Medical/NAD's screens
+    # already do for each other.
+    if role == SECTION_ADMINISTRATION:
         prereqs = []
-        for code in prereq_codes:
+        for code in engine.ALL_SECTION_CODES:
+            if code == SECTION_ADMINISTRATION:
+                continue
             pss = ss.request.section_statuses.filter(section__code=code).select_related("section").first()
             if pss is None:
                 continue
-            if role == SECTION_ADMINISTRATION:
-                # Final view: only the latest (final) document, no message thread.
-                latest = pss.documents.order_by("-uploaded_at").first()
-                docs = []
-                if latest and (latest.file or latest.event_report_url):
-                    docs = [{
-                        "id": latest.id, "original_name": latest.original_name,
-                        "event_report_url": latest.event_report_url, "ocr_text": latest.ocr_text,
-                        "ocr_fields": latest.ocr_fields,
-                        "download_url": (f"/api/document/{latest.id}/download/" if latest.file else None),
-                    }]
-                prereqs.append({
-                    "code": pss.section.code, "name": pss.section.name, "status": pss.status,
-                    "actionable": engine.actionable(ss.request, pss.section.code),
-                    "is_upload_section": pss.section.is_upload_section,
-                    "student_confirmed": pss.student_confirmed,
-                    "needs_confirm": pss.section.code in BASIC_CONFIRM_SECTIONS,
-                    "decided_by": pss.decided_by.username if pss.decided_by else None,
-                    "decided_at": pss.decided_at.isoformat() if pss.decided_at else None,
-                    "documents": docs, "comments": [],   # no messages for Administration
-                })
-            else:
-                # HOD: full detail (all documents + OCR + discussion) for consolidation.
-                prereqs.append(_section_dict(pss, ss.request))
+            # Final view: only the latest (final) document, no message thread.
+            latest = pss.documents.order_by("-uploaded_at").first()
+            docs = []
+            if latest and (latest.file or latest.event_report_url):
+                docs = [{
+                    "id": latest.id, "original_name": latest.original_name,
+                    "event_report_url": latest.event_report_url, "ocr_text": latest.ocr_text,
+                    "ocr_fields": latest.ocr_fields,
+                    "download_url": (f"/api/document/{latest.id}/download/" if latest.file else None),
+                }]
+            prereqs.append({
+                "code": pss.section.code, "name": pss.section.name, "status": pss.status,
+                "actionable": engine.actionable(ss.request, pss.section.code),
+                "is_upload_section": pss.section.is_upload_section,
+                "student_confirmed": pss.student_confirmed,
+                "needs_confirm": pss.section.code in BASIC_CONFIRM_SECTIONS,
+                "decided_by": pss.decided_by.username if pss.decided_by else None,
+                "decided_at": pss.decided_at.isoformat() if pss.decided_at else None,
+                "documents": docs, "comments": [],   # no messages for Administration
+            })
         data["prerequisites"] = prereqs
 
     return JsonResponse(data)
@@ -716,23 +708,16 @@ def document_download(request, doc_id):
     is_owner = Student.objects.filter(user=request.user, id=req.student_id).exists()
     is_officer = profile is not None and profile.role == section_code and _scope_ok(profile, req, section_code)
 
-    # Consolidators may open the documents of the sections they consolidate:
-    #  - HOD → Store/LUCS/Sports/Medical/NAD (informational, not a gate —
-    #    engine.HOD_RELATED_SECTIONS, not engine.prerequisites), within its
-    #    department scope
-    #  - Administration → any section
-    is_consolidator = False
-    if profile is not None:
-        if profile.role == SECTION_HOD and section_code in engine.HOD_RELATED_SECTIONS:
-            is_consolidator = profile.department_id == req.student.department_id
-        elif profile.role == SECTION_ADMINISTRATION:
-            is_consolidator = True
+    # Administration is the only remaining consolidator — it may open any
+    # section's documents. HOD is fully independent now (no informational
+    # consolidation of Store/LUCS/Sports/Medical/NAD either — see
+    # section_review), so it gets no equivalent access here.
+    is_consolidator = profile is not None and profile.role == SECTION_ADMINISTRATION
 
     # Library/TPC documents are shown to every officer as shared context
-    # (see section_review's "intake" — Store/LUCS/Sports/Medical/NAD/HOD all
-    # display them, not just consolidators), so any legitimate section
-    # officer must actually be able to open/download them too, not just see
-    # the filename with a link that 403s.
+    # (see section_review's "intake" — every officer sees them, not just
+    # consolidators), so any legitimate section officer must actually be able
+    # to open/download them too, not just see the filename with a link that 403s.
     is_intake_viewer = (
         profile is not None
         and profile.role in engine.ALL_SECTION_CODES

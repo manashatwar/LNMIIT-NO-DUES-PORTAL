@@ -23,20 +23,17 @@ from .models import (
 # student, they ask for it via the existing section comment thread instead of
 # a blocking gate (main/api.py::officer_comment / student_comment).
 #
-# HOD is no longer gated on Store/LUCS/Sports/Medical/NAD either — it's an
-# independent section now, actionable in parallel with them (same as they're
-# already parallel with each other), not a consolidator waiting on all five.
-# HOD_RELATED_SECTIONS below is *not* a prerequisite list — it's purely for
-# the HOD officer's own review screen (main/api.py::section_review), so they
-# can still see those five departments' status for their own verification;
-# it just no longer blocks HOD's approve action.
+# HOD is fully independent — no prerequisites, and no informational
+# consolidation of Store/LUCS/Sports/Medical/NAD either (that was tried and
+# then explicitly removed — HOD's review screen only shows its own section,
+# same as Store/LUCS/Sports/Medical/NAD's screens already do for each other).
+# It's actionable in parallel with all of them, same as they're already
+# parallel with each other.
 
 PREREQUISITES = {
     SECTION_ACCOUNTS: [SECTION_LIBRARY, SECTION_TPC, SECTION_WARDEN, SECTION_HOD],
     SECTION_ADMINISTRATION: [SECTION_ACCOUNTS],
 }
-
-HOD_RELATED_SECTIONS = [SECTION_STORE, SECTION_LUCS, SECTION_SPORTS, SECTION_MEDICAL, SECTION_NAD]
 
 # Independent sections (actionable immediately after submission)
 INDEPENDENT_SECTIONS = [
