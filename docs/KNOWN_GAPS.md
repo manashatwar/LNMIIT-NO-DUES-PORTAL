@@ -2,6 +2,22 @@
 
 A running list of everything found to be missing, stale, inconsistent, or ambiguous during the documentation pass, what (if anything) was done about it, and why. Keep this updated as the project evolves — it's the single place to check "is this actually still true?" before trusting an older doc.
 
+## Administration saw Library/TPC twice; document links silently failed instead of downloading (thirteenth pass)
+
+Two real, reported bugs from the same review screen.
+
+**Duplicate Library/TPC on Administration's review.** The ninth pass added a universal `intake` panel (Library/TPC/Warden) to every officer's `section_review` response. Administration already had its own `prerequisites` list covering *every other section* — Library and TPC included — so Administration ended up with both: the same two sections rendered once under "🎒 Student Intake" and again under "📋 Consolidation." Fixed by skipping `intake` entirely for Administration, since its `prerequisites` already covers the same ground in more detail (full document history vs. `prerequisites`' latest-document-only view for Administration).
+
+**Document links opened a broken image instead of downloading.** `document_download` served files with `Content-Disposition` left as inline (`as_attachment=False`), so the browser tried to render whatever the file's content-type claimed to be. For a real PDF or image this mostly worked; for anything the browser couldn't render — including, unhelpfully, the placeholder test files generated during earlier verification passes (random bytes named `*.jpg`, never real images) — it silently showed a blank/broken-image placeholder with no error message, which is exactly what was reported ("just like a blunt image"). Changed to always force a real download (`as_attachment=True`, proper `Content-Disposition: attachment` with the original filename) rather than attempt inline rendering — a `Download` action that reliably works beats a `View` action that silently fails for anything unrenderable. Relabeled every "👁 Open" / "👁 Open / Download" link in the officer review UI to "⬇ Download" to match.
+
+| Change | Where |
+|---|---|
+| `intake` skipped for `role == SECTION_ADMINISTRATION` (Store/LUCS/etc. and HOD unaffected — they still get it) | `No-Dues-Portal/main/api.py::section_review` |
+| `document_download` now always forces attachment download | `main/api.py::document_download` |
+| Document links relabeled to "⬇ Download" | `frontend/src/pages/SectionApprovalPage.tsx` |
+
+**Verified:** Django test client as `admin.office@` — `section_review` now has an empty `intake` and exactly one `LIBRARY`/one `TPC` entry in `prerequisites` (previously would have shown in both). Downloaded an actual Library document through the endpoint and confirmed the response header directly: `Content-Disposition: attachment; filename="BTP_Signed_Form.jpg"`. `manage.py check` and `tsc -b` both pass.
+
 ## Stale local server, again — and HOD's informational panel explicitly removed (twelfth pass)
 
 Reported: HOD still couldn't approve Rahul Sharma's request, even right after the eleventh pass's fix. Root cause was the *exact* same class of issue as the sixth pass's CSRF regression: a local `manage.py runserver` process (PID checked directly) had been running since before the eleventh pass's `engine.py`/`api.py` edits and was still serving the old code — Python doesn't hot-reload a running process just because the file on disk changed, and this one wasn't using Django's autoreloader in a way that picked it up. Confirmed via the Django test client (which imports current code fresh, bypassing any stale process) that the backend logic was already correct; killed the stale process, started a fresh one, and confirmed the approval succeeded through the actual HTTP server this time — same request, same account.

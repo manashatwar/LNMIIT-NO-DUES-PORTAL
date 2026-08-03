@@ -573,21 +573,26 @@ def section_review(request):
 
     # Every officer sees the full Page-2 tri-gate picture (Library BTP form,
     # TPC offer letter, and the Warden/hostel clearance), regardless of their
-    # own section. Previously this was only attached for HOD/Administration
-    # (the consolidators below) — meaning e.g. a Store, LUCS, or Sports
-    # officer had no visibility at all into a student's intake uploads or
-    # hostel status when reviewing them. Vacant room (the plain string) was
-    # already shown for everyone; this closes the same gap for the documents
-    # and Warden status themselves, and lets any officer verify/download them
-    # (see document_download's is_intake_viewer check).
+    # own section — e.g. a Store, LUCS, or Sports officer otherwise had no
+    # visibility at all into a student's intake uploads or hostel status when
+    # reviewing them. Vacant room (the plain string) was already shown for
+    # everyone; this closes the same gap for the documents and Warden status
+    # themselves, and lets any officer verify/download them (see
+    # document_download's is_intake_viewer check).
+    #
+    # Administration is excluded here deliberately: its own `prerequisites`
+    # below already includes every other section — Library, TPC, and Warden
+    # included — so also populating `intake` for Administration produced
+    # Library and TPC listed *twice* on the same review screen.
     TRI_GATE_REVIEW_SECTIONS = [SECTION_LIBRARY, SECTION_TPC, SECTION_WARDEN]
     intake_docs = []
-    for code in TRI_GATE_REVIEW_SECTIONS:
-        if code == role:
-            continue  # already shown as the officer's own section below
-        pss = ss.request.section_statuses.filter(section__code=code).select_related("section").first()
-        if pss is not None:
-            intake_docs.append(_section_dict(pss, ss.request))
+    if role != SECTION_ADMINISTRATION:
+        for code in TRI_GATE_REVIEW_SECTIONS:
+            if code == role:
+                continue  # already shown as the officer's own section below
+            pss = ss.request.section_statuses.filter(section__code=code).select_related("section").first()
+            if pss is not None:
+                intake_docs.append(_section_dict(pss, ss.request))
 
     data = {
         "request_id": ss.request_id,
@@ -689,10 +694,13 @@ def document_download(request, doc_id):
     Serve an uploaded document to authorised viewers only:
       - the owning student,
       - an officer of that document's section (with hostel/dept scope),
-      - a consolidator (HOD/Administration), or
+      - Administration (the only remaining consolidator), or
       - any section officer, for the shared tri-gate documents (Library/TPC)
         that every Page-3 department now sees for verification.
-    Opens inline in the browser (officers can view without downloading).
+    Always a forced download (Content-Disposition: attachment), not an inline
+    open — inline rendering depended on the browser being able to display
+    whatever the file's content-type claimed, which silently failed (a blank/
+    broken-image placeholder, no error) for anything it couldn't render.
     """
     from django.http import FileResponse, Http404
 
@@ -728,7 +736,7 @@ def document_download(request, doc_id):
         return JsonResponse({"detail": "Not authorized to view this document"}, status=403)
 
     try:
-        return FileResponse(doc.file.open("rb"), as_attachment=False,
+        return FileResponse(doc.file.open("rb"), as_attachment=True,
                             filename=doc.original_name or f"document-{doc.id}")
     except FileNotFoundError:
         raise Http404("File missing on server")

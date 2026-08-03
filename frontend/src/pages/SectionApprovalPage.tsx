@@ -206,7 +206,7 @@ export function SectionApprovalPage({ officerName, heading, rows, onReload, onLo
                                                                                 ) : sec.documents.map((d) => (
                                                                                     <div key={d.id} style={{ fontSize: 11, marginTop: 4 }}>
                                                                                         📎 {d.original_name || d.event_report_url || `Doc #${d.id}`}
-                                                                                        {d.download_url && <a href={d.download_url} target="_blank" rel="noreferrer" style={{ marginLeft: 6, color: '#2563eb' }}>👁 Open</a>}
+                                                                                        {d.download_url && <a href={d.download_url} target="_blank" rel="noreferrer" style={{ marginLeft: 6, color: '#2563eb' }}>⬇ Download</a>}
                                                                                     </div>
                                                                                 ))}
                                                                             </div>
@@ -227,7 +227,7 @@ export function SectionApprovalPage({ officerName, heading, rows, onReload, onLo
                                                                         {d.download_url && (
                                                                             <a href={d.download_url} target="_blank" rel="noreferrer"
                                                                                 style={{ color: '#2563eb', fontWeight: 600, textDecoration: 'underline' }}>
-                                                                                👁 Open / Download
+                                                                                ⬇ Download
                                                                             </a>
                                                                         )}
                                                                         {d.event_report_url && !d.download_url && (
@@ -272,7 +272,7 @@ export function SectionApprovalPage({ officerName, heading, rows, onReload, onLo
                                                                                 {p.documents.map((d) => (
                                                                                     <div key={d.id} style={{ fontSize: 11, marginTop: 4 }}>
                                                                                         📎 {d.original_name || d.event_report_url || `Doc #${d.id}`}
-                                                                                        {d.download_url && <a href={d.download_url} target="_blank" rel="noreferrer" style={{ marginLeft: 6, color: '#2563eb' }}>👁 Open</a>}
+                                                                                        {d.download_url && <a href={d.download_url} target="_blank" rel="noreferrer" style={{ marginLeft: 6, color: '#2563eb' }}>⬇ Download</a>}
                                                                                         {d.ocr_text && (
                                                                                             <pre style={{ whiteSpace: 'pre-wrap', fontSize: 10, background: '#f8fafc', padding: 4, margin: '2px 0 0', border: '1px solid #eef2f7' }}>{d.ocr_text.slice(0, 200)}</pre>
                                                                                         )}
