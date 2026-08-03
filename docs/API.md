@@ -59,7 +59,7 @@ All require an authenticated **Student** session; most operate on that student's
 | Method + path | Purpose | Scope enforcement |
 |---|---|---|
 | `GET /api/section/queue/` | This officer's queue | Warden → own hostel only; HOD → own department only (`_scope_ok`); only rows with `student_confirmed=True` appear |
-| `GET /api/section/review/?request_id=<id>` | Full detail for one request in this officer's section | `403` if out of scope. Every officer additionally sees the student's Page-2 intake submissions (Library/TPC documents + OCR, response key `intake`) for context — not just their own section. HOD/Administration further see their prerequisite sections' documents/OCR for consolidation (`prerequisites`) |
+| `GET /api/section/review/?request_id=<id>` | Full detail for one request in this officer's section | `403` if out of scope. Every officer additionally sees the student's Page-2 tri-gate status (Library/TPC documents + OCR, and Warden/hostel status — response key `intake`) for context — not just their own section. HOD/Administration further see their prerequisite sections' documents/OCR for consolidation (`prerequisites`) |
 | `POST /api/section/approve/` | Approve | `409` if prerequisites aren't all `APPROVED` yet (`engine.PermissionError_`) |
 | `POST /api/section/reject/` | Reject | Body: `{request_id, reason}`. `400` if `reason` is empty (`engine.ValidationError_`) |
 | `POST /api/section/comment/` | Post a feedback comment | Body: `{request_id, body}` |
@@ -68,7 +68,7 @@ All require an authenticated **Student** session; most operate on that student's
 
 | Method + path | Auth |
 |---|---|
-| `GET /api/document/<id>/download/` | Owning student, the section's officer (in scope), or a consolidator (HOD within its department / Administration for any section). `403` otherwise, `404` if missing |
+| `GET /api/document/<id>/download/` | Owning student, the section's officer (in scope), a consolidator (HOD within its department / Administration for any section), or — for Library/TPC documents specifically — any section officer (these are shown to every department as shared context, see `section_review`'s `intake`). `403` otherwise, `404` if missing |
 
 ## Roles reference
 

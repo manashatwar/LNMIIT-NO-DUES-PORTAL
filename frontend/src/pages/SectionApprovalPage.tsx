@@ -72,19 +72,12 @@ export function SectionApprovalPage({ officerName, heading, rows, onReload, onLo
         finally { setBusy(null); }
     };
 
-    const toggleReview = async (row: QueueRow) => {
-        if (expanded === row.request_id) { setExpanded(null); setReview(null); return; }
-        setExpanded(row.request_id); setReview(null);
-        try { setReview(await api.sectionReview(row.request_id)); } catch { /* ignore */ }
-    };
-
-    // Feedback is a first-class action alongside Approve/Reject — opens (or
-    // reuses) the same detail panel with the message box already expanded,
-    // rather than requiring the officer to open View then hunt for Messages.
-    const openFeedback = async (row: QueueRow) => {
-        setMsgOpen(true);
-        if (expanded === row.request_id && review) return;
-        setExpanded(row.request_id); setReview(null);
+    // Single toggle: opens the detail panel with the chat/messages box already
+    // expanded (previously two separate buttons — View and Feedback). Clicking
+    // again while open (button now reads "Hide") collapses it.
+    const toggleChat = async (row: QueueRow) => {
+        if (expanded === row.request_id) { setExpanded(null); setReview(null); setMsgOpen(false); return; }
+        setExpanded(row.request_id); setReview(null); setMsgOpen(true);
         try { setReview(await api.sectionReview(row.request_id)); } catch { /* ignore */ }
     };
 
@@ -165,10 +158,8 @@ export function SectionApprovalPage({ officerName, heading, rows, onReload, onLo
                                                                 onClick={() => startReject(row)}>Reject</button>
                                                         </>
                                                     )}
-                                                    <button className="btn btn-warning" style={{ fontSize: 12, padding: '3px 8px', marginRight: 4 }}
-                                                        onClick={() => openFeedback(row)}>💬 Feedback</button>
-                                                    <button className="btn btn-primary" style={{ fontSize: 12, padding: '3px 8px' }}
-                                                        onClick={() => toggleReview(row)}>{expanded === row.request_id ? 'Hide' : 'View'}</button>
+                                                    <button className="btn btn-warning" style={{ fontSize: 12, padding: '3px 8px' }}
+                                                        onClick={() => toggleChat(row)}>{expanded === row.request_id ? 'Hide' : '💬 Chat'}</button>
                                                 </>
                                             )}
                                         </td>
@@ -182,7 +173,7 @@ export function SectionApprovalPage({ officerName, heading, rows, onReload, onLo
 
                                                         {review.intake && review.intake.length > 0 && (
                                                             <div style={{ marginTop: 8, border: '1px solid #cbd5e1', borderRadius: 6, padding: 10, background: '#eef4ff' }}>
-                                                                <strong style={{ fontSize: 12, color: '#1b365d' }}>🎒 Student Intake (Page 2 — submitted before reaching your queue)</strong>
+                                                                <strong style={{ fontSize: 12, color: '#1b365d' }}>🎒 Student Intake &amp; Hostel Status (Page 2 — submitted before reaching your queue)</strong>
                                                                 <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 8 }}>
                                                                     {review.intake.map((sec) => {
                                                                         const c = sec.status === 'APPROVED' ? '#15803d' : sec.status === 'REJECTED' ? '#b91c1c' : '#b45309';
@@ -193,7 +184,9 @@ export function SectionApprovalPage({ officerName, heading, rows, onReload, onLo
                                                                                     <span style={{ fontSize: 11, fontWeight: 700, color: c }}>{sec.status}</span>
                                                                                 </div>
                                                                                 {sec.documents.length === 0 ? (
-                                                                                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>No document submitted.</div>
+                                                                                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+                                                                                        {sec.is_upload_section ? 'No document submitted.' : 'Verified by name/roll — no document required for this section.'}
+                                                                                    </div>
                                                                                 ) : sec.documents.map((d) => (
                                                                                     <div key={d.id} style={{ fontSize: 11, marginTop: 4 }}>
                                                                                         📎 {d.original_name || d.event_report_url || `Doc #${d.id}`}

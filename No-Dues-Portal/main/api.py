@@ -18,7 +18,8 @@ from .models import (
     Department, Hostel, Section, UserProfile, Student,
     ClearanceRequest, SectionStatus, Document, Comment, Certificate,
     EXIT_TYPES, STATUS_PENDING, STATUS_APPROVED, STATUS_REJECTED,
-    OVERALL_CLEARED, SECTION_WARDEN, SECTION_HOD, SECTION_ADMINISTRATION,
+    OVERALL_CLEARED, SECTION_LIBRARY, SECTION_TPC, SECTION_WARDEN,
+    SECTION_HOD, SECTION_ADMINISTRATION,
 )
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB — matches the original UI design (docs/images/ui-wireframe.png)
@@ -570,15 +571,18 @@ def section_review(request):
     if not _scope_ok(profile, ss.request, role):
         return JsonResponse({"detail": "Out of scope"}, status=403)
 
-    # Every officer sees what the student already submitted at intake (the
-    # Library BTP form + TPC offer letter, Page 2 of the student dashboard),
-    # regardless of their own section. Previously this was only attached for
-    # HOD/Administration (the consolidators below) — meaning e.g. a Store or
-    # LUCS officer had no visibility at all into a student's intake uploads
-    # when reviewing them. Vacant room is already shown for everyone above;
-    # this closes the same gap for the intake documents themselves.
+    # Every officer sees the full Page-2 tri-gate picture (Library BTP form,
+    # TPC offer letter, and the Warden/hostel clearance), regardless of their
+    # own section. Previously this was only attached for HOD/Administration
+    # (the consolidators below) — meaning e.g. a Store, LUCS, or Sports
+    # officer had no visibility at all into a student's intake uploads or
+    # hostel status when reviewing them. Vacant room (the plain string) was
+    # already shown for everyone; this closes the same gap for the documents
+    # and Warden status themselves, and lets any officer verify/download them
+    # (see document_download's is_intake_viewer check).
+    TRI_GATE_REVIEW_SECTIONS = [SECTION_LIBRARY, SECTION_TPC, SECTION_WARDEN]
     intake_docs = []
-    for code in engine.INTAKE_UPLOAD_SECTIONS:
+    for code in TRI_GATE_REVIEW_SECTIONS:
         if code == role:
             continue  # already shown as the officer's own section below
         pss = ss.request.section_statuses.filter(section__code=code).select_related("section").first()
@@ -687,8 +691,11 @@ def reject(request):
 def document_download(request, doc_id):
     """
     Serve an uploaded document to authorised viewers only:
-      - the owning student, or
-      - an officer of that document's section (with hostel/dept scope).
+      - the owning student,
+      - an officer of that document's section (with hostel/dept scope),
+      - a consolidator (HOD/Administration), or
+      - any section officer, for the shared tri-gate documents (Library/TPC)
+        that every Page-3 department now sees for verification.
     Opens inline in the browser (officers can view without downloading).
     """
     from django.http import FileResponse, Http404
@@ -715,7 +722,18 @@ def document_download(request, doc_id):
         elif profile.role == SECTION_ADMINISTRATION:
             is_consolidator = True
 
-    if not (is_owner or is_officer or is_consolidator):
+    # Library/TPC documents are shown to every officer as shared context
+    # (see section_review's "intake" — Store/LUCS/Sports/Medical/NAD/HOD all
+    # display them, not just consolidators), so any legitimate section
+    # officer must actually be able to open/download them too, not just see
+    # the filename with a link that 403s.
+    is_intake_viewer = (
+        profile is not None
+        and profile.role in engine.ALL_SECTION_CODES
+        and section_code in (SECTION_LIBRARY, SECTION_TPC)
+    )
+
+    if not (is_owner or is_officer or is_consolidator or is_intake_viewer):
         return JsonResponse({"detail": "Not authorized to view this document"}, status=403)
 
     try:

@@ -2,6 +2,19 @@
 
 A running list of everything found to be missing, stale, inconsistent, or ambiguous during the documentation pass, what (if anything) was done about it, and why. Keep this updated as the project evolves — it's the single place to check "is this actually still true?" before trusting an older doc.
 
+## Intake documents were visible but not actually downloadable (ninth pass)
+
+Reported directly from the Sports section: the Library/TPC documents shown in the "Student Intake" panel (added in the eighth pass, above) couldn't actually be opened — clicking the download link returned `403 Not authorized`. The eighth pass made these documents *visible* to every officer but didn't update `document_download`'s authorization to match, so the link was there but non-functional for anyone who wasn't the document's own section officer or a consolidator (HOD/Administration).
+
+| Change | Detail | Where |
+|---|---|---|
+| **Bug fix:** any section officer can now actually open/download Library and TPC documents | Added an `is_intake_viewer` check to `document_download`: true when the requester holds any valid section role (`engine.ALL_SECTION_CODES`) and the document belongs to Library or TPC specifically — not a blanket bypass for every document (Accounts' cancelled cheque, for example, stays restricted to Accounts/HOD/Administration/the student) | `No-Dues-Portal/main/api.py::document_download` |
+| **Extended:** the shared intake panel now also includes Warden/hostel status | Was Library + TPC only; added Warden so every officer can also verify hostel clearance status ("the hostels should be visible") — Warden has no document, so its card shows status/comments only, with wording that doesn't imply a missing upload | `main/api.py::section_review` (`TRI_GATE_REVIEW_SECTIONS`), `frontend/src/pages/SectionApprovalPage.tsx` |
+
+**Verified:** Django test-client repro — Sports officer's `section_review` now returns `LIBRARY`, `TPC`, and `WARDEN` in `intake`; before the fix, downloading the Library document as the Sports officer returned `403`, after the fix it returns `200`. Reset demo data afterward.
+
+**Scope note:** this deliberately stays narrow — only Library and TPC (the two intake upload sections) are opened up to all officers. Warden has no documents to gate. Accounts' cancelled cheque and any other section's own documents remain restricted to that section's officer + consolidators, unchanged.
+
 ## Officer review had no visibility into Page-2 intake docs; Department-Purpose removed; LUCS upload removed (eighth pass)
 
 Reported directly: a Store/LUCS officer reviewing a student had no way to see what that student had already submitted at intake (the Library BTP form, the TPC offer letter, the vacated room) — `GET /api/section/review/` only attached other sections' documents for HOD/Administration (the two actual consolidator roles), so every other officer saw only their own section, with no student context at all.
