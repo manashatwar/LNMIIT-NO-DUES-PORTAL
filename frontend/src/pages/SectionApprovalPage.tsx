@@ -121,7 +121,7 @@ export function SectionApprovalPage({ officerName, heading, rows, onReload, onLo
                     {/* Another officer approving/rejecting elsewhere (a different tab or
                         account) doesn't push updates here — this queue was only fetched on
                         login. Refresh pulls current prerequisite/actionable status without
-                        a full page reload; see docs/KNOWN_GAPS.md. */}
+                        a full page reload. */}
                     <button className="btn btn-secondary" style={{ fontSize: 12, padding: '6px 12px' }}
                         disabled={refreshing} onClick={doRefresh}>
                         {refreshing ? '↻ Refreshing…' : '↻ Refresh'}

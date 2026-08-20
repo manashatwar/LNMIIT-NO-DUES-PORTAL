@@ -12,41 +12,15 @@ A web application that digitizes LNMIIT's student clearance ("No Dues") process:
 
 ## Table of contents
 
-1. [Current status — what's actually built](#current-status--whats-actually-built)
-2. [Architecture](#architecture)
-3. [Repository layout](#repository-layout)
-4. [Quickstart](#quickstart)
-5. [Docker Compose quickstart (PostgreSQL, production-shaped)](#docker-compose-quickstart-postgresql-production-shaped)
-6. [Demo logins](#demo-logins)
-7. [Documentation map](#documentation-map)
-8. [Known gaps](#known-gaps)
-9. [Scaling & handling heavy traffic](#scaling--handling-heavy-traffic)
+1. [Architecture](#architecture)
+2. [Repository layout](#repository-layout)
+3. [Quickstart](#quickstart)
+4. [Docker Compose quickstart (PostgreSQL, production-shaped)](#docker-compose-quickstart-postgresql-production-shaped)
+5. [Demo logins](#demo-logins)
+6. [Documentation map](#documentation-map)
+7. [Scaling & handling heavy traffic](#scaling--handling-heavy-traffic)
 
 ---
-
-## Current status — what's actually built
-
-This section reflects what's actually in the code today, verified directly against `No-Dues-Portal/main/models.py`, `engine.py`, `api.py`, and `frontend/src/` — not an aspirational plan.
-
-| Area | Status | Detail |
-|---|---|---|
-| React SPA connected to Django over a JSON API | ✅ Done | Session auth + CSRF via a same-origin Vite proxy — see [Architecture](#architecture) |
-| LNMIIT data model (`Department`, `Hostel`, `Section`, `ClearanceRequest`, `SectionStatus`, `Document`, `Comment`, `Certificate`) | ✅ Done | `No-Dues-Portal/main/models.py` |
-| LNMIIT section set (Library, TPC, Warden, Store, LUCS, Sports, Medical, NAD, HOD, Accounts, Administration) | ✅ Done | `main/management/commands/seed_demo.py` — Department-Purpose was removed as a mandatory gate; see [Known gaps](#known-gaps) |
-| Roll number stored as text (e.g. `24UCC174`) | ✅ Done | `models.py` |
-| Exit types (Graduation / NEP Exit / Withdrawal / Admission Cancel) with per-type required sections | ✅ Done | `main/engine.py::REQUIRED_SECTIONS` |
-| Prerequisite gating + transactional reverse-hierarchy cascade | ✅ Done | `main/engine.py::approve/reject/_on_status_change` — HOD is independent (parallel to Store/LUCS/Sports/Medical/NAD), not gated on them; see [Known gaps](#known-gaps) |
-| Hostel-scoped Warden queues / department-scoped HOD queues | ✅ Done | `main/api.py::_scope_ok`, `section_queue` |
-| Mandatory rejection reason + two-way comment threads | ✅ Done | `engine.reject`, `student_comment`/`officer_comment` |
-| Document upload (type/size validated) + access-checked download | ✅ Done | `upload_document`, `document_download` |
-| Advisory OCR (roll/name match, never auto-rejects) | ✅ Done, best-effort | `main/ocr.py` — degrades gracefully if Tesseract isn't installed |
-| No-Dues certificate | ✅ Done | Generated **client-side as a real PDF** (jsPDF + html2canvas), not server-side — see [Known gaps](#known-gaps) |
-| Automated test suite (Hypothesis property tests from `docs/DESIGN.md`) | ❌ Missing | `main/tests.py` is an empty stub |
-| PostgreSQL | ✅ Done — only supported database | `DATABASE_URL` env var via `dj-database-url` (`myproject/settings.py`); no SQLite anywhere in the codebase |
-| Dockerized deployment (gunicorn + nginx + Postgres) | ✅ Done | `docker-compose.yml`, `No-Dues-Portal/Dockerfile`, `frontend/Dockerfile` — see [Docker Compose quickstart](#docker-compose-quickstart-postgresql-production-shaped) |
-| `Document.ocr_fields` stored as JSON | ✅ Done — native `JSONField` | Previously a `TextField` with a manual serialize/deserialize property, worked around SQLite's lack of a JSON column type. Now that Postgres is the only database, it's a real `JSONField` (Postgres `jsonb`) — see `docs/KNOWN_GAPS.md` |
-
-**Still not included even with Docker:** TLS/HTTPS termination, a real domain, backups, CI/CD, and a non-root container user — see [docs/KNOWN_GAPS.md](./docs/KNOWN_GAPS.md).
 
 ## Architecture
 
@@ -116,7 +90,6 @@ For the full request lifecycle (login, approval, reverse cascade, certificate) s
 │   ├── DATA_MODEL.md                 ER diagram + field-by-field notes
 │   ├── SCALING.md                    Production readiness + load testing plan
 │   ├── DEPLOY.md                     Deploying to Railway (+ alternatives) step by step
-│   ├── KNOWN_GAPS.md                 Everything found missing/stale, and why
 │   ├── loadtest/locustfile.py        Ready-to-run load test
 │   └── images/
 │
@@ -203,7 +176,7 @@ Password for every account: **`csepassword`**.
 | Administration | `admin.office@lnmiit.ac.in` |
 | Django admin | `admin` at http://127.0.0.1:8000/admin |
 
-Because of the hierarchy, Accounts/Administration queues start empty until their prerequisite sections clear — start with Store, Sports, Medical, NAD, HOD, or a Warden account to see requests immediately (HOD is independent, not gated on the other four — see [Known gaps](#known-gaps)).
+Because of the hierarchy, Accounts/Administration queues start empty until their prerequisite sections clear — start with Store, Sports, Medical, NAD, HOD, or a Warden account to see requests immediately (HOD is independent, not gated on the other four).
 
 ## Documentation map
 
@@ -217,27 +190,20 @@ Everything beyond this README lives in [`docs/`](./docs) — one folder, no scat
 | [`docs/DATA_MODEL.md`](./docs/DATA_MODEL.md) | ER diagram + field-by-field notes on every model |
 | [`docs/SCALING.md`](./docs/SCALING.md) | Production readiness and handling high concurrent traffic (thousands of students) |
 | [`docs/DEPLOY.md`](./docs/DEPLOY.md) | Deploying to Railway step by step (+ Render/Fly.io/VPS notes), and load-testing a real deployment safely |
-| [`docs/KNOWN_GAPS.md`](./docs/KNOWN_GAPS.md) | Everything found to be missing, stale, or inconsistent, and why |
 | [`LNMIIT_No_Dues_Portal_Research_Document.md`](./LNMIIT_No_Dues_Portal_Research_Document.md) | Research behind the section list and design choices (kept at root — it's background research, not implementation reference) |
-
-## Known gaps
-
-Full list with detail in [`docs/KNOWN_GAPS.md`](./docs/KNOWN_GAPS.md). Headline items:
-
-- **No automated test suite yet.** `docs/DESIGN.md` specifies 12 correctness properties (prerequisite gating, reverse-cascade consistency, hostel/department scoping, etc.) meant for Hypothesis property-based testing; none are implemented.
-- **OCR is best-effort only in dev.** It silently no-ops if Tesseract isn't installed on the machine running Django (by design — OCR is advisory, never blocking — but worth knowing before assuming it's active). The Docker image installs Tesseract, so OCR is active there.
-- **Docker Compose gets you to "production-shaped," not to "production."** No TLS/HTTPS termination, no real domain, no backup strategy for the Postgres volume, no CI/CD, and the containers run as root (simplest option for a first pass — see [docs/KNOWN_GAPS.md](./docs/KNOWN_GAPS.md) for the trade-off). Fine for a staging/load-test environment; needs those before a real institutional rollout.
 
 ## Scaling & handling heavy traffic
 
-You told us this needs to hold up for thousands of students hitting the portal at once (e.g. during an exit-clearance window). Full plan and rationale in **[docs/SCALING.md](./docs/SCALING.md)** — headline items, and what's actually done vs. still a recommendation:
+The traffic pattern this has to survive is near-idle for most of the semester, then thousands of students logging in and refreshing their status inside the same few-day window before an exit deadline, with dozens of section officers polling their queues throughout. **[docs/SCALING.md](./docs/SCALING.md)** sets out the full plan and rationale; the essentials are below.
 
-- ✅ **PostgreSQL is the only supported database** — no SQLite fallback anywhere, so there's no "works on my machine, falls over on concurrent writes in production" gap between dev and prod. `docker-compose.yml` runs Postgres for you; `DATABASE_URL` works against any Postgres host if you're not using Compose.
-- ✅ **gunicorn behind nginx, not `manage.py runserver`.** `No-Dues-Portal/Dockerfile` runs 3 gunicorn workers; nginx (`frontend/Dockerfile` + `nginx.conf`) serves the SPA and proxies API/admin/static traffic to it.
-- 🟡 **DB indexes on the columns queues filter by** (`SectionStatus.status`, `request.is_active`, hostel/department foreign keys) — not yet added; check with `EXPLAIN` under load and add them before a real rollout.
-- 🟡 **A cache (Redis/Memcached) in front of session storage** — not yet added; only matters once you're running more than one `backend` replica (`docker compose up --scale backend=N`).
-- ❌ **Load test not yet run.** The script is ready (`docs/loadtest/locustfile.py`) and the target to point it at now exists (the Docker Compose stack) — running it against a sized-up staging copy is the next concrete step before trusting this with a real clearance window.
+PostgreSQL is the only supported database — there is no SQLite fallback anywhere in the codebase, so development and production share the same concurrency semantics rather than diverging on the one behaviour that matters here (SQLite's single-writer file lock versus real concurrency control). `docker-compose.yml` provisions Postgres locally; outside Compose, `DATABASE_URL` points the application at any Postgres host and nothing else changes.
+
+The application runs under gunicorn behind nginx, not `manage.py runserver`. `No-Dues-Portal/Dockerfile` starts three gunicorn workers, and nginx (`frontend/Dockerfile` + `nginx.conf`) serves the built SPA while proxying API, admin, and static traffic to them. The frontend bundle keeps jsPDF and html2canvas lazy-loaded, so the initial download stays around 210 KB.
+
+Two items are deliberately still open. Database indexes on the columns officer queues filter by — `SectionStatus.status`, `request.is_active`, and the hostel and department foreign keys — have not been added yet; confirm the query plans with `EXPLAIN` under load and add them before a real rollout. Session storage is Django's DB-backed default, which is adequate for a single `backend` replica but should move behind a cache such as Redis or Memcached before scaling out with `docker compose up --scale backend=N`.
+
+Load testing is prepared but not yet exercised: the Locust script at [`docs/loadtest/locustfile.py`](./docs/loadtest/locustfile.py) is ready and the Docker Compose stack is a valid target for it. Running it against a sized-up staging copy is the recommended next step before committing to a live clearance window.
 
 ---
 
-*Questions or found something else off? Check [docs/KNOWN_GAPS.md](./docs/KNOWN_GAPS.md) first — if it's not listed there, it's new.*
+*Questions? Start with the deep-dive docs in [`docs/`](./docs).*

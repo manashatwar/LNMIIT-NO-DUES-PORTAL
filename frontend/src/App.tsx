@@ -82,7 +82,7 @@ export function App() {
   // to know Store/LUCS/Sports/Medical/NAD just got approved elsewhere. Rather
   // than only refreshing on an explicit action, also refetch whenever this
   // tab regains focus (switching back from another tab/window), which is
-  // when stale data actually gets noticed. See docs/KNOWN_GAPS.md.
+  // when stale data actually gets noticed.
   useEffect(() => {
     if (!user) return;
     const onVisible = () => {

@@ -81,7 +81,7 @@ erDiagram
     }
     CERTIFICATE {
         int request FK "OneToOne"
-        file pdf_file "nullable — currently never populated, see KNOWN_GAPS.md"
+        file pdf_file "nullable — currently never populated"
         decimal fund_us_amount
         datetime generated_at
     }
@@ -93,7 +93,7 @@ erDiagram
 |---|---|---|
 | One `ClearanceRequest` per student, full stop | `ClearanceRequest.is_active` flags the current one; `_active_request()` filters on it | Lets history (past exit attempts) stay in the table instead of being deleted |
 | — | `ClearanceRequest.intake_submitted` and `SectionStatus.student_confirmed` | Not in `DESIGN.md` — added so "basic" (name/roll-only) sections and the Library/TPC/Warden "tri-gate" only reach an officer's queue after the student explicitly confirms, matching the actual multi-page frontend flow (see `docs/images/ui-wireframe.png`) |
-| `Certificate.pdf_file` holds the generated PDF | Never populated — the PDF is generated **client-side** and never uploaded back to the server | See [KNOWN_GAPS.md](./KNOWN_GAPS.md) — means there's no server-retained copy of an issued certificate |
+| `Certificate.pdf_file` holds the generated PDF | Never populated — the PDF is generated **client-side** and never uploaded back to the server | Means there's no server-retained copy of an issued certificate |
 
 ## Validation invariants (enforced in `engine.py` / `api.py`, not database constraints)
 
@@ -103,4 +103,4 @@ erDiagram
 - `approve()` refuses to run unless every prerequisite section for that section is `APPROVED` (`engine.actionable`).
 - Reopening any `APPROVED` section deletes the request's `Certificate` if one exists (`engine._invalidate_certificate`).
 
-None of the above are currently exercised by an automated test suite — see [KNOWN_GAPS.md](./KNOWN_GAPS.md).
+None of the above are currently exercised by an automated test suite.

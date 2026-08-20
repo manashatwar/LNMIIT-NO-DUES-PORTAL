@@ -26,7 +26,7 @@ All require an authenticated **Student** session; most operate on that student's
 | `POST /api/student/confirm-review/` | Confirm OCR-prefilled fields for a section | `section`, `review: {name, roll_no, department}` | Marks the document's review payload `confirmed: true` |
 | `POST /api/student/confirm-section/` | Confirm a basic (name/roll only) section | `section`, `name`, `roll_no`, `department` | Required before Store/Sports/Medical/NAD/Administration reach the officer's queue (`student_confirmed`) |
 | `POST /api/student/comment/` | Reply on a section's thread | `section`, `body` | `400` if `body` is empty/whitespace |
-| `POST /api/student/certificate/` | Generate/fetch certificate data | — | `400` unless `overall_status == CLEARED`. Returns JSON only — the SPA renders the actual PDF client-side (see [KNOWN_GAPS.md](./KNOWN_GAPS.md)) |
+| `POST /api/student/certificate/` | Generate/fetch certificate data | — | `400` unless `overall_status == CLEARED`. Returns JSON only — the SPA renders the actual PDF client-side |
 
 ### `ClearanceRequest` shape (`_request_dict` in `api.py`)
 

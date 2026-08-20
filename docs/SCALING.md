@@ -14,7 +14,7 @@ This portal needs to survive the real-world traffic pattern of an institute clea
 | Static/media files | ✅ Done | The SPA build is served by nginx; Django's own static files (admin) are served by WhiteNoise from within the backend container and proxied through nginx — see §4 |
 | Sessions | 🟡 Open | Django DB-backed sessions (default) — fine at moderate scale or a single `backend` replica; move to a cache-backed store before running more than one — see §5 |
 | DB indexes | 🟡 Open | Not yet added — see §2 |
-| Frontend bundle | ✅ Done | jsPDF/html2canvas are lazy-loaded only when a student downloads a certificate, cutting the initial bundle to ~210 KB (see `docs/KNOWN_GAPS.md`) |
+| Frontend bundle | ✅ Done | jsPDF/html2canvas are lazy-loaded only when a student downloads a certificate, cutting the initial bundle to ~210 KB |
 | Containerized deployment | ✅ Done | `docker-compose.yml` at the repo root — Postgres + gunicorn + nginx, all wired together — see §3 |
 | Load testing | 🟡 Ready, not yet run | Locust script included (§6); hasn't been run against a sized environment yet |
 | Rate limiting | ❌ Open | See §7 |

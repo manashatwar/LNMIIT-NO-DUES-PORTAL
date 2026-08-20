@@ -5,7 +5,7 @@ tzdata
 # OCR (advisory) — also needs the Tesseract engine installed at OS level
 Pillow>=9.0
 pytesseract>=0.3.10
-# Server-side PDF generation — currently unused; see docs/KNOWN_GAPS.md.
+# Server-side PDF generation — currently unused.
 # (Certificates are generated client-side with jsPDF/html2canvas instead. Kept
 # here only if a future server-side certificate path is built.)
 reportlab>=3.6

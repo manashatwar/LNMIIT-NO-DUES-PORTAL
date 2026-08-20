@@ -15,7 +15,7 @@ The system is purpose-built around LNMIIT's own clearance order and section resp
 - **Language / framework:** Python + Django (JSON API — see [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the actual split with the React frontend), Django admin for staff data management.
 - **Database:** PostgreSQL — the only supported database, in every environment (see [`SCALING.md`](./SCALING.md)).
 - **OCR:** Tesseract engine via the `pytesseract` wrapper, with Pillow for image preprocessing.
-- **Certificate:** generated client-side (jsPDF + html2canvas) — see [`KNOWN_GAPS.md`](./KNOWN_GAPS.md) for why, and what's not yet done about persisting it server-side.
+- **Certificate:** generated client-side (jsPDF + html2canvas); the server supplies only the JSON payload and retains no copy of an issued certificate.
 - **Auth:** Django's built-in authentication and session framework; passwords hashed by Django, never stored in plain text.
 
 ## Section Flow
@@ -55,7 +55,7 @@ flowchart TD
     class CERT done;
 ```
 
-> **HOD is fully independent of Store/LUCS/Sports/Medical/NAD.** It used to require all five `APPROVED` before HOD could act (a consolidator, shown as a gate node); it's now an independent section like they are, actionable in parallel — HOD's own approval no longer waits on them. This was tried first as "still visible, just not blocking" (an informational-only panel on HOD's review screen), then explicitly removed too — HOD's review screen now only ever shows its own section, the same as Store/LUCS/Sports/Medical/NAD's screens already show for each other. Department-Purpose (a dedicated "HOD form" upload) was separately removed as a mandatory gate — HOD no longer requires its own document upload either. LUCS was also converted from an upload section to a confirm-only one (name/roll, like Store/Sports/Medical/NAD). If an HOD genuinely needs something from a student, they ask for it via the existing section comment thread (`main/api.py::officer_comment` / `student_comment`) rather than a blocking upload requirement — see [`KNOWN_GAPS.md`](./KNOWN_GAPS.md).
+> **HOD is fully independent of Store/LUCS/Sports/Medical/NAD.** It used to require all five `APPROVED` before HOD could act (a consolidator, shown as a gate node); it's now an independent section like they are, actionable in parallel — HOD's own approval no longer waits on them. This was tried first as "still visible, just not blocking" (an informational-only panel on HOD's review screen), then explicitly removed too — HOD's review screen now only ever shows its own section, the same as Store/LUCS/Sports/Medical/NAD's screens already show for each other. Department-Purpose (a dedicated "HOD form" upload) was separately removed as a mandatory gate — HOD no longer requires its own document upload either. LUCS was also converted from an upload section to a confirm-only one (name/roll, like Store/Sports/Medical/NAD). If an HOD genuinely needs something from a student, they ask for it via the existing section comment thread (`main/api.py::officer_comment` / `student_comment`) rather than a blocking upload requirement.
 
 ## Components and Interfaces
 
@@ -126,7 +126,7 @@ class OcrService:
 **Purpose**: Validate and store uploads, and serve them only to authorized reviewers.
 
 **Responsibilities**:
-- Enforce type (JPG/PNG/PDF) and size limit on both client and server — **10 MB** (`main/api.py::MAX_UPLOAD_BYTES`), matching the original UI design (`docs/images/ui-wireframe.png`); see [`KNOWN_GAPS.md`](./KNOWN_GAPS.md) for how this number was arrived at.
+- Enforce type (JPG/PNG/PDF) and size limit on both client and server — **10 MB** (`main/api.py::MAX_UPLOAD_BYTES`), matching the original UI design (`docs/images/ui-wireframe.png`).
 - Store originals outside the web root; serve via an access-checked download view.
 - Support link-mode submission (a URL instead of a file) as a generic capability of the upload endpoint; OCR applies only when a file is provided. Not currently used by any section — LUCS was the original use case but was converted to a confirm-only section (no upload at all, see the note under [Section Flow](#section-flow)).
 - Always retain the original uploaded file and keep it downloadable by authorized reviewers.
@@ -277,11 +277,11 @@ def process_upload(uploaded_file, section_status, student):
 
 - The officer UI shows the extracted fields **and** a download link to the original.
 - OCR is advisory: a mismatch raises a warning; it does not auto-reject. The original file is the source of truth.
-- In practice this degrades to a no-op if Tesseract isn't installed on the machine running Django — see [`KNOWN_GAPS.md`](./KNOWN_GAPS.md).
+- In practice this degrades to a no-op if Tesseract isn't installed on the machine running Django.
 
 ## Upload Handling
 
-- **Limit:** enforced both client-side (pre-check) and server-side (hard validation). See [`KNOWN_GAPS.md`](./KNOWN_GAPS.md) for the actual configured value.
+- **Limit:** **10 MB** (`main/api.py::MAX_UPLOAD_BYTES`), enforced both client-side (pre-check) and server-side (hard validation).
 - **Types:** JPG, PNG, PDF.
 - **Quality guidance:** the upload control advises submitting the highest quality that fits the limit; files too degraded for OCR are flagged.
 - **Link mode:** the upload endpoint generically also accepts a URL instead of a file (originally used by LUCS; no section currently uses it — see [Section Flow](#section-flow)); OCR applies only when a file is provided.
@@ -326,7 +326,7 @@ flowchart TD
 
 ## Correctness Properties
 
-These properties are stated for property-based testing (e.g. Hypothesis). Each should hold for all valid inputs over the domain described. **None of these are currently covered by an automated test** — see [`KNOWN_GAPS.md`](./KNOWN_GAPS.md).
+These properties are stated for property-based testing (e.g. Hypothesis). Each should hold for all valid inputs over the domain described. **None of these are currently covered by an automated test.**
 
 ### Property 1: Roll number is always text
 

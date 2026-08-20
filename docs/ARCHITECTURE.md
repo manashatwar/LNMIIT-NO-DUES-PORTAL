@@ -124,9 +124,9 @@ All of this runs inside a single `transaction.atomic()` block (`engine.py::appro
 | Approval engine | `main/engine.py` | Owns `PREREQUISITES`, `actionable()`, `approve()`/`reject()`, `downstream_closure()`, `recompute_overall()` |
 | OCR service | `main/ocr.py` | Best-effort text extraction; returns `("", {}, [])` if Tesseract/Pillow aren't available — never blocks the upload |
 | Upload handling | `main/api.py::upload_document` | Type/size validation (10 MB; JPG/PNG/PDF), stores outside web root (`MEDIA_ROOT`), re-opens rejected sections on re-upload |
-| Certificate | `frontend/src/pages/StudentDashboard.tsx::downloadCertificate` | Client-side PDF via jsPDF/html2canvas (lazy-loaded); backend only supplies the JSON payload — see [KNOWN_GAPS.md](./KNOWN_GAPS.md) |
+| Certificate | `frontend/src/pages/StudentDashboard.tsx::downloadCertificate` | Client-side PDF via jsPDF/html2canvas (lazy-loaded); backend only supplies the JSON payload |
 | SPA session bootstrap | `frontend/src/App.tsx` | Calls `GET /api/me/` on load to restore an existing Django session before rendering routes |
 
 ## Data flow for documents
 
-Uploaded files never sit under `STATIC_URL`. They're written to `MEDIA_ROOT` (`uploaded_media/`, gitignored) and served only through `GET /api/document/<id>/download/`, which re-checks: is the caller the owning student, the section's officer (in scope), Administration (the only remaining consolidator), or — for Library/TPC specifically — any section officer (see `docs/KNOWN_GAPS.md`). Always a forced download (`Content-Disposition: attachment`), not an inline open — inline rendering silently failed (a broken-image placeholder, no error) for anything the browser's content-type guess got wrong. See `main/api.py::document_download`.
+Uploaded files never sit under `STATIC_URL`. They're written to `MEDIA_ROOT` (`uploaded_media/`, gitignored) and served only through `GET /api/document/<id>/download/`, which re-checks: is the caller the owning student, the section's officer (in scope), Administration (the only remaining consolidator), or — for Library/TPC specifically — any section officer. Always a forced download (`Content-Disposition: attachment`), not an inline open — inline rendering silently failed (a broken-image placeholder, no error) for anything the browser's content-type guess got wrong. See `main/api.py::document_download`.
