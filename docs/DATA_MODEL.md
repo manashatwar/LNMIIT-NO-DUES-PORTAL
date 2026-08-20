@@ -32,21 +32,21 @@ erDiagram
         bool is_consolidator "HOD, Administration"
     }
     USERPROFILE {
-        fk user "OneToOne -> auth.User"
+        int user FK "OneToOne -> auth.User"
         string role "STUDENT | LIBRARY | ... | ADMIN"
-        fk hostel "nullable, wardens only"
-        fk department "nullable, HODs only"
+        int hostel FK "nullable, wardens only"
+        int department FK "nullable, HODs only"
     }
     STUDENT {
-        fk user "OneToOne -> auth.User"
+        int user FK "OneToOne -> auth.User"
         string name
         string roll_no "CharField — TEXT, e.g. 24UCC174"
-        fk department
-        fk hostel
+        int department FK
+        int hostel FK
         string webmail
     }
     CLEARANCEREQUEST {
-        fk student
+        int student FK
         string exit_type "GRADUATION | NEP_EXIT | WITHDRAWAL | ADMISSION_CANCEL"
         string overall_status "IN_PROGRESS | CLEARED"
         decimal fund_us_amount
@@ -56,15 +56,15 @@ erDiagram
         datetime created_at
     }
     SECTIONSTATUS {
-        fk request
-        fk section
+        int request FK
+        int section FK
         string status "PENDING | APPROVED | REJECTED"
-        fk decided_by "nullable -> auth.User"
+        int decided_by FK "nullable -> auth.User"
         datetime decided_at
         bool student_confirmed "gate before officer sees it"
     }
     DOCUMENT {
-        fk section_status
+        int section_status FK
         file file "nullable — LUCS link mode has none"
         string event_report_url "nullable, LUCS link mode"
         string original_name
@@ -73,14 +73,14 @@ erDiagram
         json ocr_fields "native Postgres jsonb"
     }
     COMMENT {
-        fk section_status
-        fk author "nullable -> auth.User; null = system comment"
+        int section_status FK
+        int author FK "nullable -> auth.User; null = system comment"
         text body
         bool is_system
         datetime created_at
     }
     CERTIFICATE {
-        fk request "OneToOne"
+        int request FK "OneToOne"
         file pdf_file "nullable — currently never populated, see KNOWN_GAPS.md"
         decimal fund_us_amount
         datetime generated_at

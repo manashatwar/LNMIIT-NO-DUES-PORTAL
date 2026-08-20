@@ -64,7 +64,7 @@ sequenceDiagram
     SPA->>API: POST /api/student/submit-intake/
     API->>DB: intake_submitted = True
 
-    Note over API,DB: Independent sections (Store/Sports/Medical/NAD/...)<br/>are actionable immediately; officers approve/reject in parallel
+    Note over API,DB: Independent sections (Store/Sports/Medical/NAD/...)<br/>are actionable immediately — officers approve/reject in parallel
 
     par Officer reviews
         actor O as Section officer
@@ -79,7 +79,7 @@ sequenceDiagram
         ENG->>ENG: recompute_overall()
     end
 
-    Note over ENG,DB: HOD is independent — actionable immediately, in parallel with Store/LUCS/Sports/Medical/NAD;<br/>Accounts becomes actionable once Library+TPC+Warden+HOD clear;<br/>Administration once Accounts clears
+    Note over ENG,DB: HOD is independent — actionable immediately, in parallel with Store/LUCS/Sports/Medical/NAD.<br/>Accounts becomes actionable once Library+TPC+Warden+HOD clear.<br/>Administration once Accounts clears
 
     API-->>SPA: overall_status = CLEARED
     S->>SPA: Download certificate
