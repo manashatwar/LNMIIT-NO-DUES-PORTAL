@@ -126,7 +126,7 @@ class Command(BaseCommand):
         first = Student.objects.get(webmail="student@lnmiit.ac.in")
         if not ClearanceRequest.objects.filter(student=first, is_active=True).exists():
             req = ClearanceRequest.objects.create(
-                student=first, exit_type="GRADUATION", vacant_room_no="BH1-102")
+                student=first, exit_type="GRADUATION", vacant_room_no="A102")
             for code in engine.required_sections("GRADUATION"):
                 SectionStatus.objects.get_or_create(request=req, section=Section.objects.get(code=code))
 

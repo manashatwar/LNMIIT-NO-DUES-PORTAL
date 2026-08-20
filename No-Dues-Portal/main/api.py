@@ -5,6 +5,7 @@ Session auth + role/scope guard. The React SPA talks to these endpoints through
 the Vite dev proxy (same-origin), so Django CSRF + sessions work directly.
 """
 import json
+import re
 
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
@@ -23,6 +24,9 @@ from .models import (
 )
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB — matches the original UI design (docs/images/ui-wireframe.png)
+
+# Hostel room numbers: one block letter + exactly 3 digits, e.g. A102, B501.
+VACANT_ROOM_RE = re.compile(r"^[A-Za-z]\d{3}$")
 
 # Basic (name/roll) sections that require an explicit student "Confirm & Send" before
 # the request reaches the officer's queue. LUCS moved here (no longer an
@@ -248,7 +252,12 @@ def initiate(request):
         return JsonResponse({"detail": "Invalid exit_type"}, status=400)
 
     fund_us = body.get("fund_us_amount") or 0
-    vacant_room = body.get("vacant_room_no") or ""
+    vacant_room = (body.get("vacant_room_no") or "").strip().upper()
+    if vacant_room and not VACANT_ROOM_RE.match(vacant_room):
+        return JsonResponse(
+            {"detail": "Vacated room number must be a block letter followed by 3 digits, e.g. A102"},
+            status=400,
+        )
 
     req = ClearanceRequest.objects.create(
         student=stud, exit_type=exit_type, fund_us_amount=fund_us, vacant_room_no=vacant_room,
@@ -278,7 +287,7 @@ def submit_intake(request):
 
     body = _json_body(request)
     if "vacant_room_no" in body:
-        req.vacant_room_no = (body.get("vacant_room_no") or "").strip()
+        req.vacant_room_no = (body.get("vacant_room_no") or "").strip().upper()
     if "fund_us_amount" in body:
         try:
             req.fund_us_amount = body.get("fund_us_amount") or 0
@@ -287,6 +296,11 @@ def submit_intake(request):
 
     if not req.vacant_room_no:
         return JsonResponse({"detail": "Vacated room number is required"}, status=400)
+    if not VACANT_ROOM_RE.match(req.vacant_room_no):
+        return JsonResponse(
+            {"detail": "Vacated room number must be a block letter followed by 3 digits, e.g. A102"},
+            status=400,
+        )
 
     _, _, pending, rejected_intake = _intake_upload_state(req)
     # Pending = never uploaded. Rejected sections are being re-worked, not blocked.

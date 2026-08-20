@@ -36,7 +36,7 @@ All require an authenticated **Student** session; most operate on that student's
   "exit_type": "GRADUATION",
   "overall_status": "IN_PROGRESS",       // or "CLEARED"
   "fund_us_amount": "1000.00",
-  "vacant_room_no": "BH1-102",
+  "vacant_room_no": "A102",  // one block letter + 3 digits
   "intake_submitted": true,
   "current_page": 2,                     // 1 = intake, 2 = dashboard
   "intake": { "required_uploads": [...], "uploaded": [...], "pending": [...], "rejected": [...] },

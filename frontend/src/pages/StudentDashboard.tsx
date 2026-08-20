@@ -16,6 +16,9 @@ const EXIT_LABELS: Record<string, string> = {
     WITHDRAWAL: 'Withdrawal', ADMISSION_CANCEL: 'Admission Cancellation',
 };
 
+// Hostel room numbers: one block letter + exactly 3 digits, e.g. A102, B501.
+const VACANT_ROOM_RE = /^[A-Za-z]\d{3}$/;
+
 const circle = (n: number) => (
     <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#1b365d', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: 14 }}>{n}</div>
 );
@@ -163,11 +166,13 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
         if (!uploaded('LIBRARY')) missing.push('Library BTP document upload');
         else if (!btpConfirmed) missing.push('Confirm the Library OCR review');
         if (has('TPC') && !uploaded('TPC')) missing.push('TPC offer letter upload');
-        if (!room.trim()) missing.push('Hostel vacant room number');
+        const roomTrimmed = room.trim();
+        if (!roomTrimmed) missing.push('Hostel vacant room number');
+        else if (!VACANT_ROOM_RE.test(roomTrimmed)) missing.push('Vacant room number must be a block letter followed by 3 digits, e.g. A102');
         if (missing.length) { setIntakeError(missing.join('\n• ')); return; }
         setIntakeError(''); setBusy('submit');
         try {
-            await api.submitIntake(room.trim(), donate ? Number(amount) || 0 : 0);
+            await api.submitIntake(roomTrimmed.toUpperCase(), donate ? Number(amount) || 0 : 0);
             setFixingSectionAndAdvance();
             onReload();
         } catch (e) { setIntakeError(e instanceof Error ? e.message : 'Submit failed'); }
@@ -465,7 +470,7 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                                 <div><label style={ocrLabel}>Hostel Block</label>
                                     <input className="erp-input" value={request.student.hostel} readOnly style={{ ...ocrInput, background: '#f1f5f9' }} /></div>
                                 <div><label style={ocrLabel}>Vacant Room Number</label>
-                                    <input className="erp-input" value={room} onChange={(e) => setRoom(e.target.value)} placeholder="e.g. BH1-102" style={ocrInput} /></div>
+                                    <input className="erp-input" value={room} onChange={(e) => setRoom(e.target.value)} placeholder="e.g. A102" style={ocrInput} /></div>
                             </div>
                             <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
                                 <input type="checkbox" checked={donate} onChange={(e) => setDonate(e.target.checked)} />
