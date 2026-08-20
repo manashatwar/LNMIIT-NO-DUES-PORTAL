@@ -2,7 +2,7 @@
 
 This is the authoritative **domain design** — section flow, approval engine, routing/scoping rules, OCR pipeline, upload handling, certificate rules, and the correctness properties the implementation is expected to satisfy. It was originally written as a coordination document between the developers building this out; now that the build is done, it lives here as the lasting reference for *why the rules are what they are*, folded in alongside the rest of the documentation set.
 
-For **what's actually running** (the React SPA + Django JSON API split, request lifecycle, sequence diagrams), see [`ARCHITECTURE.md`](./ARCHITECTURE.md) — this document predates that implementation and its own architecture description (server-rendered templates) was superseded by the SPA approach. For the concrete model fields and how they differ from what's described here, see [`DATA_MODEL.md`](./DATA_MODEL.md).
+For the system architecture (the React SPA + Django JSON API split, request lifecycle, sequence diagrams), see [`ARCHITECTURE.md`](./ARCHITECTURE.md). For the concrete model fields and how they differ from what's described here, see [`DATA_MODEL.md`](./DATA_MODEL.md).
 
 ## Overview
 
@@ -12,7 +12,7 @@ The system is purpose-built around LNMIIT's own clearance order and section resp
 
 **Stack**
 
-- **Language / framework:** Python + Django (JSON API — see [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the actual split with the React frontend), Django admin for staff data management.
+- **Language / framework:** Python + Django (JSON API — see [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the split with the React frontend), Django admin for staff data management.
 - **Database:** PostgreSQL — the only supported database, in every environment (see [`SCALING.md`](./SCALING.md)).
 - **OCR:** Tesseract engine via the `pytesseract` wrapper, with Pillow for image preprocessing.
 - **Certificate:** generated client-side (jsPDF + html2canvas); the server supplies only the JSON payload and retains no copy of an issued certificate.

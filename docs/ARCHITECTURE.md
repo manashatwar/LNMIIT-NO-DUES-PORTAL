@@ -1,6 +1,6 @@
 # Architecture
 
-This documents what is **actually running**, verified against the code (`No-Dues-Portal/main/*.py`, `frontend/src/*`) as of this writing. For the *domain rules* (why the section order is what it is, the correctness properties), [`DESIGN.md`](./DESIGN.md) remains the source of truth — this document only corrects its Architecture section, which describes server-rendered Django templates. That's not what was built: the actual system is a decoupled React SPA talking to a Django JSON API.
+This describes the system as implemented — a decoupled React SPA talking to a Django JSON API — verified against the code (`No-Dues-Portal/main/*.py`, `frontend/src/*`). For the domain rules (why the section order is what it is, the correctness properties), see [`DESIGN.md`](./DESIGN.md).
 
 ## System overview
 
