@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from './api';
+import { api, deskFor } from './api';
 import { CurrentUser, RoleType, ExitType, StudentRequestResponse, SectionQueue } from './types';
 import { LoginPage } from './pages/LoginPage';
 import { StudentDashboard } from './pages/StudentDashboard';
@@ -9,9 +9,11 @@ import { ContactPage } from './pages/ContactPage';
 
 type View = 'HOME' | 'RULES' | 'CONTACT';
 
-const SECTION_ROLES: RoleType[] = [
+// Everyone who works an approval desk: the institute sections, plus department
+// lab in-charges (LAB), whose accounts their HOD creates in "Manage Labs".
+const OFFICER_ROLES: RoleType[] = [
   'LIBRARY', 'TPC', 'WARDEN', 'STORE', 'LUCS', 'SPORTS',
-  'MEDICAL', 'NAD', 'HOD', 'ACCOUNTS', 'ADMINISTRATION',
+  'MEDICAL', 'NAD', 'HOD', 'ACCOUNTS', 'ADMINISTRATION', 'LAB',
 ];
 
 export function App() {
@@ -38,8 +40,8 @@ export function App() {
     try {
       if (u.role === 'STUDENT') {
         await ensureStudentRequest(exitType);
-      } else if (SECTION_ROLES.includes(u.role)) {
-        setQueue(await api.sectionQueue());
+      } else if (OFFICER_ROLES.includes(u.role)) {
+        setQueue(await deskFor(u.role).queue());
         setStudentData(null);
       }
     } catch (e) {
@@ -75,7 +77,7 @@ export function App() {
   };
 
   const reloadStudent = async () => { if (user) setStudentData(await api.studentRequest()); };
-  const reloadQueue = async () => { if (user) setQueue(await api.sectionQueue()); };
+  const reloadQueue = async () => { if (user) setQueue(await deskFor(user.role).queue()); };
 
   // An officer's queue (prerequisite/actionable status especially) can change
   // from a completely different login session — e.g. an HOD's tab has no way
@@ -87,7 +89,7 @@ export function App() {
     if (!user) return;
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
-      if (SECTION_ROLES.includes(user.role)) reloadQueue();
+      if (OFFICER_ROLES.includes(user.role)) reloadQueue();
       else if (user.role === 'STUDENT') reloadStudent();
     };
     document.addEventListener('visibilitychange', onVisible);
@@ -130,13 +132,21 @@ export function App() {
     );
   }
 
-  // ── Officer ──
-  if (SECTION_ROLES.includes(user.role)) {
+  // ── Officer (section officers, HOD, and department lab in-charges) ──
+  if (OFFICER_ROLES.includes(user.role)) {
     return (
       <SectionApprovalPage
+        role={user.role}
         officerName={user.name}
         heading={queue?.heading ?? 'Officer Desk'}
         rows={queue?.students ?? []}
+        canManageStaff={!!queue?.can_manage_staff}
+        staffMode={queue?.staff_mode ?? 'manual'}
+        canRecordRefunds={!!queue?.can_record_refunds}
+        refundsPending={queue?.refunds_pending ?? 0}
+        refundModes={queue?.refund_modes ?? ['NEFT']}
+        staff={queue?.staff ?? []}
+        readyToAssign={queue?.ready_to_assign ?? 0}
         onReload={reloadQueue}
         onLogout={handleLogout}
         onRules={() => setView('RULES')}
