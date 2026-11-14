@@ -9,18 +9,23 @@ import re
 
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
+from django.db.models import Count, Prefetch, Q
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 
+from . import checklist as checklist_service
 from . import engine
+from . import labs as lab_service
+from . import refunds as refund_service
+from . import staff as staff_service
 from .models import (
     Department, Hostel, Section, UserProfile, Student,
-    ClearanceRequest, SectionStatus, Document, Comment, Certificate,
+    ClearanceRequest, SectionStatus, Document, Comment, Certificate, Lab, LabStatus, StageApproval,
     EXIT_TYPES, STATUS_PENDING, STATUS_APPROVED, STATUS_REJECTED,
     OVERALL_CLEARED, SECTION_LIBRARY, SECTION_TPC, SECTION_WARDEN,
-    SECTION_HOD, SECTION_ADMINISTRATION,
+    SECTION_HOD, SECTION_ACCOUNTS, SECTION_ADMINISTRATION, ROLE_LAB,
 )
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB — matches the original UI design (docs/images/ui-wireframe.png)
@@ -40,7 +45,7 @@ BASIC_CONFIRM_SECTIONS = {
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "application/pdf"}
 ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".pdf"}
 
-ROLES = ["STUDENT"] + engine.ALL_SECTION_CODES + ["ADMIN"]
+ROLES = ["STUDENT"] + engine.ALL_SECTION_CODES + [ROLE_LAB, "ADMIN"]
 
 
 # ─── Helpers ────────────────────────────────────────────────────────────────────
@@ -60,6 +65,167 @@ def _active_request(student):
     return ClearanceRequest.objects.filter(student=student, is_active=True).first()
 
 
+def _int(value):
+    """Parse an id from a request body/query string; None if it isn't one."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _comment_dict(c):
+    return {"body": c.body, "author": (c.author.username if c.author else "system"),
+            "is_system": c.is_system, "created_at": c.created_at.isoformat()}
+
+
+def _person(user):
+    return {"id": user.id, "name": user.get_full_name() or user.username} if user else None
+
+
+def _staff_dict(p, waiting_by_level=None):
+    """A section staff member as their head sees them (main/staff.py)."""
+    levelled = staff_service.is_levelled(p.role)
+    if levelled:
+        # By level: what's waiting at their level (shared with anyone else on it),
+        # and the levels they approved plus requests they rejected.
+        if waiting_by_level is None:
+            waiting_by_level = staff_service.waiting_by_level(p.role)
+        pending = waiting_by_level.get(p.staff_level, 0) if p.user.is_active else 0
+        decided = (StageApproval.objects.filter(approved_by=p.user).count()
+                   + SectionStatus.objects.filter(decided_by=p.user, status=STATUS_REJECTED).count())
+    else:
+        # By hand: requests sent to them and still waiting, decisions they've made.
+        pending = SectionStatus.objects.filter(
+            assigned_to=p.user, status=STATUS_PENDING, request__is_active=True).count()
+        decided = SectionStatus.objects.filter(decided_by=p.user).count()
+    return {
+        "id": p.user_id,
+        "name": p.user.get_full_name() or p.user.username,
+        "email": p.user.username,
+        "is_active": p.user.is_active,
+        "level": p.staff_level if levelled else None,
+        "refund_manager": bool(levelled and p.is_refund_manager),   # Accounts: sends refunds
+        "pending": pending,
+        "decided": decided,
+    }
+
+
+def _staff_list(head_user, include_removed=False):
+    profiles = list(staff_service.staff_of(head_user, include_removed=include_removed))
+    waiting = None
+    if profiles and staff_service.is_levelled(profiles[0].role):
+        waiting = staff_service.waiting_by_level(profiles[0].role)   # once, not per person
+    return [_staff_dict(p, waiting) for p in profiles]
+
+
+# ─── Department labs: serialisers (engine.py § Department labs) ──────────────────
+
+def _lab_rows(req):
+    """This request's lab chain, ordered by level then lab name."""
+    return list(
+        req.lab_statuses.select_related("lab", "decided_by")
+        .prefetch_related(Prefetch(
+            "comments", queryset=Comment.objects.select_related("author").order_by("created_at")))
+        .order_by("level", "lab__name")
+    )
+
+
+def _lab_entry(ls, with_comments=True):
+    comments = list(ls.comments.all())
+    # The in-charge's latest own message — on a rejection, that's the reason.
+    lab_notes = [c for c in comments if not c.is_system and c.author_id == ls.lab.user_id]
+    entry = {
+        "lab_id": ls.lab_id,
+        "name": ls.lab.name,
+        "incharge_name": ls.lab.incharge_name,
+        "level": ls.level,
+        "status": ls.status,
+        "sent": ls.sent_at is not None,
+        "sent_at": ls.sent_at.isoformat() if ls.sent_at else None,
+        "decided_by": ls.decided_by.username if ls.decided_by else None,
+        "decided_at": ls.decided_at.isoformat() if ls.decided_at else None,
+        "reason": lab_notes[-1].body if (ls.status == STATUS_REJECTED and lab_notes) else None,
+    }
+    if with_comments:
+        entry["comments"] = [_comment_dict(c) for c in comments]
+    return entry
+
+
+def _mark_actionable(entries):
+    """Same rule as engine.lab_actionable, computed on already-loaded entries."""
+    for e in entries:
+        e["actionable"] = e["sent"] and all(
+            o["status"] == STATUS_APPROVED for o in entries if o["level"] < e["level"])
+
+
+def _group_levels(entries):
+    """[{level, sent, approved, labs: [...]}, ...] — `entries` sorted by level."""
+    levels = []
+    for e in entries:
+        if not levels or levels[-1]["level"] != e["level"]:
+            levels.append({"level": e["level"], "labs": []})
+        levels[-1]["labs"].append(e)
+    for lv in levels:
+        lv["sent"] = all(e["sent"] for e in lv["labs"])
+        lv["approved"] = all(e["status"] == STATUS_APPROVED for e in lv["labs"])
+    return levels
+
+
+def _lab_chain(req):
+    """Read-only chain overview for officers (HOD, Administration, lab in-charges)."""
+    entries = [_lab_entry(ls, with_comments=False) for ls in _lab_rows(req)]
+    _mark_actionable(entries)
+    return _group_levels(entries)
+
+
+def _labs_dict(req):
+    """
+    The student's department-lab chain, shown on the HOD card (Page 3).
+
+    `enabled` is False when no labs apply: the department has none, or HOD
+    approved this request before any labs were set up. Until the student
+    starts the chain, `levels` previews the department's current hierarchy.
+    """
+    rows = _lab_rows(req)
+    started = bool(rows)
+    if started:
+        entries = [_lab_entry(ls) for ls in rows]
+    else:
+        hod = req.section_statuses.filter(section__code=SECTION_HOD).first()
+        dept_labs = list(Lab.objects.filter(department_id=req.student.department_id, is_active=True)
+                         .order_by("level", "name"))
+        if hod is None or hod.status == STATUS_APPROVED or not dept_labs:
+            return {"enabled": False, "started": False, "cleared": True, "total": 0, "approved": 0,
+                    "levels": [], "next_level": None, "can_send": False}
+        entries = [{
+            "lab_id": lab.id, "name": lab.name, "incharge_name": lab.incharge_name,
+            "level": lab.level, "status": STATUS_PENDING, "sent": False, "sent_at": None,
+            "decided_by": None, "decided_at": None, "reason": None, "comments": [],
+        } for lab in dept_labs]
+    _mark_actionable(entries)
+
+    total = len(entries)
+    approved = sum(1 for e in entries if e["status"] == STATUS_APPROVED)
+    unsent = [e["level"] for e in entries if not e["sent"]]
+    next_level = min(unsent) if unsent else None
+    can_send = (
+        next_level is not None
+        and all(e["status"] == STATUS_APPROVED for e in entries if e["level"] < next_level)
+        and req.intake_submitted
+        and engine.tri_gate_cleared(req)
+    )
+    return {
+        "enabled": True,
+        "started": started,
+        "cleared": started and approved == total,
+        "total": total,
+        "approved": approved,
+        "levels": _group_levels(entries),
+        "next_level": next_level,
+        "can_send": can_send,
+    }
+
+
 def _section_dict(ss, request):
     return {
         "code": ss.section.code,
@@ -71,11 +237,7 @@ def _section_dict(ss, request):
         "needs_confirm": ss.section.code in BASIC_CONFIRM_SECTIONS,
         "decided_by": ss.decided_by.username if ss.decided_by else None,
         "decided_at": ss.decided_at.isoformat() if ss.decided_at else None,
-        "comments": [
-            {"body": c.body, "author": (c.author.username if c.author else "system"),
-             "is_system": c.is_system, "created_at": c.created_at.isoformat()}
-            for c in ss.comments.all().order_by("created_at")
-        ],
+        "comments": [_comment_dict(c) for c in ss.comments.all().order_by("created_at")],
         "documents": [
             {"id": d.id, "original_name": d.original_name,
              "event_report_url": d.event_report_url, "ocr_text": d.ocr_text,
@@ -139,9 +301,38 @@ def _request_dict(req):
             "hostel": req.student.hostel.code,
             "webmail": req.student.webmail,
         },
-        "sections": [_section_dict(ss, req) for ss in statuses],
+        "sections": [_student_section_dict(ss, req) for ss in statuses],
+        "labs": _labs_dict(req),
+        # The refund Accounts pays once every section has approved; the certificate
+        # unlocks only after it's recorded (main/refunds.py).
+        "refund": refund_service.status_for(req),
         "has_certificate": Certificate.objects.filter(request=req).exists(),
     }
+
+
+def _student_section_dict(ss, req):
+    """A section as the student sees it: plus Administration's checklist (what to
+    hand in at the office, and what's been ticked)."""
+    data = _section_dict(ss, req)
+    code = ss.section.code
+    if checklist_service.enabled(code):
+        data["checklist"] = [{"label": e["label"], "done": e["done"]} for e in checklist_service.entries(ss)]
+    return data
+
+
+def _not_sent_to_you():
+    """Section staff (main/staff.py) touching a request their head didn't send them."""
+    return JsonResponse({"detail": "This request hasn't been sent to you"}, status=403)
+
+
+def _can_see(profile, ss):
+    """May this officer see (review, comment on, open the documents of) this row?
+    Section staff: what reached them (staff.can_handle) — and whoever sends
+    Accounts' refunds also every Accounts-approved request, whose bank details
+    they need to pay it."""
+    return staff_service.can_handle(profile, ss) or (
+        ss.section.code == SECTION_ACCOUNTS and ss.status == STATUS_APPROVED
+        and refund_service.can_record(profile))
 
 
 def _scope_ok(profile, req, section_code):
@@ -205,6 +396,10 @@ def _me_payload(user, profile):
             data["hostel"] = profile.hostel.code
         if profile.department_id:
             data["department"] = profile.department.code
+        if profile.role == ROLE_LAB:
+            lab = Lab.objects.filter(user=user).first()
+            if lab is not None:
+                data["lab"] = lab.name
     return data
 
 
@@ -481,6 +676,8 @@ def officer_comment(request):
         return JsonResponse({"detail": "Not found"}, status=404)
     if not _scope_ok(profile, ss.request, role):
         return JsonResponse({"detail": "Out of scope"}, status=403)
+    if not _can_see(profile, ss):
+        return _not_sent_to_you()
     Comment.objects.create(section_status=ss, author=request.user, body=text)
     return JsonResponse({"ok": True})
 
@@ -535,17 +732,44 @@ def section_queue(request):
 
     qs = SectionStatus.objects.filter(
         section__code=role, request__is_active=True, student_confirmed=True,
-    ).select_related("request", "request__student", "section")
+    ).select_related("request", "request__student", "section", "assigned_to").order_by(
+        "request__created_at", "id")   # stable, oldest first (bulk sends rewrite rows)
+
+    # Section staff (main/staff.py) see only what reached them; the head sees
+    # everything, as a section officer always has. By hand (Library, LUCS, NAD):
+    # what the head sent them. By level (Accounts): what's waiting at their
+    # level, plus what they approved or rejected — shown with *their* outcome.
+    is_staff = staff_service.is_staff_member(profile)
+    levelled = staff_service.is_levelled(role)
+    by_hand = role in staff_service.STAFF_SECTIONS and not levelled
 
     if role == SECTION_WARDEN and profile.hostel_id:
         qs = qs.filter(request__student__hostel_id=profile.hostel_id)
+    dept_has_labs = None
     if role == SECTION_HOD and profile.department_id:
         qs = qs.filter(request__student__department_id=profile.department_id)
+        dept_has_labs = engine.department_has_labs(profile.department_id)
+
+    # Accounts: whoever sends refunds handles them from Approved, which therefore
+    # lists every request Accounts has approved — not only their own approvals.
+    refund_sender = role == SECTION_ACCOUNTS and refund_service.can_record(profile)
+    if is_staff and levelled:
+        items = staff_service.level_queue(profile)
+        if refund_sender:
+            mine = {ss.id for ss, _ in items}
+            items += [(ss, STATUS_APPROVED) for ss in qs.filter(status=STATUS_APPROVED).exclude(id__in=mine)]
+    else:
+        if is_staff:
+            qs = qs.filter(assigned_to=request.user)
+        items = [(ss, ss.status) for ss in qs]
+    names = staff_service.chain_names(role) if levelled else None
+    # Administration: what the student has to complete at the office, per request.
+    checklist_items = checklist_service.items(role) if checklist_service.enabled(role) else None
 
     rows = []
-    for ss in qs:
+    for ss, status in items:
         req = ss.request
-        rows.append({
+        row = {
             "request_id": req.id,
             "section_status_id": ss.id,
             "roll_no": req.student.roll_no,
@@ -553,10 +777,27 @@ def section_queue(request):
             "department": req.student.department.code,
             "hostel": req.student.hostel.code,
             "exit_type": req.exit_type,
-            "status": ss.status,
-            "actionable": engine.actionable(req, role),
+            "status": status,
+            # Staff only ever get a request at their own level once it's ready.
+            "actionable": True if (is_staff and levelled) else engine.actionable(req, role),
             "vacant_room_no": req.vacant_room_no,
-        })
+        }
+        if role == SECTION_HOD:
+            # The request reaches HOD only once every department lab approved;
+            # until then the HOD desk lists it under "In labs" with this progress.
+            row["labs"] = engine.lab_progress(req, dept_has_labs=dept_has_labs)
+        if by_hand:
+            row["assigned_to"] = _person(ss.assigned_to)
+            row["assigned_at"] = ss.assigned_at.isoformat() if ss.assigned_at else None
+            row["ready"] = req.intake_submitted
+        if levelled:
+            row["stage"] = staff_service.stage_info(ss, names)
+        if checklist_items:
+            row["checklist"] = checklist_service.entries(ss, checklist_items)
+        if refund_sender and ss.status == STATUS_APPROVED:
+            # The Refund column of the Approved tab: waiting / ready / sent / not due.
+            row["refund"] = refund_service.row_state(req)
+        rows.append(row)
 
     section = Section.objects.filter(code=role).first()
     heading = section.name if section else role
@@ -564,8 +805,25 @@ def section_queue(request):
         heading = f"{section.name} — {profile.hostel.code}"
     if role == SECTION_HOD and profile.department_id:
         heading = f"{section.name} — {profile.department.code}"
+    if is_staff:
+        heading = f"{heading} — Staff"
 
-    return JsonResponse({"role": role, "heading": heading, "students": rows})
+    data = {"role": role, "heading": heading, "students": rows}
+    if staff_service.is_head(profile):
+        # What the head needs: their active staff, how work reaches them, and
+        # (by hand) how many requests are waiting, ready to be sent.
+        data["can_manage_staff"] = True
+        data["staff_mode"] = "levels" if levelled else "manual"
+        data["staff"] = _staff_list(request.user)
+        data["ready_to_assign"] = 0 if levelled else staff_service.ready_for_staff(role).count()
+    if role == SECTION_ACCOUNTS:
+        # Whoever sends refunds — the main account, plus any staff it made refund
+        # managers — sends them from the Approved tab.
+        data["can_record_refunds"] = refund_sender
+        if refund_sender:
+            data["refunds_pending"] = refund_service.pending().count()
+            data["refund_modes"] = refund_service.MODES
+    return JsonResponse(data)
 
 
 @login_required
@@ -584,6 +842,8 @@ def section_review(request):
         return JsonResponse({"detail": "Not found"}, status=404)
     if not _scope_ok(profile, ss.request, role):
         return JsonResponse({"detail": "Out of scope"}, status=403)
+    if not _can_see(profile, ss):
+        return _not_sent_to_you()
 
     # Every officer sees the full Page-2 tri-gate picture (Library BTP form,
     # TPC offer letter, and the Warden/hostel clearance), regardless of their
@@ -618,6 +878,18 @@ def section_review(request):
         "section": _section_dict(ss, ss.request),
         "intake": intake_docs,
     }
+
+    # HOD approves after its department's labs, so it sees who cleared each lab
+    # (and why one rejected); Administration, the final all-green gate, too.
+    if role in (SECTION_HOD, SECTION_ADMINISTRATION):
+        data["labs"] = _lab_chain(ss.request)
+
+    # Levelled sections (Accounts): where the request is in the staff levels and
+    # who approved each level so far.
+    if staff_service.is_levelled(role):
+        data["stage"] = staff_service.stage_info(ss)
+    if checklist_service.enabled(role):
+        data["checklist"] = checklist_service.entries(ss)
 
     # Administration sees every other section's documents/OCR/status — a true
     # prerequisite gate, since Administration only acts once everything is
@@ -659,6 +931,20 @@ def section_review(request):
     return JsonResponse(data)
 
 
+def _level_param(body):
+    """The optional `level` of an approve: the chain step the officer saw the
+    request at (Accounts). None when not given."""
+    raw = body.get("level")
+    if raw is None or raw == "":
+        return None
+    if isinstance(raw, bool):
+        raise engine.ValidationError_("level must be a whole number.")
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        raise engine.ValidationError_("level must be a whole number.") from None
+
+
 def _decide(request, action):
     profile = _profile(request.user)
     role = profile.role if profile else None
@@ -673,10 +959,26 @@ def _decide(request, action):
         return JsonResponse({"detail": "Not found"}, status=404)
     if not _scope_ok(profile, ss.request, role):
         return JsonResponse({"detail": "Out of scope"}, status=403)
+    # Staff decide only what reached them — and that decision is final.
+    if not staff_service.can_decide(profile, ss):
+        return _not_sent_to_you()
 
     try:
         if action == "approve":
-            engine.approve(ss, request.user)
+            # Administration: what the student had to do at the office (hand in the
+            # physical ID card, ...) must be ticked before anyone approves.
+            missing = checklist_service.missing(ss) if checklist_service.enabled(role) else []
+            if missing:
+                return JsonResponse({"detail": f"Tick the checklist first: {', '.join(missing)}."}, status=409)
+            if staff_service.is_levelled(role):
+                # Accounts: approves the step the request is waiting at — staff at
+                # their level, the main account at its own step or standing in for
+                # a level (naming the `level` it saw). The request moves up one
+                # step; after the last step the section is approved.
+                staff_service.approve(ss, profile, _level_param(body))
+                ss.refresh_from_db()
+            else:
+                engine.approve(ss, request.user)
         else:
             engine.reject(ss, request.user, body.get("reason", ""))
     except engine.PermissionError_ as e:
@@ -697,6 +999,444 @@ def approve(request):
 @require_http_methods(["POST"])
 def reject(request):
     return _decide(request, "reject")
+
+
+# ─── Department labs: student side (HOD card on Page 3) ──────────────────────────
+
+def _student_and_request(request):
+    """(student, active request, None) or (…, …, error response) for student endpoints."""
+    stud = Student.objects.filter(user=request.user).first()
+    if stud is None:
+        return None, None, JsonResponse({"detail": "Student record not found"}, status=404)
+    req = _active_request(stud)
+    if req is None:
+        return stud, None, JsonResponse({"detail": "No active request"}, status=400)
+    return stud, req, None
+
+
+@login_required
+@require_http_methods(["POST"])
+def student_labs_send(request):
+    """Send the request to the next level of department labs (starts the chain)."""
+    _, req, err = _student_and_request(request)
+    if err:
+        return err
+    # The lab chain lives on Page 3, which opens once Library/TPC/Warden approve.
+    if not req.intake_submitted or not engine.tri_gate_cleared(req):
+        return JsonResponse(
+            {"detail": "Library, TPC and Warden must approve before you can send requests to your department labs."},
+            status=409)
+    try:
+        sent = engine.send_next_lab_level(req, request.user)
+    except engine.PermissionError_ as e:
+        return JsonResponse({"detail": str(e)}, status=409)
+    return JsonResponse({"has_request": True, "request": _request_dict(req),
+                         "sent_to": [ls.lab.name for ls in sent]})
+
+
+@login_required
+@require_http_methods(["POST"])
+def student_labs_resend(request):
+    """Send a rejected lab request back to that lab."""
+    _, req, err = _student_and_request(request)
+    if err:
+        return err
+    body = _json_body(request)
+    ls = req.lab_statuses.filter(lab_id=_int(body.get("lab_id"))).select_related("lab").first()
+    if ls is None:
+        return JsonResponse({"detail": "That lab is not part of your request"}, status=400)
+    try:
+        engine.resend_lab(ls, request.user)
+    except engine.PermissionError_ as e:
+        return JsonResponse({"detail": str(e)}, status=409)
+    return JsonResponse({"has_request": True, "request": _request_dict(req)})
+
+
+@login_required
+@require_http_methods(["POST"])
+def student_labs_comment(request):
+    """Student replies on one lab's thread (two-way, like section threads)."""
+    _, req, err = _student_and_request(request)
+    if err:
+        return err
+    body = _json_body(request)
+    text = (body.get("body") or "").strip()
+    if not text:
+        return JsonResponse({"detail": "Comment cannot be empty"}, status=400)
+    ls = req.lab_statuses.filter(lab_id=_int(body.get("lab_id")), sent_at__isnull=False).first()
+    if ls is None:
+        return JsonResponse({"detail": "You can message a lab once your request has been sent to it"}, status=400)
+    Comment.objects.create(lab_status=ls, author=request.user, body=text)
+    return JsonResponse({"ok": True})
+
+
+# ─── Department labs: lab in-charge desk ────────────────────────────────────────
+# Each lab login is tied to exactly one Lab (Lab.user), so the lab — and with it
+# the department — comes from the session, never from the request body.
+
+def _lab_officer(user):
+    """The active Lab this user is in charge of, or None."""
+    profile = _profile(user)
+    if profile is None or profile.role != ROLE_LAB:
+        return None
+    return Lab.objects.filter(user=user, is_active=True).select_related("department").first()
+
+
+def _lab_status_for(lab, request_id):
+    """This lab's row for an active request that has been sent to it."""
+    return LabStatus.objects.filter(
+        lab=lab, request_id=_int(request_id), request__is_active=True, sent_at__isnull=False,
+    ).select_related("lab", "request", "request__student", "request__student__department",
+                     "request__student__hostel", "decided_by").first()
+
+
+@login_required
+@require_http_methods(["GET"])
+def lab_queue(request):
+    lab = _lab_officer(request.user)
+    if lab is None:
+        return JsonResponse({"detail": "Not a lab in-charge"}, status=403)
+    qs = LabStatus.objects.filter(
+        lab=lab, request__is_active=True, sent_at__isnull=False,
+    ).select_related("request", "request__student", "request__student__department",
+                     "request__student__hostel").order_by("-sent_at")
+    rows = []
+    for ls in qs:
+        req = ls.request
+        rows.append({
+            "request_id": req.id,
+            "section_status_id": ls.id,
+            "roll_no": req.student.roll_no,
+            "name": req.student.name,
+            "department": req.student.department.code,
+            "hostel": req.student.hostel.code,
+            "exit_type": req.exit_type,
+            "status": ls.status,
+            "actionable": engine.lab_actionable(ls),
+            "vacant_room_no": req.vacant_room_no,
+            "level": ls.level,
+        })
+    return JsonResponse({"role": ROLE_LAB, "heading": f"{lab.name} — {lab.department.code}", "students": rows})
+
+
+@login_required
+@require_http_methods(["GET"])
+def lab_review(request):
+    """One request as this lab sees it: its own decision + thread, and the chain."""
+    lab = _lab_officer(request.user)
+    if lab is None:
+        return JsonResponse({"detail": "Not a lab in-charge"}, status=403)
+    ls = _lab_status_for(lab, request.GET.get("request_id"))
+    if ls is None:
+        return JsonResponse({"detail": "Not found"}, status=404)
+    req = ls.request
+    return JsonResponse({
+        "request_id": req.id,
+        "student": {"name": req.student.name, "roll_no": req.student.roll_no,
+                    "department": req.student.department.code, "hostel": req.student.hostel.code},
+        "vacant_room_no": req.vacant_room_no,
+        # Same shape as a section, so the officer desk renders it unchanged.
+        "section": {
+            "code": ROLE_LAB, "name": lab.name, "status": ls.status,
+            "actionable": engine.lab_actionable(ls), "is_upload_section": False,
+            "student_confirmed": True, "needs_confirm": False,
+            "decided_by": ls.decided_by.username if ls.decided_by else None,
+            "decided_at": ls.decided_at.isoformat() if ls.decided_at else None,
+            "comments": [_comment_dict(c) for c in
+                         ls.comments.select_related("author").order_by("created_at")],
+            "documents": [],
+        },
+        "intake": [],
+        "labs": _lab_chain(req),
+    })
+
+
+def _lab_decide(request, action):
+    lab = _lab_officer(request.user)
+    if lab is None:
+        return JsonResponse({"detail": "Not a lab in-charge"}, status=403)
+    body = _json_body(request)
+    ls = _lab_status_for(lab, body.get("request_id"))
+    if ls is None:
+        return JsonResponse({"detail": "Not found"}, status=404)
+    try:
+        if action == "approve":
+            engine.approve_lab(ls, request.user)
+        else:
+            engine.reject_lab(ls, request.user, body.get("reason", ""))
+    except engine.PermissionError_ as e:
+        return JsonResponse({"detail": str(e)}, status=409)
+    except engine.ValidationError_ as e:
+        return JsonResponse({"detail": str(e)}, status=400)
+    return JsonResponse({"ok": True, "status": ls.status})
+
+
+@login_required
+@require_http_methods(["POST"])
+def lab_approve(request):
+    return _lab_decide(request, "approve")
+
+
+@login_required
+@require_http_methods(["POST"])
+def lab_reject(request):
+    return _lab_decide(request, "reject")
+
+
+@login_required
+@require_http_methods(["POST"])
+def lab_comment(request):
+    lab = _lab_officer(request.user)
+    if lab is None:
+        return JsonResponse({"detail": "Not a lab in-charge"}, status=403)
+    body = _json_body(request)
+    text = (body.get("body") or "").strip()
+    if not text:
+        return JsonResponse({"detail": "Comment cannot be empty"}, status=400)
+    ls = _lab_status_for(lab, body.get("request_id"))
+    if ls is None:
+        return JsonResponse({"detail": "Not found"}, status=404)
+    Comment.objects.create(lab_status=ls, author=request.user, body=text)
+    return JsonResponse({"ok": True})
+
+
+# ─── Department labs: HOD "Manage Labs" panel ───────────────────────────────────
+# An HOD manages only their own department's labs; the department always comes
+# from the HOD's profile, and another department's lab id is a 404.
+
+def _hod_department(user):
+    profile = _profile(user)
+    if profile is None or profile.role != SECTION_HOD or profile.department_id is None:
+        return None
+    return profile.department
+
+
+# Students currently waiting on a lab: sent to it, not approved, request active.
+_WAITING_ON_LAB = Q(statuses__request__is_active=True, statuses__sent_at__isnull=False,
+                    statuses__status__in=[STATUS_PENDING, STATUS_REJECTED])
+
+
+def _hod_lab_dict(lab, waiting):
+    return {
+        "id": lab.id,
+        "name": lab.name,
+        "incharge_name": lab.incharge_name,
+        "email": lab.user.username,
+        "level": lab.level,
+        "is_active": lab.is_active,
+        "waiting": waiting,
+    }
+
+
+def _waiting_count(lab):
+    return Lab.objects.filter(pk=lab.pk).aggregate(n=Count("statuses", filter=_WAITING_ON_LAB))["n"]
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def hod_labs(request):
+    """GET: this HOD's department labs. POST: add a lab (+ its in-charge login)."""
+    dept = _hod_department(request.user)
+    if dept is None:
+        return JsonResponse({"detail": "Only a department HOD can manage labs"}, status=403)
+
+    if request.method == "POST":
+        body = _json_body(request)
+        if not isinstance(body, dict):
+            body = {}
+        try:
+            lab = lab_service.create_lab(
+                dept, name=body.get("name"), incharge_name=body.get("incharge_name"),
+                email=body.get("email"), password=body.get("password"), level=body.get("level"),
+            )
+        except lab_service.LabError as e:
+            return JsonResponse({"detail": str(e)}, status=400)
+        return JsonResponse({"lab": _hod_lab_dict(lab, 0)}, status=201)
+
+    labs = (Lab.objects.filter(department=dept).select_related("user")
+            .annotate(waiting=Count("statuses", filter=_WAITING_ON_LAB))
+            .order_by("level", "name"))
+    return JsonResponse({
+        "department": dept.code,
+        "labs": [_hod_lab_dict(lab, lab.waiting) for lab in labs],
+    })
+
+
+@login_required
+@require_http_methods(["PATCH", "DELETE"])
+def hod_lab_detail(request, lab_id):
+    """PATCH: edit / reset password / restore. DELETE: remove from the chain."""
+    dept = _hod_department(request.user)
+    if dept is None:
+        return JsonResponse({"detail": "Only a department HOD can manage labs"}, status=403)
+    lab = Lab.objects.filter(id=lab_id, department=dept).select_related("user", "department").first()
+    if lab is None:
+        return JsonResponse({"detail": "Lab not found"}, status=404)
+
+    if request.method == "DELETE":
+        outcome, released = lab_service.remove_lab(lab, request.user)
+        return JsonResponse({"ok": True, "outcome": outcome, "released": released})
+
+    body = _json_body(request)
+    if not isinstance(body, dict):
+        body = {}
+    try:
+        lab = lab_service.update_lab(lab, body)
+    except lab_service.LabError as e:
+        return JsonResponse({"detail": str(e)}, status=400)
+    return JsonResponse({"lab": _hod_lab_dict(lab, _waiting_count(lab))})
+
+
+# ─── Section staff (Library, LUCS, NAD Cell): the head sends out work, manages staff
+# Only the section's head — its own account, not a staff member — may call these,
+# and the section always comes from the head's profile. Staff ids are the user
+# ids of that head's staff; anyone else's id is a 404.
+
+def _section_head(user):
+    profile = _profile(user)
+    return profile if staff_service.is_head(profile) else None
+
+
+@login_required
+@require_http_methods(["POST"])
+def section_assign(request):
+    """
+    {staff_id, count}       — send the next `count` waiting requests (oldest first);
+    {request_ids, staff_id} — send those requests, or with staff_id null take them back.
+    """
+    head = _section_head(request.user)
+    if head is None:
+        return JsonResponse({"detail": "Only the section head can send requests to staff"}, status=403)
+    body = _json_body(request)
+    if not isinstance(body, dict):
+        body = {}
+    try:
+        if "request_ids" in body:
+            target, moved = staff_service.move(head, body.get("request_ids"), body.get("staff_id"))
+        else:
+            target, moved = staff_service.send_next(head, body.get("staff_id"), body.get("count"))
+    except staff_service.StaffError as e:
+        return JsonResponse({"detail": str(e)}, status=400)
+    return JsonResponse({"ok": True, "moved": moved, "to": _person(target)})
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def section_staff(request):
+    """GET: the head's staff (removed ones too). POST: add a staff member + login
+    ({name, email, password, level?, refund_manager?})."""
+    head = _section_head(request.user)
+    if head is None:
+        return JsonResponse({"detail": "Only the section head can manage staff"}, status=403)
+
+    if request.method == "POST":
+        body = _json_body(request)
+        if not isinstance(body, dict):
+            body = {}
+        try:
+            staff = staff_service.create_staff(head, name=body.get("name"), email=body.get("email"),
+                                               password=body.get("password"), level=body.get("level"),
+                                               refund_manager=bool(body.get("refund_manager")))
+        except staff_service.StaffError as e:
+            return JsonResponse({"detail": str(e)}, status=400)
+        return JsonResponse({"staff": _staff_dict(staff)}, status=201)
+
+    levelled = staff_service.is_levelled(head.role)
+    profiles = list(staff_service.staff_of(request.user, include_removed=True))
+    waiting = staff_service.waiting_by_level(head.role) if levelled else None   # once, not per person
+    return JsonResponse({
+        "section": head.role,
+        "staff_mode": "levels" if levelled else "manual",
+        # Levels: requests every level has approved, waiting for the head's final approval.
+        "head_waiting": staff_service.waiting_for_final(head.role) if levelled else 0,
+        "staff": [_staff_dict(p, waiting) for p in profiles],
+        # Administration: the checklist the head manages (null = no checklist here).
+        "checklist": ([{"id": i.id, "label": i.label} for i in checklist_service.items(head.role)]
+                      if checklist_service.enabled(head.role) else None),
+        # Accounts: who sends refunds (the main account, plus any staff refund managers).
+        "refund_senders": refund_service.sender_names(viewer=head) if head.role == SECTION_ACCOUNTS else None,
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def section_checklist(request):
+    """The section head adds a checklist item: {label} -> 201 {item}."""
+    head = _section_head(request.user)
+    if head is None or not checklist_service.enabled(head.role):
+        return JsonResponse({"detail": "Only the Administration head manages the checklist"}, status=403)
+    body = _json_body(request)
+    try:
+        item = checklist_service.add_item(head.role, body.get("label") if isinstance(body, dict) else None)
+    except checklist_service.ChecklistError as e:
+        return JsonResponse({"detail": str(e)}, status=400)
+    return JsonResponse({"item": {"id": item.id, "label": item.label}}, status=201)
+
+
+@login_required
+@require_http_methods(["DELETE"])
+def section_checklist_detail(request, item_id):
+    """The section head removes a checklist item."""
+    head = _section_head(request.user)
+    if head is None or not checklist_service.enabled(head.role):
+        return JsonResponse({"detail": "Only the Administration head manages the checklist"}, status=403)
+    outcome = checklist_service.remove_item(head.role, item_id)
+    if outcome is None:
+        return JsonResponse({"detail": "Checklist item not found"}, status=404)
+    return JsonResponse({"ok": True, "outcome": outcome})
+
+
+@login_required
+@require_http_methods(["POST"])
+def section_checklist_tick(request):
+    """Tick / untick a checklist item for a request: {request_id, item_id, done}.
+    Whoever can decide the request now — the head, or staff it has reached."""
+    profile = _profile(request.user)
+    role = profile.role if profile else None
+    if not checklist_service.enabled(role):
+        return JsonResponse({"detail": "This section has no checklist"}, status=403)
+    body = _json_body(request)
+    if not isinstance(body, dict):
+        body = {}
+    ss = SectionStatus.objects.filter(
+        request_id=_int(body.get("request_id")), section__code=role, request__is_active=True,
+    ).select_related("request", "request__student", "section").first()
+    if ss is None:
+        return JsonResponse({"detail": "Not found"}, status=404)
+    if not _scope_ok(profile, ss.request, role):
+        return JsonResponse({"detail": "Out of scope"}, status=403)
+    if not staff_service.can_decide(profile, ss):
+        return _not_sent_to_you()
+    try:
+        entries = checklist_service.set_tick(ss, _int(body.get("item_id")), bool(body.get("done")), request.user)
+    except checklist_service.ChecklistError as e:
+        return JsonResponse({"detail": str(e)}, status=400)
+    return JsonResponse({"ok": True, "checklist": entries})
+
+
+@login_required
+@require_http_methods(["PATCH", "DELETE"])
+def section_staff_detail(request, staff_id):
+    """PATCH: edit / reset password / restore. DELETE: remove (their open requests return)."""
+    head = _section_head(request.user)
+    if head is None:
+        return JsonResponse({"detail": "Only the section head can manage staff"}, status=403)
+    staff = staff_service.staff_of(request.user, include_removed=True).filter(user_id=staff_id).first()
+    if staff is None:
+        return JsonResponse({"detail": "Staff member not found"}, status=404)
+
+    if request.method == "DELETE":
+        outcome, returned = staff_service.remove_staff(staff)
+        return JsonResponse({"ok": True, "outcome": outcome, "returned": returned})
+
+    body = _json_body(request)
+    if not isinstance(body, dict):
+        body = {}
+    try:
+        staff = staff_service.update_staff(staff, body)
+    except staff_service.StaffError as e:
+        return JsonResponse({"detail": str(e)}, status=400)
+    return JsonResponse({"staff": _staff_dict(staff)})
 
 
 # ─── Certificate ────────────────────────────────────────────────────────────────
@@ -728,13 +1468,22 @@ def document_download(request, doc_id):
     profile = _profile(request.user)
 
     is_owner = Student.objects.filter(user=request.user, id=req.student_id).exists()
-    is_officer = profile is not None and profile.role == section_code and _scope_ok(profile, req, section_code)
+    # Section staff count as the section's officer only for requests that reached
+    # them (Accounts staff and bank details, especially — main/staff.py).
+    is_officer = (profile is not None and profile.role == section_code
+                  and _scope_ok(profile, req, section_code)
+                  and _can_see(profile, doc.section_status))
 
     # Administration is the only remaining consolidator — it may open any
     # section's documents. HOD is fully independent now (no informational
     # consolidation of Store/LUCS/Sports/Medical/NAD either — see
-    # section_review), so it gets no equivalent access here.
-    is_consolidator = profile is not None and profile.role == SECTION_ADMINISTRATION
+    # section_review), so it gets no equivalent access here. Administration's
+    # staff (main/staff.py) only for requests that have reached them.
+    is_consolidator = False
+    if profile is not None and profile.role == SECTION_ADMINISTRATION:
+        admin_ss = req.section_statuses.filter(section__code=SECTION_ADMINISTRATION).select_related("section").first()
+        is_consolidator = (not staff_service.is_staff_member(profile)
+                           or (admin_ss is not None and staff_service.can_handle(profile, admin_ss)))
 
     # Library/TPC documents are shown to every officer as shared context
     # (see section_review's "intake" — every officer sees them, not just
@@ -783,5 +1532,67 @@ def generate_certificate(request):
                  "decided_at": ss.decided_at.isoformat() if ss.decided_at else None}
                 for ss in req.section_statuses.select_related("section", "decided_by")
             ],
+            # Staff levels that approved a levelled section (Accounts), in order.
+            "stages": [
+                {"section": ss.section.name, "level": a.level,
+                 "approved_by": a.approved_by.username if a.approved_by else None,
+                 "approved_at": a.approved_at.isoformat()}
+                for ss in req.section_statuses.select_related("section").prefetch_related(
+                    "stage_approvals__approved_by")
+                for a in ss.stage_approvals.all()
+            ],
+            # Department labs cleared before HOD (empty if the department has none).
+            "labs": [
+                {"name": ls.lab.name, "level": ls.level,
+                 "approved_by": ls.decided_by.username if ls.decided_by else None,
+                 "decided_at": ls.decided_at.isoformat() if ls.decided_at else None}
+                for ls in req.lab_statuses.select_related("lab", "decided_by").order_by("level", "lab__name")
+            ],
+            # The refund Accounts paid (a cleared request always has one; amount 0 = none due).
+            "refund": refund_service.status_for(req),
         },
+    })
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def accounts_refunds(request):
+    """Refunds — for whoever sends them: the main account (accounts@), plus any
+    Accounts staff it made refund managers.
+    GET: {pending: [row], sent: [row]} — pending = every section approved, refund not
+    recorded yet (oldest first); sent = refunds already recorded (newest first).
+    POST {request_id, amount, mode, reference, paid_on} — record (or correct) a paid
+    refund; or {request_id, no_refund: true}. Clears the request, so its certificate
+    unlocks, and notes it in the student's Accounts thread.
+    POST {request_id, reject: true, reason} — send Accounts back to the student instead."""
+    if not refund_service.can_record(_profile(request.user)):
+        return JsonResponse({"detail": "Refunds are sent by: " + ", ".join(refund_service.sender_names())},
+                            status=403)
+
+    if request.method == "POST":
+        body = _json_body(request)
+        if not isinstance(body, dict):
+            body = {}
+        req = ClearanceRequest.objects.filter(id=_int(body.get("request_id")), is_active=True).first()
+        if req is None:
+            return JsonResponse({"detail": "Not found"}, status=404)
+        if body.get("reject"):
+            try:
+                refund_service.reject(req, request.user, body.get("reason", ""))
+            except refund_service.RefundError as e:
+                return JsonResponse({"detail": str(e)}, status=400)
+            return JsonResponse({"ok": True, "status": STATUS_REJECTED})
+        try:
+            refund = refund_service.record(
+                req, request.user, amount=body.get("amount"), mode=body.get("mode"),
+                reference=body.get("reference"), paid_on=body.get("paid_on"),
+                no_refund=bool(body.get("no_refund")))
+        except refund_service.RefundError as e:
+            return JsonResponse({"detail": str(e)}, status=400)
+        return JsonResponse({"ok": True, "refund": refund_service.row(req, refund)["refund"]})
+
+    return JsonResponse({
+        "pending": [refund_service.row(req) for req in refund_service.pending()],
+        "sent": [refund_service.row(r.request, r) for r in refund_service.recent()],
+        "modes": refund_service.MODES,
     })
