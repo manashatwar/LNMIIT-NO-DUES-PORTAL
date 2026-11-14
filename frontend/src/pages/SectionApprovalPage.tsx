@@ -390,8 +390,9 @@ export function SectionApprovalPage({
                                 )}
                                 {staff.length > 0 && <> You can also <strong>Approve</strong> a request at any level, standing in for the people on
                                     it: it moves up one step (at the last level, that is also your final approval).{' '}
-                                    <em>Not ready yet</em> means it is still waiting for Library, TPC, Warden or HOD
-                                    {role === 'ACCOUNTS' ? ", or for the student's cheque details" : ''}.</>}
+                                    <em>Not ready yet</em> means it is still waiting for Library, Warden or HOD (or TPC, for a
+                                    graduating student){role === 'ACCOUNTS' ? ", or for the student's cheque details" : ''}: each row
+                                    says which.</>}
                                 {checklistCol && <> 📋 Tick the <strong>Checklist</strong> (e.g. the physical ID card) when the student hands it in:
                                     Approve stays locked until every item is ticked.</>}
                             </div>
@@ -443,7 +444,7 @@ export function SectionApprovalPage({
                         </button>
                         <span style={{ fontSize: 12, color: '#475569' }}>
                             <strong>{readyToAssign}</strong> waiting with you · oldest first · only requests the student has fully submitted
-                            {role === 'ADMINISTRATION' ? ' and Library, TPC, Warden & HOD have approved' : ''}
+                            {role === 'ADMINISTRATION' ? ' and Library, Warden & HOD (plus TPC, for a graduation) have approved' : ''}
                         </span>
                         {staff.length === 0 && (
                             <span style={{ fontSize: 12, color: '#b45309' }}>Add staff in <strong>Manage staff</strong> first.</span>
