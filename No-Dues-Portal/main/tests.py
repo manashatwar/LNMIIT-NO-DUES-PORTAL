@@ -9,14 +9,16 @@ Run with: python manage.py test main  (needs PostgreSQL, like the app).
 import json
 import tempfile
 from datetime import timedelta
+from unittest import mock
 
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 
 from main import checklist as checklist_service
+from main import checks as workflow_checks
 from main import engine
 from main import labs as lab_service
 from main import prefetch
@@ -27,7 +29,7 @@ from main.management.commands.seed_demo import SECTION_DEFS
 from main.models import (
     Department, Hostel, Section, UserProfile, Student, ClearanceRequest, SectionStatus,
     Certificate, Comment, Document, Lab, LabStatus, Refund, StageApproval,
-    DEPARTMENT_CODES, HOSTEL_CODES, ROLE_LAB,
+    DEPARTMENT_CODES, EXIT_TYPES, HOSTEL_CODES, ROLE_LAB,
     STATUS_PENDING, STATUS_APPROVED, STATUS_REJECTED, OVERALL_CLEARED, OVERALL_IN_PROGRESS,
     SECTION_LIBRARY, SECTION_TPC, SECTION_WARDEN, SECTION_HOD, SECTION_ACCOUNTS,
     SECTION_ADMINISTRATION, SECTION_LUCS, SECTION_NAD, SECTION_STORE, SECTION_SPORTS, SECTION_MEDICAL,
@@ -1557,3 +1559,235 @@ class QueryCountTests(ApiHelpers, TestCase):
                                engine.actionable(fast.request, SECTION_HOD, dept_has_labs=has_labs))
                 self.assertEqual(answers, (engine.lab_progress(ss.request),
                                            engine.actionable(ss.request, SECTION_HOD)))
+
+
+class WorkflowGraphTests(SimpleTestCase):
+    """Every exit type's approval graph is a valid DAG, checked with Kahn's
+    algorithm (engine.analyze_workflow) — and the check finds what would break
+    one: a prerequisite the exit type doesn't have (the original NEP-exit bug:
+    Accounts waited for a TPC section the request didn't have) or a cycle."""
+
+    NO_TPC = ("NEP_EXIT", "WITHDRAWAL", "ADMISSION_CANCEL")
+
+    def test_every_exit_type_has_a_complete_approval_order(self):
+        self.assertEqual(engine.workflow_problems(), [])
+        for exit_type in EXIT_TYPES:
+            with self.subTest(exit_type):
+                graph = engine.workflow(exit_type)
+                order = engine.approval_order(graph)
+                self.assertCountEqual(order, engine.required_sections(exit_type))   # every section, once
+                for code, prereqs in graph.items():
+                    for p in prereqs:
+                        self.assertLess(order.index(p), order.index(code), f"{p} must come before {code}")
+
+    def test_tpc_is_waited_for_only_by_graduations(self):
+        self.assertEqual(engine.prerequisites(SECTION_ACCOUNTS, "GRADUATION"),
+                         [SECTION_LIBRARY, SECTION_TPC, SECTION_WARDEN, SECTION_HOD])
+        for exit_type in self.NO_TPC:
+            with self.subTest(exit_type):
+                self.assertNotIn(SECTION_TPC, engine.required_sections(exit_type))
+                for code in (SECTION_ACCOUNTS, SECTION_ADMINISTRATION):
+                    self.assertEqual(engine.prerequisites(code, exit_type),
+                                     [SECTION_LIBRARY, SECTION_WARDEN, SECTION_HOD])
+        # Without an exit type: the full rule ("does Accounts wait on anything?").
+        self.assertIn(SECTION_TPC, engine.prerequisites(SECTION_ACCOUNTS))
+
+    def test_the_old_rule_shows_up_as_missing_dependencies(self):
+        # Before the fix, every exit type waited for TPC: the validator flags exactly that.
+        with mock.patch.object(engine, "OPTIONAL_PREREQUISITES", set()):
+            problems = engine.workflow_problems()
+        self.assertEqual(sorted(problems), sorted(
+            f"{exit_type}: {code} waits for TPC, which isn't part of this workflow"
+            for exit_type in self.NO_TPC for code in (SECTION_ACCOUNTS, SECTION_ADMINISTRATION)))
+
+    def test_kahn_finds_missing_dependencies_and_cycles(self):
+        self.assertEqual(engine.analyze_workflow({"A": [], "B": ["A", "X"], "C": ["B"]}),
+                         (["A", "B", "C"], [("B", "X")], []))
+        cyclic = {"A": [], "B": ["A", "D"], "C": ["B"], "D": ["C"], "E": ["D"]}   # B → C → D → B, E after it
+        self.assertEqual(engine.analyze_workflow(cyclic), (["A"], [], ["B", "C", "D", "E"]))
+        self.assertEqual(engine.analyze_workflow({"A": ["A"]})[2], ["A"])          # a self-loop
+        self.assertEqual(engine.analyze_workflow({"A": [], "B": ["A", "A"]})[0], ["A", "B"])   # duplicate edge
+        with self.assertRaisesMessage(engine.WorkflowError, "B, C, D, E can never be approved (a cycle)"):
+            engine.approval_order(cyclic)
+        with self.assertRaisesMessage(engine.WorkflowError, "B waits for X, which isn't part of this workflow"):
+            engine.approval_order({"A": [], "B": ["X"]})
+
+    def test_a_broken_workflow_stops_django_from_starting(self):
+        self.assertEqual(workflow_checks.approval_workflows(None), [])
+        with mock.patch.dict(engine.PREREQUISITES, {SECTION_LIBRARY: [SECTION_ACCOUNTS]}):   # Library ⇄ Accounts
+            errors = workflow_checks.approval_workflows(None)
+        self.assertEqual({e.id for e in errors}, {"main.E001"})
+        self.assertEqual(len(errors), len(EXIT_TYPES))
+        self.assertIn("can never be approved (a cycle)", errors[0].msg)
+
+    def test_the_reverse_cascade_follows_the_exit_type(self):
+        both = {SECTION_ACCOUNTS, SECTION_ADMINISTRATION}
+        self.assertEqual(engine.downstream_closure(SECTION_TPC, "GRADUATION"), both)
+        self.assertEqual(engine.downstream_closure(SECTION_TPC, "NEP_EXIT"), set())   # nothing waits for it
+        for exit_type in EXIT_TYPES:
+            with self.subTest(exit_type):
+                for code in (SECTION_LIBRARY, SECTION_WARDEN, SECTION_HOD):
+                    self.assertEqual(engine.downstream_closure(code, exit_type), both)
+                self.assertEqual(engine.downstream_closure(SECTION_STORE, exit_type), set())
+
+
+@override_settings(PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"])
+class ExitTypeClearanceTests(ApiHelpers, TestCase):
+    """For every exit type, a student gets all the way to a certificate through
+    the real API: each office approves in the order Kahn's algorithm gives, and at
+    every step each section is open exactly when its own prerequisites (for that
+    exit type) have approved. Then a reopen resets what depends on it."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.dept = {c: Department.objects.create(code=c) for c in DEPARTMENT_CODES}
+        cls.hostel = {c: Hostel.objects.create(code=c) for c in HOSTEL_CODES}
+        for code, name, order, upload, consolidator in SECTION_DEFS:
+            Section.objects.create(code=code, name=name, order=order,
+                                   is_upload_section=upload, is_consolidator=consolidator)
+        checklist_service.ensure_defaults(SECTION_ADMINISTRATION)
+
+        def officer(code, hostel=None, dept=None):
+            user = User.objects.create_user(f"{code.lower()}@t.in", password="x")
+            UserProfile.objects.create(user=user, role=code, hostel=cls.hostel.get(hostel),
+                                       department=cls.dept.get(dept))
+            return user
+
+        cls.officers = {code: officer(code) for code in engine.ALL_SECTION_CODES
+                        if code not in (SECTION_WARDEN, SECTION_HOD)}
+        cls.officers[SECTION_WARDEN] = officer(SECTION_WARDEN, hostel="BH1")
+        cls.officers[SECTION_HOD] = officer(SECTION_HOD, dept="CSE")      # CSE has no labs
+        cls.accounts = cls.officers[SECTION_ACCOUNTS]
+        cls.clerk = staff_service.create_staff(cls.accounts.profile, name="Clerk", email="clerk@t.in",
+                                               password=STAFF_PASSWORD, level=1).user
+
+    # ── helpers ──────────────────────────────────────────────────────────────────
+
+    def ss(self, req, code):
+        return SectionStatus.objects.get(request=req, section__code=code)
+
+    def mine(self, student):
+        return {s["code"]: s for s in self.get(student, "/api/student/request/").json()["request"]["sections"]}
+
+    def start(self, exit_type):
+        """A CSE student starts a request of `exit_type` and completes their side:
+        the confirm-only sections confirmed, Page 1 submitted, cheque details confirmed."""
+        tag = exit_type.lower()
+        user = User.objects.create_user(f"{tag}@t.in", password="x")
+        UserProfile.objects.create(user=user, role="STUDENT")
+        student = Student.objects.create(user=user, name=f"{exit_type} Student", roll_no=f"25U{tag[:3].upper()}001",
+                                         department=self.dept["CSE"], hostel=self.hostel["BH1"], webmail=user.username)
+        r = self.post(user, "/api/student/initiate/", {"exit_type": exit_type, "vacant_room_no": "A102"})
+        self.assertEqual(r.status_code, 201, r.content)
+        req = ClearanceRequest.objects.get(pk=r.json()["request"]["id"])
+        for code in BASIC_CONFIRM_SECTIONS & set(engine.required_sections(exit_type)):
+            r = self.post(user, "/api/student/confirm-section/",
+                          {"section": code, "name": student.name, "roll_no": student.roll_no, "department": "CSE"})
+            self.assertEqual(r.status_code, 200, r.content)
+        ClearanceRequest.objects.filter(pk=req.pk).update(intake_submitted=True)   # uploads aren't under test here
+        Document.objects.create(section_status=self.ss(req, SECTION_ACCOUNTS), ocr_fields={
+            "review": {"account_holder": student.name, "account_no": "50100000001", "ifsc": "SBIN0000001"},
+            "confirmed": True})
+        return user, req
+
+    def approve(self, req, code):
+        """Approve `code` the way its office does, through the API."""
+        if code == SECTION_ACCOUNTS:
+            # Level 1 (the clerk) first; then accounts@, always the final step.
+            incoming = [r["request_id"] for r in self.get(self.clerk, "/api/section/queue/").json()["students"]
+                        if r["status"] == STATUS_PENDING]
+            self.assertIn(req.id, incoming, "the request never reached Accounts' level 1")
+            self.assertEqual(self.post(self.clerk, "/api/section/approve/", {"request_id": req.id}).status_code, 200)
+        if code == SECTION_ADMINISTRATION:
+            # Ready to be sent to Administration's staff, then the ID card ticked at the office.
+            self.assertTrue(staff_service.ready_for_staff(SECTION_ADMINISTRATION).filter(request=req).exists())
+            item = checklist_service.items(SECTION_ADMINISTRATION)[0]
+            r = self.post(self.officers[code], "/api/section/checklist/tick/",
+                          {"request_id": req.id, "item_id": item.id, "done": True})
+            self.assertEqual(r.status_code, 200, r.content)
+        r = self.post(self.officers[code], "/api/section/approve/", {"request_id": req.id})
+        self.assertEqual(r.status_code, 200, f"{code}: {r.content}")
+        self.assertEqual(self.ss(req, code).status, STATUS_APPROVED)
+
+    def clear(self, exit_type):
+        """Start a request and approve every section in Kahn's order, checking at
+        each step that a section is open exactly when its prerequisites are approved;
+        then Accounts records the refund. Returns (student, request)."""
+        student, req = self.start(exit_type)
+        graph = engine.workflow(exit_type)
+        self.assertEqual(list(self.mine(student)), engine.required_sections(exit_type))
+        approved = set()
+        for code in engine.approval_order(graph):
+            view = self.mine(student)
+            for other, prereqs in graph.items():
+                waiting = [p for p in prereqs if p not in approved]
+                self.assertEqual(view[other]["actionable"], not waiting,
+                                 f"{other} open with {sorted(approved)} approved")
+                self.assertEqual(view[other]["waiting_for"], [view[p]["name"] for p in waiting])
+            self.approve(req, code)
+            approved.add(code)
+        r = self.post(self.accounts, "/api/accounts/refunds/", {
+            "request_id": req.id, "amount": "9000", "mode": "NEFT", "reference": f"UTR-{exit_type}",
+            "paid_on": (refund_service.today() - timedelta(days=1)).isoformat()})
+        self.assertEqual(r.status_code, 200, r.content)
+        req.refresh_from_db()
+        self.assertEqual(req.overall_status, OVERALL_CLEARED)
+        return student, req
+
+    # ── tests ────────────────────────────────────────────────────────────────────
+
+    def test_every_exit_type_can_be_cleared_in_dependency_order(self):
+        for exit_type in EXIT_TYPES:
+            with self.subTest(exit_type):
+                student, req = self.clear(exit_type)
+                cert = self.post(student, "/api/student/certificate/")
+                self.assertEqual(cert.status_code, 200, cert.content)
+                self.assertCountEqual([s["code"] for s in cert.json()["certificate"]["sections"]],
+                                      engine.required_sections(exit_type))
+
+    def test_accounts_shows_what_each_exit_type_still_waits_for(self):
+        for exit_type, expected in (("GRADUATION", ["Library", "TPC", "Warden", "HOD"]),
+                                    ("NEP_EXIT", ["Library", "Warden", "HOD"]),
+                                    ("WITHDRAWAL", ["Library", "Warden", "HOD"]),
+                                    ("ADMISSION_CANCEL", ["Library", "Warden", "HOD"])):
+            with self.subTest(exit_type):
+                _, req = self.start(exit_type)
+                row = next(r for r in self.get(self.accounts, "/api/section/queue/").json()["students"]
+                           if r["request_id"] == req.id)
+                self.assertEqual((row["stage"]["ready"], row["stage"]["blocked_by"]), (False, expected))
+                r = self.post(self.accounts, "/api/section/approve/", {"request_id": req.id})
+                self.assertEqual(r.status_code, 409)
+                self.assertIn(", ".join(expected), r.json()["detail"])
+
+    def test_a_reopen_resets_what_depends_on_it_for_every_exit_type(self):
+        for exit_type in EXIT_TYPES:
+            with self.subTest(exit_type):
+                student, req = self.clear(exit_type)
+                self.assertEqual(self.post(student, "/api/student/certificate/").status_code, 200)
+                library = self.officers[SECTION_LIBRARY]
+                r = self.post(library, "/api/section/reject/", {"request_id": req.id, "reason": "Book not returned"})
+                self.assertEqual(r.status_code, 200, r.content)
+
+                # Accounts and Administration depend on the Library: back to pending; the rest stays.
+                for code in engine.required_sections(exit_type):
+                    expected = (STATUS_REJECTED if code == SECTION_LIBRARY
+                                else STATUS_PENDING if code in (SECTION_ACCOUNTS, SECTION_ADMINISTRATION)
+                                else STATUS_APPROVED)
+                    self.assertEqual(self.ss(req, code).status, expected, code)
+                for code in (SECTION_ACCOUNTS, SECTION_ADMINISTRATION):
+                    self.assertTrue(self.ss(req, code).comments.filter(
+                        is_system=True, body="Reset: upstream LIBRARY reopened").exists())
+                self.assertEqual(StageApproval.objects.filter(section_status__request=req).count(), 0)
+                req.refresh_from_db()
+                self.assertEqual(req.overall_status, OVERALL_IN_PROGRESS)
+                self.assertFalse(Certificate.objects.filter(request=req).exists())
+                view = self.mine(student)
+                self.assertEqual((view[SECTION_ACCOUNTS]["actionable"], view[SECTION_ACCOUNTS]["waiting_for"]),
+                                 (False, ["Central Library"]))
+
+                # Library approves again: it clears again, without a second refund.
+                for code in (SECTION_LIBRARY, SECTION_ACCOUNTS, SECTION_ADMINISTRATION):
+                    self.approve(req, code)
+                req.refresh_from_db()
+                self.assertEqual(req.overall_status, OVERALL_CLEARED)
+                self.assertEqual(Refund.objects.filter(request=req).count(), 1)
