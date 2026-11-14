@@ -22,7 +22,7 @@ The system is purpose-built around LNMIIT's own clearance order and section resp
 
 ## Section Flow
 
-The clearance follows the institute's "Order of No Dues." Independent sections — now including HOD — review in parallel. Once Library, TPC, Warden and HOD have approved, **Accounts and Administration open together and run side by side**, and neither waits for the other. The request is cleared once every section has approved. Every section supports approve/reject with a mandatory reason and a two-way comment thread (omitted from the diagram for readability).
+The clearance follows the institute's "Order of No Dues." Independent sections — now including HOD — review in parallel. Once Library, TPC (graduation only), Warden and HOD have approved, **Accounts and Administration open together and run side by side**, and neither waits for the other. The request is cleared once every section has approved. Every section supports approve/reject with a mandatory reason and a two-way comment thread (omitted from the diagram for readability).
 
 ```mermaid
 flowchart TD
@@ -181,6 +181,23 @@ Sections are grouped into stages. A section becomes actionable only when its pre
 - **Accounts** depends on: Library, TPC, Warden, HOD.
 - **Administration** depends on: Library, TPC, Warden, HOD, the same as Accounts. The two run side by side, and neither waits for the other. (Administration used to come after Accounts.)
 - **Cleared** means every section of the request is `APPROVED`. No single section stands for "all green" any more (see [Final clearance](#final-clearance)).
+
+#### Each exit type has its own graph
+
+The sections a request goes through depend on its exit type (`engine.REQUIRED_SECTIONS`): a graduation has all eleven, while an NEP exit, a withdrawal or an admission cancel has no TPC (no placement obligation). The prerequisites follow: `engine.prerequisites(section, exit_type)` leaves out an *optional* prerequisite the exit type doesn't have (`OPTIONAL_PREREQUISITES = {TPC}`), so for those three Accounts and Administration wait for **Library, Warden and HOD** only. `engine.workflow(exit_type)` is one exit type's whole graph, `{section: [prerequisites]}`, and everything that asks "is this section ready?" asks it of that graph:
+- `actionable()` and the student's lock messages (`waiting_for`);
+- the officer desk's "Waiting for …" (`stage.blocked_by`);
+- Administration's "send the next N to staff" (`staff.ready_for_staff`);
+- the reverse cascade (`downstream_closure(section, exit_type)`).
+
+This fixed a real bug: before it, every exit type waited for TPC, so a student on an NEP exit, a withdrawal or an admission cancel (who has no TPC section) could never reach Accounts or Administration, and never be cleared.
+
+**Validation — Kahn's algorithm.** `engine.analyze_workflow(graph)` runs Kahn's topological sort over a graph, in O(V + E). It repeatedly takes a section whose prerequisites are all done. It returns:
+- an approval order;
+- the **missing dependencies**: a prerequisite that isn't in the graph, which is the bug above;
+- the sections **blocked by a cycle**: whatever the sort can never take.
+
+`engine.workflow_problems()` runs it for every exit type, and Django's system check (`main/checks.py`, error `main.E001`) runs that before `runserver`, `migrate` and `test`. So a broken workflow stops the app from starting, rather than stranding students. Only an *optional* prerequisite may be absent from an exit type; dropping any other one (say, removing HOD from withdrawals by mistake) is reported, not silently waived. `main/tests.py` (`WorkflowGraphTests`, `ExitTypeClearanceTests`) clears a request of every exit type end to end, in the order Kahn gives.
 
 HOD is independent of the other sections, not a consolidator — it does not wait on Store/LUCS/Sports/Medical/NAD, and doesn't display their status either; its review screen shows only its own section, plus its department's lab chain. There is no remaining link between HOD and those five sections at all. The only sections HOD gates are **Accounts** and **Administration**, the same as Library, TPC and Warden do.
 
@@ -640,7 +657,11 @@ If a fully approved Accounts row leaves `APPROVED`, its `StageApproval`s are del
 
 ### Property 22: Accounts and Administration side by side
 
-For any request, Accounts and Administration are actionable under the same condition: Library, TPC, Warden and HOD `APPROVED`. Neither section's status affects the other's actionability, and Accounts leaving `APPROVED` does not reset Administration (or vice versa). Either one leaving `APPROVED` still invalidates the certificate, since `CLEARED` needs every section.
+For any request, Accounts and Administration are actionable under the same condition: Library, Warden and HOD `APPROVED`, plus TPC when the request's exit type has it (graduation). Neither section's status affects the other's actionability, and Accounts leaving `APPROVED` does not reset Administration (or vice versa). Either one leaving `APPROVED` still invalidates the certificate, since `CLEARED` needs every section.
+
+### Property 22a: Every exit type can be cleared
+
+For every exit type, `engine.workflow(exit_type)` is a DAG with no missing dependencies: Kahn's algorithm orders all of its sections, and every prerequisite of a section is itself a section of that exit type. Hence a request of any exit type can reach `CLEARED`, and each section is actionable exactly when its prerequisites for that exit type are `APPROVED` (`main/tests.py::ExitTypeClearanceTests`; checked at startup by `main/checks.py`).
 
 ### Property 23: Administration's checklist gates its approval
 
@@ -701,7 +722,7 @@ Focus areas: hierarchy invariants (P2–P4), scoping (P5–P6), certificate gati
 
 ### Integration Testing Approach
 
-- End-to-end clearance for each exit type: initiate → upload → parallel section approvals (including HOD, independent) → Accounts → Administration → certificate download.
+- End-to-end clearance for each exit type: initiate → upload → parallel section approvals (including HOD, independent) → Accounts → Administration → certificate download. Implemented in `ExitTypeClearanceTests`: every exit type, approvals in Kahn's order through the API, each section's `actionable` checked at every step, then a reopen and re-clear.
 - Reverse-cascade scenario: clear through Administration, reopen an upstream section, assert downstream reset and certificate invalidation.
 - Access-control scenarios: cross-hostel and cross-department attempts via direct URLs; unauthorized document download attempts.
 
