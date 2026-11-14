@@ -1,7 +1,7 @@
 // ─── API client for the redesigned Django backend (via Vite proxy at /api) ────
 import {
     CurrentUser, RoleType, StudentRequestResponse, SectionQueue,
-    SectionReview, ExitType, CertificateData,
+    SectionReview, ExitType, CertificateData, HodLab, StaffMember, ChecklistEntry, RefundRow,
 } from './types';
 
 function getCookie(name: string): string | null {
@@ -89,8 +89,102 @@ export const api = {
     // Officer
     sectionQueue: () => request<SectionQueue>('/api/section/queue/'),
     sectionReview: (requestId: number) => request<SectionReview>(`/api/section/review/?request_id=${requestId}`),
-    approve: (requestId: number) =>
-        request<{ ok: boolean; status: string }>('/api/section/approve/', { method: 'POST', body: JSON.stringify({ request_id: requestId }) }),
+    // `level`: the Accounts chain step the officer saw the request at (so a request
+    // that moved on meanwhile isn't approved a step further by mistake).
+    approve: (requestId: number, level?: number | null) =>
+        request<{ ok: boolean; status: string }>('/api/section/approve/', {
+            method: 'POST',
+            body: JSON.stringify(level === undefined || level === null ? { request_id: requestId } : { request_id: requestId, level }),
+        }),
     reject: (requestId: number, reason: string) =>
         request<{ ok: boolean; status: string }>('/api/section/reject/', { method: 'POST', body: JSON.stringify({ request_id: requestId, reason }) }),
+
+    // Student — department lab chain (HOD card)
+    sendToLabs: () =>
+        request<StudentRequestResponse & { sent_to: string[] }>('/api/student/labs/send/', { method: 'POST' }),
+    resendToLab: (labId: number) =>
+        request<StudentRequestResponse>('/api/student/labs/resend/', { method: 'POST', body: JSON.stringify({ lab_id: labId }) }),
+    labCommentFromStudent: (labId: number, body: string) =>
+        request<{ ok: boolean }>('/api/student/labs/comment/', { method: 'POST', body: JSON.stringify({ lab_id: labId, body }) }),
+
+    // Lab in-charge
+    labQueue: () => request<SectionQueue>('/api/lab/queue/'),
+    labReview: (requestId: number) => request<SectionReview>(`/api/lab/review/?request_id=${requestId}`),
+    labApprove: (requestId: number) =>
+        request<{ ok: boolean; status: string }>('/api/lab/approve/', { method: 'POST', body: JSON.stringify({ request_id: requestId }) }),
+    labReject: (requestId: number, reason: string) =>
+        request<{ ok: boolean; status: string }>('/api/lab/reject/', { method: 'POST', body: JSON.stringify({ request_id: requestId, reason }) }),
+    labComment: (requestId: number, body: string) =>
+        request<{ ok: boolean }>('/api/lab/comment/', { method: 'POST', body: JSON.stringify({ request_id: requestId, body }) }),
+
+    // HOD — manage the department's labs
+    hodLabs: () => request<{ department: string; labs: HodLab[] }>('/api/hod/labs/'),
+    hodAddLab: (lab: { name: string; incharge_name: string; email: string; password: string; level: number }) =>
+        request<{ lab: HodLab }>('/api/hod/labs/', { method: 'POST', body: JSON.stringify(lab) }),
+    hodUpdateLab: (id: number, changes: Partial<{ name: string; incharge_name: string; email: string; level: number; password: string; is_active: boolean }>) =>
+        request<{ lab: HodLab }>(`/api/hod/labs/${id}/`, { method: 'PATCH', body: JSON.stringify(changes) }),
+    hodRemoveLab: (id: number) =>
+        request<{ ok: boolean; outcome: 'deleted' | 'deactivated'; released: number }>(`/api/hod/labs/${id}/`, { method: 'DELETE' }),
+
+    // Section head (library@ / lucs@ / nad@) — send requests to staff, manage staff
+    sendToStaff: (staffId: number, count: number) =>
+        request<{ ok: boolean; moved: number; to: { id: number; name: string } | null }>('/api/section/assign/', {
+            method: 'POST', body: JSON.stringify({ staff_id: staffId, count }),
+        }),
+    moveRequests: (requestIds: number[], staffId: number | null) =>
+        request<{ ok: boolean; moved: number; to: { id: number; name: string } | null }>('/api/section/assign/', {
+            method: 'POST', body: JSON.stringify({ request_ids: requestIds, staff_id: staffId }),
+        }),
+    sectionStaff: () => request<{
+        section: string; staff: StaffMember[];
+        head_waiting: number;                                 // levels: waiting for the head's final approval
+        checklist: { id: number; label: string }[] | null;   // Administration only
+        refund_senders: string[] | null;                      // Accounts only: who sends refunds
+    }>('/api/section/staff/'),
+    addStaff: (member: { name: string; email: string; password: string; level?: number; refund_manager?: boolean }) =>
+        request<{ staff: StaffMember }>('/api/section/staff/', { method: 'POST', body: JSON.stringify(member) }),
+    updateStaff: (id: number, changes: Partial<{ name: string; email: string; password: string; level: number; refund_manager: boolean; is_active: boolean }>) =>
+        request<{ staff: StaffMember }>(`/api/section/staff/${id}/`, { method: 'PATCH', body: JSON.stringify(changes) }),
+    removeStaff: (id: number) =>
+        request<{ ok: boolean; outcome: 'deleted' | 'deactivated'; returned: number }>(`/api/section/staff/${id}/`, { method: 'DELETE' }),
+
+    // Administration checklist — its office ticks items per request; the head manages the list
+    tickChecklist: (requestId: number, itemId: number, done: boolean) =>
+        request<{ ok: boolean; checklist: ChecklistEntry[] }>('/api/section/checklist/tick/', {
+            method: 'POST', body: JSON.stringify({ request_id: requestId, item_id: itemId, done }),
+        }),
+    addChecklistItem: (label: string) =>
+        request<{ item: { id: number; label: string } }>('/api/section/checklist/', { method: 'POST', body: JSON.stringify({ label }) }),
+    removeChecklistItem: (id: number) =>
+        request<{ ok: boolean; outcome: 'deleted' | 'deactivated' }>(`/api/section/checklist/${id}/`, { method: 'DELETE' }),
+
+    // Refunds — whoever sends them records each one paid (or none due), or sends it back
+    refunds: () => request<{ pending: RefundRow[]; sent: RefundRow[]; modes: string[] }>('/api/accounts/refunds/'),
+    recordRefund: (body: { request_id: number; amount?: string; mode?: string; reference?: string; paid_on?: string; no_refund?: boolean }) =>
+        request<{ ok: boolean; refund: RefundRow['refund'] }>('/api/accounts/refunds/', { method: 'POST', body: JSON.stringify(body) }),
+    rejectRefund: (requestId: number, reason: string) =>
+        request<{ ok: boolean; status: string }>('/api/accounts/refunds/', {
+            method: 'POST', body: JSON.stringify({ request_id: requestId, reject: true, reason }),
+        }),
 };
+
+/** The endpoints an officer desk acts through: sections, or a department lab. */
+export interface OfficerDesk {
+    queue: () => Promise<SectionQueue>;
+    review: (requestId: number) => Promise<SectionReview>;
+    approve: (requestId: number, level?: number | null) => Promise<{ ok: boolean; status: string }>;
+    reject: (requestId: number, reason: string) => Promise<{ ok: boolean; status: string }>;
+    comment: (requestId: number, body: string) => Promise<{ ok: boolean }>;
+}
+
+export const sectionDesk: OfficerDesk = {
+    queue: api.sectionQueue, review: api.sectionReview, approve: api.approve,
+    reject: api.reject, comment: api.officerComment,
+};
+
+export const labDesk: OfficerDesk = {
+    queue: api.labQueue, review: api.labReview, approve: api.labApprove,
+    reject: api.labReject, comment: api.labComment,
+};
+
+export const deskFor = (role: RoleType): OfficerDesk => (role === 'LAB' ? labDesk : sectionDesk);
