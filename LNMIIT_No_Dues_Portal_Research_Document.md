@@ -95,7 +95,12 @@ For each section below we answer three questions: **What does it do? · What doe
 **HOD / Department**
 - *Does:* acts as a departmental checkpoint, confirming departmental clearance.
 - *Needs:* nothing directly from the student — consolidates the sub-sections below.
-- *Found:* the HOD's approval depends on the linked subordinate clearances — Store, LUCS, Sports, Medical Cell, and NAD Cell — so the HOD is not re-doing each office's work, only confirming it after those steps are satisfied. A dedicated [department-purpose no-dues form](./LNMIIT_DOCUMENTS/IMG-20260628-WA0008.jpg) upload was originally scoped here too, but implemented instead as optional: if an HOD needs something specific from a student, they request it through the section's comment thread rather than a blocking upload gate.
+- *Found:* the HOD's approval depends on the linked subordinate clearances — Store, LUCS, Sports, Medical Cell, and NAD Cell — so the HOD is not re-doing each office's work, only confirming it after those steps are satisfied. The [department-purpose no-dues form](./LNMIIT_DOCUMENTS/IMG-20260628-WA0008.jpg) has every lab in-charge sign for their lab before the HOD signs. It was first scoped as a signed-sheet upload, then dropped, and is now digitized directly as an HOD-managed lab hierarchy:
+  - each HOD registers their department's labs, which creates each in-charge's portal login, and arranges them in levels;
+  - labs on a level review the request in parallel, and the next level opens only when they all approve;
+  - the HOD approves last.
+
+  See [`docs/DESIGN.md` § Department labs](./docs/DESIGN.md#department-labs-hod-managed-hierarchy).
 
 **Accounts**
 - *Does:* handles the financial clearance and refund stage.
