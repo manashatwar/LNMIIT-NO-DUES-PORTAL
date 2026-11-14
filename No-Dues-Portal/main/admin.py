@@ -2,7 +2,8 @@ from django.contrib import admin
 
 from .models import (
     Department, Hostel, Section, UserProfile, Student,
-    ClearanceRequest, SectionStatus, Document, Comment, Certificate,
+    ClearanceRequest, SectionStatus, Document, Comment, Certificate, Lab, LabStatus, StageApproval,
+    ChecklistItem, ChecklistTick, Refund,
 )
 
 
@@ -24,7 +25,7 @@ class SectionAdmin(admin.ModelAdmin):
 
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
-    list_display = ("user", "role", "hostel", "department")
+    list_display = ("user", "role", "hostel", "department", "managed_by", "staff_level")
     list_filter = ("role",)
 
 
@@ -39,17 +40,60 @@ class SectionStatusInline(admin.TabularInline):
     extra = 0
 
 
+class LabStatusInline(admin.TabularInline):
+    model = LabStatus
+    extra = 0
+
+
 @admin.register(ClearanceRequest)
 class ClearanceRequestAdmin(admin.ModelAdmin):
     list_display = ("id", "student", "exit_type", "overall_status", "is_active", "created_at")
     list_filter = ("exit_type", "overall_status", "is_active")
-    inlines = (SectionStatusInline,)
+    inlines = (SectionStatusInline, LabStatusInline)
 
 
 @admin.register(SectionStatus)
 class SectionStatusAdmin(admin.ModelAdmin):
-    list_display = ("request", "section", "status", "decided_by", "decided_at")
+    list_display = ("request", "section", "status", "assigned_to", "decided_by", "decided_at")
     list_filter = ("status", "section")
+
+
+# Labs are normally added by the department's HOD in the portal ("Manage Labs"),
+# which also creates the in-charge's login; this admin is for inspection/repair.
+@admin.register(Lab)
+class LabAdmin(admin.ModelAdmin):
+    list_display = ("name", "department", "level", "incharge_name", "user", "is_active")
+    list_filter = ("department", "is_active")
+    search_fields = ("name", "incharge_name", "user__username")
+    ordering = ("department", "level", "name")
+
+
+@admin.register(StageApproval)
+class StageApprovalAdmin(admin.ModelAdmin):
+    list_display = ("section_status", "level", "approved_by", "approved_at")
+
+
+@admin.register(Refund)
+class RefundAdmin(admin.ModelAdmin):
+    list_display = ("request", "amount", "mode", "reference", "paid_on", "recorded_by", "recorded_at")
+    search_fields = ("reference", "request__student__roll_no")
+
+
+@admin.register(ChecklistItem)
+class ChecklistItemAdmin(admin.ModelAdmin):
+    list_display = ("label", "section", "order", "is_active")
+    list_filter = ("section", "is_active")
+
+
+@admin.register(ChecklistTick)
+class ChecklistTickAdmin(admin.ModelAdmin):
+    list_display = ("section_status", "item", "ticked_by", "ticked_at")
+
+
+@admin.register(LabStatus)
+class LabStatusAdmin(admin.ModelAdmin):
+    list_display = ("request", "lab", "level", "status", "sent_at", "decided_by", "decided_at")
+    list_filter = ("status", "lab__department")
 
 
 admin.site.register(Document)
