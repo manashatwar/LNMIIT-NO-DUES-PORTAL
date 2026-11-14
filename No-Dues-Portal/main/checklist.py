@@ -12,6 +12,7 @@ Ticks survive a reopen: what was handed in stays handed in.
 from django.db import transaction
 
 from .models import ChecklistItem, ChecklistTick, Section, SECTION_ADMINISTRATION, STATUS_PENDING
+from .prefetch import prefetched
 
 CHECKLIST_SECTIONS = [SECTION_ADMINISTRATION]
 DEFAULT_ITEMS = {SECTION_ADMINISTRATION: ["Physical ID card submitted"]}
@@ -41,7 +42,8 @@ def entries(ss, active_items=None):
         active_items = items(ss.section.code)
     if not active_items:
         return []
-    ticks = {t.item_id: t for t in ss.checklist_ticks.select_related("ticked_by")}
+    loaded = prefetched(ss, "checklist_ticks")
+    ticks = {t.item_id: t for t in (loaded if loaded is not None else ss.checklist_ticks.select_related("ticked_by"))}
     rows = []
     for item in active_items:
         tick = ticks.get(item.id)
