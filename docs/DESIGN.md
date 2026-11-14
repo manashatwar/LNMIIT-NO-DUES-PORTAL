@@ -8,6 +8,8 @@ For the system architecture (the React SPA + Django JSON API split, request life
 
 The LNMIIT No Dues Portal digitizes the institute's student clearance ("No Dues") process end to end. A student initiates a request, selects an exit type, uploads the proof each section requires, and every institutional section independently approves or rejects with a mandatory written reason. Approvals follow a fixed dependency hierarchy; a reverse-hierarchy cascade keeps the final status trustworthy by resetting downstream approvals when an upstream section reopens. Once every required section is cleared, the student downloads a No-Dues certificate.
 
+On top of the fixed sections, each department's HOD maintains its own **lab hierarchy** (see [Department labs](#department-labs-hod-managed-hierarchy)). This replaces the paper "No Dues Form for Department Purpose". The student's request passes through those labs level by level before the HOD can approve, and each lab in-charge decides in the portal with a login the HOD created.
+
 The system is purpose-built around LNMIIT's own clearance order and section responsibilities — four departments (CCE, CSE, ECE, MME), six hostels (BH1–BH5, GH1), and alphanumeric roll numbers (e.g. `24UCC174`). OCR (via `pytesseract`) is used as an advisory review aid.
 
 **Stack**
@@ -20,7 +22,7 @@ The system is purpose-built around LNMIIT's own clearance order and section resp
 
 ## Section Flow
 
-The clearance follows the institute's "Order of No Dues." Independent sections — now including HOD — review in parallel; Accounts consolidates Library/TPC/Warden/HOD; Administration gives final approval. Every section supports approve/reject with a mandatory reason and a two-way comment thread (omitted from the diagram for readability).
+The clearance follows the institute's "Order of No Dues." Independent sections — now including HOD — review in parallel. Once Library, TPC, Warden and HOD have approved, **Accounts and Administration open together and run side by side**, and neither waits for the other. The request is cleared once every section has approved. Every section supports approve/reject with a mandatory reason and a two-way comment thread (omitted from the diagram for readability).
 
 ```mermaid
 flowchart TD
@@ -35,25 +37,40 @@ flowchart TD
     C --> SPO[Sports + GSAC Gen. Secretary]
     C --> MED[Medical Cell]
     C --> NAD[NAD Cell]
-    C --> HOD[HOD — CCE/CSE/ECE/MME<br/>independent, parallel to Store/LUCS/Sports/Medical/NAD]
+    C --> LABS[Department labs — levels set by each HOD<br/>same level in parallel · next level after all approve]
+    LABS --> HOD[HOD — CCE/CSE/ECE/MME<br/>after its labs · parallel to Store/LUCS/Sports/Medical/NAD]
 
-    LIB --> ACC[Accounts<br/>cancelled cheque + refund]
+    LIB --> ACC[Accounts — staff levels<br/>cancelled cheque + refund]
     TPC --> ACC
     WAR --> ACC
     HOD --> ACC
+    LIB --> ADM[Administration — staff by hand<br/>office checklist: physical ID card]
+    TPC --> ADM
+    WAR --> ADM
+    HOD --> ADM
 
-    ACC --> ADM{Administration<br/>final approval — all green?}
-    ADM -->|Yes| CERT([Download No-Dues Certificate<br/>+ Fund Us])
-    ADM -->|Any section reverts to due| RC[Reverse-hierarchy cascade:<br/>downstream approvals reset to pending]
+    ACC --> ALL{Every section<br/>approved?}
+    ADM --> ALL
+    STO --> ALL
+    LUCS --> ALL
+    SPO --> ALL
+    MED --> ALL
+    NAD --> ALL
+    ALL -->|Yes| REF[Accounts sends the refund<br/>records amount + UTR · student told]
+    REF --> CERT([Download No-Dues Certificate<br/>+ Fund Us + refund])
+    ALL -->|Any section reverts to due| RC[Reverse-hierarchy cascade:<br/>downstream approvals reset to pending]
     RC -.-> ACC
+    RC -.-> ADM
 
     classDef sec fill:#e8f1ff,stroke:#1f6feb,color:#0f2748;
     classDef gate fill:#fdf3e2,stroke:#b7791f,color:#0f2748;
     classDef done fill:#e4f6ec,stroke:#1a8f4c,color:#0f2748;
-    class LIB,TPC,WAR,STO,LUCS,SPO,MED,NAD,HOD,ACC sec;
-    class ADM gate;
+    class LIB,TPC,WAR,STO,LUCS,SPO,MED,NAD,LABS,HOD,ACC,ADM,REF sec;
+    class ALL gate;
     class CERT done;
 ```
+
+> **Department labs replace the paper department form.** The "No Dues Form for Department Purpose" ([photo](../LNMIIT_DOCUMENTS/IMG-20260628-WA0008.jpg)) listed a department's labs (for ECE: Microwave, ADC, TI, DSP, E-CAD, BE). Each lab's in-charge signed it, then the HOD. Each HOD now keeps that list in the portal and arranges it in levels. A department with no labs set up behaves exactly as described below: HOD acts directly. See [Department labs](#department-labs-hod-managed-hierarchy).
 
 > **HOD is fully independent of Store/LUCS/Sports/Medical/NAD.** It used to require all five `APPROVED` before HOD could act (a consolidator, shown as a gate node); it's now an independent section like they are, actionable in parallel — HOD's own approval no longer waits on them. This was tried first as "still visible, just not blocking" (an informational-only panel on HOD's review screen), then explicitly removed too — HOD's review screen now only ever shows its own section, the same as Store/LUCS/Sports/Medical/NAD's screens already show for each other. Department-Purpose (a dedicated "HOD form" upload) was separately removed as a mandatory gate — HOD no longer requires its own document upload either. LUCS was also converted from an upload section to a confirm-only one (name/roll, like Store/Sports/Medical/NAD). If an HOD genuinely needs something from a student, they ask for it via the existing section comment thread (`main/api.py::officer_comment` / `student_comment`) rather than a blocking upload requirement.
 
@@ -93,7 +110,20 @@ class ApprovalEngine:
         """Transitive set of sections that depend (directly or indirectly) on `section`."""
 
     def recompute_overall(self, request: ClearanceRequest) -> None:
-        """Set overall_status CLEARED iff Administration is APPROVED, else IN_PROGRESS."""
+        """Set overall_status CLEARED iff every section of the request is APPROVED, else IN_PROGRESS."""
+
+    # ── Department labs (engine.py § Department labs) ──
+    def send_next_lab_level(self, request: ClearanceRequest, actor: User) -> list[LabStatus]:
+        """Student: on first call copy the department's labs into the request's chain;
+        send the lowest unsent level, refused while any earlier-level lab isn't APPROVED."""
+
+    def lab_actionable(self, lab_status: LabStatus) -> bool:
+        """True iff the request was sent to this lab and every earlier-level lab is APPROVED."""
+
+    def approve_lab(self, lab_status: LabStatus, actor: User) -> None: ...
+    def reject_lab(self, lab_status: LabStatus, actor: User, reason: str) -> None: ...
+    def resend_lab(self, lab_status: LabStatus, actor: User) -> None:
+        """Student: a REJECTED lab goes back to PENDING."""
 ```
 
 **Responsibilities**:
@@ -146,11 +176,13 @@ class OcrService:
 
 Sections are grouped into stages. A section becomes actionable only when its prerequisites are `APPROVED`.
 
-- **Independent sections** (actionable immediately after submission): Library, TPC, Warden, Store, LUCS, Sports, Medical, NAD, **HOD**.
+- **Independent sections** (actionable immediately after submission): Library, TPC, Warden, Store, LUCS, Sports, Medical, NAD, **HOD** (HOD waits only on its own department's labs, if the HOD has set any up).
+- **HOD** depends on: every lab in the student's department lab chain — level by level (see [Department labs](#department-labs-hod-managed-hierarchy)). No labs set up → no prerequisite.
 - **Accounts** depends on: Library, TPC, Warden, HOD.
-- **Administration** depends on: Accounts and, transitively, everything upstream.
+- **Administration** depends on: Library, TPC, Warden, HOD, the same as Accounts. The two run side by side, and neither waits for the other. (Administration used to come after Accounts.)
+- **Cleared** means every section of the request is `APPROVED`. No single section stands for "all green" any more (see [Final clearance](#final-clearance)).
 
-HOD is independent, not a consolidator — it does not wait on Store/LUCS/Sports/Medical/NAD, and (as of this pass) doesn't display their status either; its review screen shows only its own section, exactly like Store/LUCS/Sports/Medical/NAD's screens show for each other. There is no remaining link between HOD and those five sections at all. The only thing HOD still gates is **Accounts**, same as Library/TPC/Warden do.
+HOD is independent of the other sections, not a consolidator — it does not wait on Store/LUCS/Sports/Medical/NAD, and doesn't display their status either; its review screen shows only its own section, plus its department's lab chain. There is no remaining link between HOD and those five sections at all. The only sections HOD gates are **Accounts** and **Administration**, the same as Library, TPC and Warden do.
 
 ```mermaid
 flowchart TD
@@ -159,11 +191,15 @@ flowchart TD
     SPO[Sports]
     MED[Medical]
     NAD[NAD]
+    LABS[Department labs<br/>level 1 → … → level N] --> HOD
     LIB[Library] --> ACC[Accounts]
     TPC[TPC] --> ACC
     WAR[Warden] --> ACC
     HOD[HOD] --> ACC
-    ACC --> ADM[Administration]
+    LIB --> ADM[Administration]
+    TPC --> ADM
+    WAR --> ADM
+    HOD --> ADM
 ```
 
 `Store`, `LUCS`, `Sports`, `Medical`, `NAD` are drawn with no connection to `HOD` deliberately — there isn't one, gating or otherwise.
@@ -201,6 +237,8 @@ An officer may set a `SectionStatus` to `APPROVED` only if both hold:
 
 A `REJECTED` decision requires a non-empty `Comment`; the reject action and the comment are written in a single transaction.
 
+The same two rules apply to department labs. A lab in-charge acts only on requests the student has sent to **their own** lab. They may approve only when every lab on an earlier level of that request is `APPROVED`. Rejecting needs a reason.
+
 ### Reverse-hierarchy cascade
 
 When a section that was `APPROVED` changes to `REJECTED` or `PENDING`, every section that transitively depends on it is reset to `PENDING`.
@@ -226,9 +264,69 @@ def on_status_change(section_status, previous):
 
 `downstream_closure` is computed from the dependency graph. The cascade runs inside the same DB transaction as the triggering change so the matrix is never left inconsistent.
 
+### Department labs (HOD-managed hierarchy)
+
+The digital form of the paper "No Dues Form for Department Purpose". Code: `main/engine.py` § Department labs (approval rules), `main/labs.py` (HOD lab management), `Lab` / `LabStatus` in `main/models.py`.
+
+```mermaid
+flowchart LR
+    S([Student sends from<br/>HOD card · Page 3]) --> L1
+    subgraph L1[Level 1 — together]
+        MW[Microwave Lab]
+        ADC[ADC Lab]
+        TI[TI Lab]
+    end
+    L1 -->|every lab approved| L2
+    subgraph L2[Level 2]
+        DSP[DSP Lab]
+    end
+    L2 -->|every lab approved| L3
+    subgraph L3[Level 3 — together]
+        ECAD[E-CAD Lab]
+        BE[BE Lab]
+    end
+    L3 -->|every lab approved| HOD[HOD — final departmental approval]
+    HOD --> ACC[Accounts]
+```
+
+- **Setting up labs (HOD → Manage labs).**
+  - An HOD adds labs to their own department only. Each lab has a name, an in-charge name, a login email, a password, and a level.
+  - Adding a lab also creates the in-charge's portal login: a Django `User` whose username is that email, with role `LAB`. The password must pass Django's password validators and is stored hashed.
+  - The HOD can edit any of these fields, reset the password, or remove the lab.
+- **Levels.** Labs that share a level number receive the request together. A higher level receives it only after **every** lab on the lower levels has approved. HOD approves after the last level. Gaps in the numbering (1, 3, …) are allowed.
+- **Sending.** The student moves the request along from the HOD card on Page 3, which opens once Library/TPC/Warden approve (checked server-side too).
+  - The first send copies the department's current labs into one `LabStatus` per lab, recording each lab's level at that moment, and sends level 1.
+  - Each later send releases the next level, and is refused while any earlier-level lab isn't `APPROVED`.
+  - A lab only sees a request once it has been sent to it.
+- **HOD edits don't reshuffle students already in progress.** Because levels are copied at the first send, re-levelling, adding, or editing a lab only affects students who haven't started their lab chain yet.
+- **Decisions.**
+  - A lab in-charge approves ("no dues") or rejects ("dues") with a mandatory reason. Each lab has its own two-way message thread with the student.
+  - A rejected lab shows its reason on the student's HOD card, and the student can **re-send** to that lab, which puts it back to `PENDING`.
+- **Cascade.** If a lab leaves `APPROVED`, every `APPROVED` lab on a later level of that request resets to `PENDING`, and so does HOD. HOD's own cascade then resets Accounts/Administration and invalidates any certificate, all in one transaction. Labs on the same level are untouched. Reset labs keep their "sent" state, so they can approve again as soon as the earlier lab does.
+- **Removing a lab.**
+  - The lab stops blocking any in-progress request it hasn't approved yet; those rows are dropped, and a system note is added to the HOD thread.
+  - Its login is disabled.
+  - If no request ever involved the lab, the lab and its login are deleted outright. Otherwise it's kept as "removed", restorable from Manage labs, so past approvals stay on record.
+- **No labs.** A department without labs behaves exactly as before: HOD acts directly. An HOD approval given before the department set up labs is left as it is.
+
 ### Final clearance
 
-`overall_status` becomes `CLEARED` only when Administration is `APPROVED` (which, by the dependency graph, guarantees all other required sections are `APPROVED`). Certificate generation is gated on `CLEARED`.
+`overall_status` becomes `CLEARED` only when **every** section of the request is `APPROVED` **and** Accounts has recorded the student's [refund](#refund) as sent, or as not due (`engine.recompute_overall`, re-run after every decision). This used to be "Administration is `APPROVED`", which held while Administration came after Accounts. With the two side by side, an Administration approval no longer implies the rest are green. That old rule also never covered Store, LUCS, Sports, Medical or NAD once HOD stopped waiting for them. Certificate generation is gated on `CLEARED`, and any section leaving `APPROVED` invalidates an issued certificate.
+
+### Refund
+
+Code: `main/refunds.py`, `Refund` (one per request), and the **Refund** column of the **✅ Approved** tab for whoever sends refunds (`components/RefundCell.tsx`).
+
+- **When.** Once every section has approved a request, it waits for its refund. The student's Page 5 says "Every section has approved ✓. Waiting for Accounts to send your refund of ₹…", and the certificate stays locked.
+- **Who sends refunds.** `accounts@`, always: it is permanently Accounts' **refund manager**, just as it is permanently its final approver. It can also make staff members refund managers (`UserProfile.is_refund_manager`, the checkbox under **Edit** on their card); they then send refunds as well. Worked out live (`refunds.senders()`), and Manage staff shows who sends them.
+- **Where.** There's no separate Refunds tab: refunds are sent from the **✅ Approved** tab.
+  - For whoever sends refunds, Approved lists **every** request Accounts has approved, not only the ones they approved themselves. The tab label shows how many are ready ("✅ Approved (4) · 💸 2 to send").
+  - The table is cut down to the refund: the student, a **Refund** column and an **Action** column (no Stage, Status or Chat). The Refund column shows "⏳ Waiting for Store, LUCS, …" while other sections haven't approved; the bank account and a pay form (amount, mode, date, UTR) once it's ready; "Sent ₹… · UTR …"; or "No refund due".
+  - The sender may open these requests (review, messages, the cancelled-cheque document) even if they never approved them, since they need the bank details to pay. Everyone else's Approved tab is unchanged.
+- **Three actions.** **Mark refund sent**, **No refund due** and **Reject**. The first two are greyed out, with the reason as a tooltip, until every section has approved. **Reject** asks for a reason and sends Accounts back to the student (`refunds.reject`, then the usual rejection), e.g. when the cheque's bank details are wrong. The student fixes them and the request goes through Accounts' levels again. Reject works only while no refund is recorded.
+- **Paying it.** Each ready row shows the bank account from the student's confirmed cancelled cheque, and an amount pre-filled as the ₹10,000 caution money less the Fund-Us donation; it can be changed when dues were deducted. After paying from the bank, Accounts records the amount, mode (NEFT / IMPS / RTGS / UPI / cheque), the bank's **UTR / transaction reference** and the payment date. The date can't be in the future; "today" is the institute's (India) date. Or it records **No refund due**.
+- **Telling the student.** Recording it clears the request, so the certificate unlocks. The student sees a green banner on every page ("💸 Your refund of ₹9,000.00 has been sent to your account ••••0001 by NEFT on … · UTR …"), the Refund Ledger on Page 4 shows it as paid, and a note is added to their Accounts messages. The certificate shows the refund line. There's no email (yet).
+- **Corrections and reopens.** A recorded refund is never removed, since the money can't be unsent. The desk has no Correct button. A mistyped UTR is fixed in the Django admin (`Refund`), or by recording the refund again through the API, which updates the record and notes the change to the student. If a section reopens afterwards, the certificate is withdrawn as usual, and on re-approval the request clears again without a second payment.
 
 ## Routing & Scoping
 
@@ -238,11 +336,68 @@ A warden's queue is `SectionStatus` rows where `section = Warden` and `request.s
 
 ### Department-scoped HOD queues
 
-An HOD's queue is filtered by `request.student.department == hod.department`. Unlike Warden (which is otherwise unrestricted once confirmed), HOD is independent rather than gated on other sections (see [Approval Engine](#approval-engine)), so every department-scoped request appears as soon as it's confirmed — `actionable` is `true` immediately, not dependent on Store/LUCS/Sports/Medical/NAD.
+An HOD's queue is filtered by `request.student.department == hod.department`. HOD is not gated on other sections (see [Approval Engine](#approval-engine)). For a department **without labs**, every department-scoped request is actionable as soon as it's confirmed, not dependent on Store/LUCS/Sports/Medical/NAD. For a department **with labs**, the HOD desk lists the request under **In labs**, with lab-by-lab progress, until every lab in its chain approves. Only then does it move to **Incoming**, with Approve enabled. The server refuses an early approve either way.
+
+### Lab in-charge queues
+
+A lab login is tied to exactly one lab (`Lab.user`), so the lab, and with it the department, always comes from the session, never from the request body. Its queue holds only active requests that a student has **sent** to that lab. Approve is disabled while an earlier-level lab of that request isn't approved. Lab logins can't reach the section endpoints, and section officers can't reach the lab endpoints.
+
+### Section staff (Library, LUCS, NAD Cell, Administration)
+
+Code: `main/staff.py`, enabled through `STAFF_SECTIONS = [LIBRARY, LUCS, NAD, ACCOUNTS, ADMINISTRATION]`. Adding another section code there is all that's needed to extend it. Library, LUCS, NAD Cell and Administration work **by hand**, as described below. Accounts works **by level**; see the next section.
+
+- **Head.** Each of those sections' own account — `library@`, `lucs@`, `nad@`, `admin.office@` — is its **head**: its `UserProfile.managed_by` is empty. Every request reaches the head first, exactly as before.
+- **Staff.** The head adds staff in **Manage staff**. Each staff member gets a login with the **same role** as the head (`LIBRARY` / `LUCS` / `NAD` / `ADMINISTRATION`), so they sign in as that section. Their profile records the head in `managed_by`, and the password goes through Django's validators. Each head sees and manages only its own staff.
+- **Sending work.** The head records who handles a request in `SectionStatus.assigned_to`. Two ways to set it:
+  - **"Send the next N waiting requests to …"** takes the oldest unassigned `PENDING` requests that the student has fully submitted. That means Page 1 is submitted (`intake_submitted`) and the row is confirmed (`student_confirmed`). For confirm-only sections like LUCS, NAD and Administration, the row is only confirmed after the student's "Confirm & Send". For a section that waits on others (Administration: Library, TPC, Warden, HOD), those must have approved too, so staff only receive requests they can act on. Locking with skip-locked means two simultaneous sends never pick the same request.
+  - **The per-row "Handled by" menu** moves one request, or takes it back to the head.
+- **What staff can do.** A staff member's queue, review, approve/reject, and comments cover **only** requests sent to them. Anything else answers `403`. That includes documents: Administration's head can open any section's documents, but its staff only those of requests sent to them.
+  - Their decision is **final** for that section and is recorded as `decided_by = the staff member`, so the records show who approved (the certificate itself just says "Approved").
+  - The head can still decide any request directly.
+- **Re-submission.** If a student re-submits after a staff rejection, the request stays with the same staff member.
+- **Removing staff.** Removing a staff member hands everything they hadn't approved back to the head and disables their login. If they never handled anything, the login is deleted. Otherwise it's kept (restorable), so their past decisions still show who made them.
+- **Head-only actions.** Only the head can manage staff or send work. Staff never see the Manage staff tab or the send controls.
+
+### Accounts staff levels
+
+Code: `main/staff.py` (`LEVELLED_SECTIONS = [ACCOUNTS]`), `UserProfile.staff_level` (staff only), `StageApproval`.
+
+```mermaid
+flowchart LR
+    R([Request ready for Accounts<br/>Library · TPC · Warden · HOD approved<br/>+ cheque details confirmed]) --> L1[Level 1<br/>Clerk]
+    L1 -->|approves| L2[Level 2<br/>Assistant A or B]
+    L2 -->|either approves| L3[Level 3<br/>Officer]
+    L3 -->|approves| H[accounts@<br/>final approval]
+    H -->|approves| OK([Accounts APPROVED])
+```
+
+- **Setting it up.** `accounts@` adds staff in **Manage staff**, the same way as the by-hand sections, but each person also gets a **level**. Several people can share a level.
+- **When a request is ready.** A request is ready for the levels once it's `PENDING` and actionable: Library, TPC, Warden and HOD are approved, and the student's latest Accounts submission (the cancelled-cheque details) is confirmed. Until then it waits with `accounts@`, and the desk says why.
+- **Moving up.** A ready request waits at the **lowest level that hasn't approved it yet**, and everyone on that level sees it. When **either** of them approves, one `StageApproval` is recorded for that level and the request moves up.
+  - The current level is worked out live from the staff the head has now. A level with nobody on it is skipped, and nothing is stranded when people are moved or removed.
+- **The final step is always `accounts@`.** After the last level approves, the request is not yet approved: it comes to `accounts@` (`stage.final`), and **its approval approves Accounts**, with `decided_by` = `accounts@`. This is fixed: the head is never on a staff level (`staff.level_names()` lists staff only; a `staff_level` left on its own profile is ignored), and there's no setting to move it. Manage staff shows it after the last level as **Final approval** ("👑 You (main account) · 💸 Refund manager", with how many requests wait for it). With no staff levels at all, every ready request comes straight to it.
+- **Rejections.** Any level can reject, and a reason is required. The student fixes the details and confirms again. The request then returns to **the level that rejected it**, because earlier levels' approvals are kept.
+- **Re-check after a reopen.** If an Accounts row that was fully approved reopens, its level approvals are cleared and it starts again from level 1. That happens either through the reverse cascade (e.g. Library reopens) or when `accounts@` rejects it after approval.
+- **The head.** `accounts@` sees every request with its stage: for example "Level 2 of 3 · Assistant A / B", "👑 With you · final approval", or "Not ready yet" plus the reason. Its **Show** filter has "With you · final approval", one entry per configured level ("At Level 1 (4)", "At Level 2 (3)", …), and "Not ready yet", each with a count.
+  - Every Incoming row has an **Approve** button. On a request every level has approved, it is the head's final approval. On a request still at a level, the head approves that level, standing in for the people on it: that is recorded as the level's `StageApproval`, with the head as approver, and moves the request up exactly one level, so no level is ever skipped. At the last level, the head's step comes next anyway, so standing in there is also its final approval, in one click.
+  - When standing in, the desk sends the level shown on screen (`level`). If the request has moved on meanwhile, even to the head's own final step, the server refuses with `409` instead of approving a step further. An approve without `level` only gives the final approval.
+  - *Not ready yet* rows show Approve greyed out with the reason: the earlier sections still pending (`stage.blocked_by`, e.g. "Waiting for Library, TPC, Warden, HOD"), or the student's cheque details. The server refuses with `409` and the same reason.
+  - The head can always **Reject**, which sends the request back to the student. There's no "send" bar for Accounts: requests aren't sent by hand.
+- **What staff see.** Staff see the requests at their level (**Incoming**), plus those they approved a level of (**Approved**) or rejected (**Rejected**). They can open a request's documents only once it has reached them, which matters because these are bank details.
+- **What the student sees.** Just the Accounts card's status, as for any section; the levels stay internal. The certificate lists each level as "Approved" with its date; who approved stays in the records.
+
+### Administration checklist
+
+Code: `main/checklist.py`, `ChecklistItem` / `ChecklistTick`, enabled through `CHECKLIST_SECTIONS = [ADMINISTRATION]`.
+
+- **What it is.** A list of things every student must complete in person at the Administration office, starting with **"Physical ID card submitted"**. `admin.office@` manages the list under **Manage staff → Checklist at the office**. An item that was ever ticked is kept, inactive, when removed, so past ticks stay on record.
+- **Ticking.** The office ticks each item on the request, in the **Checklist** column of Incoming, when the student hands it in. Whoever can decide the request can tick it: the head, or the staff member it was sent to. Only while the request is `PENDING`.
+- **The gate.** Approve is refused (`409`, naming the missing items), for the head and staff alike, until every active item is ticked. A new item applies to requests already in progress. Ticks survive a reopen: what was handed in stays handed in.
+- **The student** sees the checklist on Page 5 ("📋 Complete at the Administration office"), with each item marked received or pending.
 
 ### Officer visibility
 
-Each officer sees only rows for their own section (and scope). Administration sees the global final-stage queue (requests where all other required sections are `APPROVED`). This is a queryset-level filter plus a per-action authorization check.
+Each officer sees only rows for their own section (and scope). This is a queryset-level filter plus a per-action authorization check. Administration's review still shows every other section's documents and status, as context for its sign-off. It no longer waits for all of them, since it runs alongside Accounts; the certificate does instead (see [Final clearance](#final-clearance)).
 
 ### Exit-type rules
 
@@ -303,7 +458,13 @@ def process_upload(uploaded_file, section_status, student):
 | `/student/dashboard` | Student | Per-section status matrix, comments, re-upload, certificate |
 | `/section/<code>/queue` | Section officer | Scoped queue of pending requests |
 | `/section/<code>/review/<id>` | Section officer | View docs + OCR, approve/reject with comment |
-| `/hod/queue` | HOD | Department-scoped consolidated queue |
+| `/hod/queue` | HOD | Department-scoped consolidated queue (Incoming · **In labs** · Approved · Rejected) |
+| HOD desk → **Manage labs** | HOD | Add / edit / re-level / remove the department's labs; creates each in-charge's login |
+| Lab desk (user type **Lab In-charge**) | Lab in-charge | Requests sent to this lab: approve, reject with reason, message the student |
+| Library / LUCS / NAD Cell desk (head: `library@`, `lucs@`, `nad@`) | Section head | Every request; **Send the next N** to a staff member; per-row **Handled by**; **Manage staff** tab |
+| Same desk (staff, same user type as the head) | Section staff | Only the requests their head sent them; approve / reject (final) |
+| Accounts desk (head, `accounts@`) | Accounts head | Every request with its **Stage** (level N of M); **Manage staff** with levels |
+| Accounts desk (staff, user type **Accounts**) | Accounts staff | Requests waiting at their level; approve (moves it up) / reject |
 | `/accounts/queue` | Accounts | Refund + cancelled-cheque review |
 | `/admin-office/queue` | Administration | Final all-green approval |
 | `/certificate/<id>` | Student | Download final certificate |
@@ -323,10 +484,13 @@ flowchart TD
 - CSRF protection on all forms (Django default); template auto-escaping for XSS; ORM parameterization against SQL injection.
 - Uploaded files are access-checked on download; sensitive fields (bank details, cancelled cheque) are visible only to Accounts and Administration.
 - All approval/rejection actions and reverse-cascade resets are recorded with actor and timestamp for an audit trail.
+- An HOD manages only their own department's labs; another department's lab id answers 404. Lab passwords go through Django's password validators and are stored hashed; the API never returns them. Removing a lab disables its login.
+- A lab in-charge sees and acts only on requests sent to their own lab. They get a read-only overview of that request's lab chain, but no documents and no other section's data.
+- Section staff (Library, LUCS, NAD Cell) see and act only on requests their head sent them, and can't manage staff or move requests. Only the head (`library@`, `lucs@`, `nad@`) can do those, on its own staff (another head's staff id is a 404).
 
 ## Correctness Properties
 
-These properties are stated for property-based testing (e.g. Hypothesis). Each should hold for all valid inputs over the domain described. **None of these are currently covered by an automated test.**
+These properties are stated for property-based testing (e.g. Hypothesis). Each should hold for all valid inputs over the domain described. **Example-based tests in `main/tests.py` cover P13–P24 (department labs, section staff, Accounts levels, Accounts and Administration side by side, the checklist, refunds), and P8.** Through the lab cascade they also cover the HOD → Accounts → Administration reset and the certificate invalidation of P4/P9. P1–P12 are otherwise not yet covered by an automated test.
 
 ### Property 1: Roll number is always text
 
@@ -400,13 +564,13 @@ assert section_status.status != "REJECTED"
 
 ### Property 8: Certificate gating
 
-A certificate exists for a request only if `overall_status == CLEARED`, which holds only if Administration is `APPROVED` and (by P3) all required sections are `APPROVED`.
+A certificate exists for a request only if `overall_status == CLEARED`. That holds only if every required section, Accounts and Administration included, is `APPROVED`, and Accounts has recorded the refund (sent, or not due).
 
 ```python
 if Certificate.objects.filter(request=req).exists():
     assert req.overall_status == "CLEARED"
-    assert section_status(req, ADMINISTRATION).status == "APPROVED"
     assert all(ss.status == "APPROVED" for ss in required_sections(req))
+    assert Refund.objects.filter(request=req).exists()
 ```
 
 ### Property 9: Certificate invalidation on reopen
@@ -431,6 +595,60 @@ Any file exceeding the configured size limit or of a disallowed type is rejected
 ### Property 12: Single active request
 
 At most one active `ClearanceRequest` exists per student at any time; re-initiation while one is active is blocked.
+
+### Property 13: Lab level gating
+
+For any request and lab `l`, `approve_lab(l)` succeeds only if the request was sent to `l` and every lab of that request on a lower level is `APPROVED`. Otherwise it is refused and `l`'s status is unchanged. Likewise, the student can send level N only once every lab below N is `APPROVED`.
+
+```python
+if any(o.status != "APPROVED" for o in chain(request) if o.level < l.level):
+    with pytest.raises(PermissionError):
+        engine.approve_lab(l, l.lab.user)
+```
+
+### Property 14: HOD waits for its department's labs
+
+`approve(HOD)` is refused while any lab in the request's chain is not `APPROVED`. It is also refused before the chain has started, if the student's department has labs.
+
+### Property 15: Lab cascade
+
+If an `APPROVED` lab leaves `APPROVED`, every `APPROVED` lab on a later level of the same request becomes `PENDING`, and so does HOD. Through HOD, Accounts/Administration reset too, and the certificate is invalidated. Labs on the same level are untouched.
+
+### Property 16: In-progress chains are stable
+
+Once a student has sent their first lab level, later HOD changes to lab levels, or added labs, never change that request's chain. The one exception is removing a lab, which drops it from chains it hadn't approved yet.
+
+### Property 17: Lab scoping
+
+A lab in-charge's queue and actions cover only requests sent to their own lab. An HOD can view and change only their own department's labs.
+
+### Property 18: Section staff act only on what they were sent
+
+For any staff member `s` of a section `X` (Library, LUCS, NAD Cell) and request `r`, the following succeed only if `r`'s `X` row is assigned to `s`: listing `r` in `s`'s queue, reviewing it, commenting on it, approving it, and rejecting it. Otherwise each is refused and the row is unchanged. Only `X`'s head can assign, move, or take back requests, or manage its own staff.
+
+### Property 19: Bulk send takes the oldest ready requests
+
+"Send the next N to `s`" assigns `min(N, waiting)` requests to `s`. It takes the oldest rows of the head's section that are `PENDING`, unassigned, confirmed by the student, and on a request whose Page 1 is submitted. It never assigns any other row.
+
+### Property 20: Accounts levels in order, one approval per level
+
+A ready Accounts request is decidable by a staff member `s` only while it waits at `s`'s level. That level is the lowest staff level without a `StageApproval`, where the levels are those with an active staff member on them (never the head). Each level records at most one approval, and anyone on it may give it. Accounts becomes `APPROVED` only through `accounts@`, the final step: once every level has approved (or straight away with no staff levels), or when it stands in for the last level, which is also its final approval. Before that, `accounts@` may approve the level a request waits at by naming that level; that is the one level's approval, so no level is skipped. A staff member's approval never approves the section while the main account exists.
+
+### Property 21: Levels re-check after a reopen, resume after a rejection
+
+If a fully approved Accounts row leaves `APPROVED`, its `StageApproval`s are deleted, so it restarts at level 1. A rejection made while the request is still in progress keeps the earlier levels' approvals, so after the student's fix the request resumes at the rejecting level.
+
+### Property 22: Accounts and Administration side by side
+
+For any request, Accounts and Administration are actionable under the same condition: Library, TPC, Warden and HOD `APPROVED`. Neither section's status affects the other's actionability, and Accounts leaving `APPROVED` does not reset Administration (or vice versa). Either one leaving `APPROVED` still invalidates the certificate, since `CLEARED` needs every section.
+
+### Property 23: Administration's checklist gates its approval
+
+An approve of a request's Administration row, by the head or its staff, succeeds only if every active `ChecklistItem` of Administration has a `ChecklistTick` for that row. Only someone who can decide the row may tick it, and only while it is `PENDING`.
+
+### Property 24: The refund comes before the certificate
+
+A refund can be recorded only for an active request whose every section is `APPROVED`. Only whoever sends refunds can record it: the Accounts staff on the last level, or `accounts@` if it took this over or has no staff levels. A paid refund needs an amount above zero, a mode, a UTR / reference and a date no later than the institute's today. Recording it, or "no refund due", is what turns an all-approved request `CLEARED`. There is at most one `Refund` per request: a correction updates it, and a reopen never asks for a second payment.
 
 ## Error Handling
 
@@ -508,5 +726,8 @@ Focus areas: hierarchy invariants (P2–P4), scoping (P5–P6), certificate gati
 - Store `roll_no` as text, never integer.
 - No cross-hostel or cross-department visibility.
 - HOD is independent (parallel to Store/LUCS/Sports/Medical/NAD, not gated on them); no Administration approval before all required sections are approved.
+- No HOD approval before every lab in the student's department lab chain has approved; lab levels open strictly in order.
+- Section staff (Library, LUCS, NAD Cell) never see or decide a request their head didn't send them; only the head manages staff.
+- Accounts staff act only at their own level; Accounts is approved only by the last staffed level — `accounts@` never approves over its staff.
 - No rejection without a written reason.
 - OCR never replaces the original document; originals remain downloadable.
