@@ -79,7 +79,7 @@ sequenceDiagram
         ENG->>ENG: recompute_overall()
     end
 
-    Note over ENG,DB: HOD is independent — actionable immediately, in parallel with Store/LUCS/Sports/Medical/NAD.<br/>Accounts becomes actionable once Library+TPC+Warden+HOD clear.<br/>Administration once Accounts clears
+    Note over ENG,DB: HOD runs in parallel with Store/LUCS/Sports/Medical/NAD — after its department's labs, if any (next diagram).<br/>Accounts becomes actionable once Library+TPC+Warden+HOD clear.<br/>Administration once Accounts clears
 
     API-->>SPA: overall_status = CLEARED
     S->>SPA: Download certificate
@@ -116,12 +116,46 @@ sequenceDiagram
 
 All of this runs inside a single `transaction.atomic()` block (`engine.py::approve`/`reject`) — the matrix is never left half-updated if the process dies mid-cascade.
 
+## Department lab chain
+
+How a student clears their department's labs before HOD (rules: [DESIGN.md § Department labs](./DESIGN.md#department-labs-hod-managed-hierarchy)):
+
+```mermaid
+sequenceDiagram
+    actor H as HOD
+    actor S as Student
+    actor L as Lab in-charge
+    participant API as Django API
+    participant ENG as engine.py
+    participant DB as Database
+
+    H->>API: POST /api/hod/labs/ {name, email, password, level}
+    API->>DB: create User (role LAB) + Lab
+    Note over S: Page 3 opens once Library/TPC/Warden approve
+    S->>API: POST /api/student/labs/send/
+    API->>ENG: send_next_lab_level()
+    ENG->>DB: first send: one LabStatus per department lab (level copied); mark level 1 sent
+    L->>API: GET /api/lab/queue/ → POST /api/lab/approve/ (or reject + reason)
+    API->>ENG: approve_lab() — refused until every earlier level is APPROVED
+    S->>API: POST /api/student/labs/send/ (next level, once the current one is all green)
+    Note over S,DB: …repeat per level…
+    H->>API: POST /api/section/approve/
+    API->>ENG: approve(HOD) — refused (409) until every lab is APPROVED
+```
+
+If an approved lab later rejects, `engine._on_lab_status_change` resets the later-level labs and HOD to `PENDING`, then runs HOD's normal cascade (Accounts, Administration, certificate) — the same single transaction.
+
 ## Component responsibilities
 
 | Component | File | Responsibility |
 |---|---|---|
-| Auth + role/scope guard | `main/api.py::_scope_ok`, `_profile`, `@login_required` | Every state-changing view re-checks role AND hostel/department scope server-side — never trusts client-supplied role claims |
-| Approval engine | `main/engine.py` | Owns `PREREQUISITES`, `actionable()`, `approve()`/`reject()`, `downstream_closure()`, `recompute_overall()` |
+| Auth + role/scope guard | `main/api.py::_scope_ok`, `_profile`, `_lab_officer`, `_hod_department`, `@login_required` | Every state-changing view re-checks role AND hostel/department scope server-side — never trusts client-supplied role claims. A lab login's lab, and an HOD's department, always come from the session |
+| Approval engine | `main/engine.py` | Owns `PREREQUISITES`, `actionable()`, `approve()`/`reject()`, `downstream_closure()`, `recompute_overall()` — and the department lab chain: `send_next_lab_level()`, `lab_actionable()`, `approve_lab()`/`reject_lab()`/`resend_lab()`, the lab cascade |
+| HOD lab management | `main/labs.py` | Add/edit/remove a department's labs; creates each in-charge's login (username = email, role `LAB`, Django password validators) |
+| Section staff | `main/staff.py` | Staff of the Library, LUCS, NAD Cell, Accounts and Administration heads (`STAFF_SECTIONS`): who is head vs staff (`UserProfile.managed_by`); by hand (Library, LUCS, NAD Cell, Administration) — "send the next N" / move / take back (`SectionStatus.assigned_to`); by level (Accounts) — `current_level()` / `approve_level()` over the staff's `UserProfile.staff_level` + `StageApproval`, then the head's final approval (`approve()`, `head_can_approve()`); add/edit/remove staff, and mark refund managers. `can_handle()` / `can_decide()` are the checks every officer view applies so staff only touch what reached them |
+| In-app logins | `main/accounts.py` | Shared email/password validation and login creation for lab in-charges and section staff |
+| Refunds | `main/refunds.py` | The last step: once every section has approved, Accounts records the refund it paid (amount, mode, UTR, date — or none due) from the bank details on the student's cancelled cheque. The main account (`accounts@`) always does this, plus any staff it made refund managers (`senders()`, `can_record()`). That clears the request and unlocks the certificate, and the student is told on their dashboard and in their Accounts thread. Instead of paying, the sender can reject with a reason (`reject()`), which sends Accounts back to the student |
+| Office checklist | `main/checklist.py` | Administration's checklist (`CHECKLIST_SECTIONS`): items the head manages ("Physical ID card submitted", …), per-request ticks by whoever can decide the request, and `missing()`, which the approve view checks so Administration can't approve until everything is ticked |
 | OCR service | `main/ocr.py` | Best-effort text extraction; returns `("", {}, [])` if Tesseract/Pillow aren't available — never blocks the upload |
 | Upload handling | `main/api.py::upload_document` | Type/size validation (10 MB; JPG/PNG/PDF), stores outside web root (`MEDIA_ROOT`), re-opens rejected sections on re-upload |
 | Certificate | `frontend/src/pages/StudentDashboard.tsx::downloadCertificate` | Client-side PDF via jsPDF/html2canvas (lazy-loaded); backend only supplies the JSON payload |
