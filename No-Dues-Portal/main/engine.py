@@ -17,6 +17,7 @@ from .models import (
     SECTION_SPORTS, SECTION_MEDICAL, SECTION_NAD, SECTION_HOD,
     SECTION_ACCOUNTS, SECTION_ADMINISTRATION,
 )
+from .prefetch import prefetched
 
 # ─── Dependency graph: section -> prerequisite section codes ────────────────────
 #
@@ -87,19 +88,32 @@ def downstream_closure(section_code):
 
 
 def _status_map(request):
-    """{section_code: SectionStatus} for a request."""
-    return {ss.section.code: ss for ss in request.section_statuses.select_related("section")}
+    """{section_code: SectionStatus} for a request (from prefetched rows when loaded)."""
+    rows = prefetched(request, "section_statuses")
+    if rows is None:
+        rows = request.section_statuses.select_related("section")
+    return {ss.section.code: ss for ss in rows}
 
 
-def actionable(request, section_code):
+def status_map(request):
+    """{section_code: SectionStatus} for a request — one query, or none when the
+    request's sections were prefetched (main/prefetch.py)."""
+    return _status_map(request)
+
+
+def actionable(request, section_code, dept_has_labs=None):
     """True iff every prerequisite of `section_code` is APPROVED for this request
-    (for HOD, that includes every lab in the student's department lab chain)."""
-    smap = _status_map(request)
-    for prereq in prerequisites(section_code):
-        ss = smap.get(prereq)
-        if ss is None or ss.status != STATUS_APPROVED:
-            return False
-    if section_code == SECTION_HOD and not labs_cleared(request):
+    (for HOD, that includes every lab in the student's department lab chain).
+    `dept_has_labs`: for HOD, whether the student's department has labs, when
+    the caller already knows it (a desk asks once, not once per row)."""
+    prereqs = prerequisites(section_code)
+    if prereqs:
+        smap = _status_map(request)
+        for prereq in prereqs:
+            ss = smap.get(prereq)
+            if ss is None or ss.status != STATUS_APPROVED:
+                return False
+    if section_code == SECTION_HOD and not labs_cleared(request, dept_has_labs=dept_has_labs):
         return False
     return True
 
@@ -173,7 +187,9 @@ def _on_status_change(section_status, previous):
 
 
 def all_sections_approved(request):
-    statuses = list(request.section_statuses.values_list("status", flat=True))
+    rows = prefetched(request, "section_statuses")
+    statuses = ([ss.status for ss in rows] if rows is not None
+                else list(request.section_statuses.values_list("status", flat=True)))
     return bool(statuses) and all(s == STATUS_APPROVED for s in statuses)
 
 
@@ -234,7 +250,9 @@ def lab_progress(request, dept_has_labs=None):
     `cleared` is what HOD waits on: every lab in the chain APPROVED — or, before
     the student has started the chain, only if their department has no labs.
     """
-    statuses = list(request.lab_statuses.values_list("status", flat=True))
+    rows = prefetched(request, "lab_statuses")
+    statuses = ([ls.status for ls in rows] if rows is not None
+                else list(request.lab_statuses.values_list("status", flat=True)))
     total = len(statuses)
     approved = sum(1 for s in statuses if s == STATUS_APPROVED)
     if total:
@@ -246,8 +264,8 @@ def lab_progress(request, dept_has_labs=None):
     return {"total": total, "approved": approved, "started": total > 0, "cleared": cleared}
 
 
-def labs_cleared(request):
-    return lab_progress(request)["cleared"]
+def labs_cleared(request, dept_has_labs=None):
+    return lab_progress(request, dept_has_labs=dept_has_labs)["cleared"]
 
 
 def lab_actionable(lab_status):
@@ -255,6 +273,11 @@ def lab_actionable(lab_status):
     level of the same request is APPROVED."""
     if lab_status.sent_at is None:
         return False
+    # A lab desk prefetches each request's lab rows (api.lab_queue).
+    request = lab_status.request if LabStatus.request.is_cached(lab_status) else None
+    rows = prefetched(request, "lab_statuses")
+    if rows is not None:
+        return not any(ls.level < lab_status.level and ls.status != STATUS_APPROVED for ls in rows)
     return not LabStatus.objects.filter(
         request_id=lab_status.request_id, level__lt=lab_status.level,
     ).exclude(status=STATUS_APPROVED).exists()
