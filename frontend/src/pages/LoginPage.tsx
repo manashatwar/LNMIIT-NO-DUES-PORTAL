@@ -24,6 +24,7 @@ const ROLE_OPTIONS: { value: RoleType; label: string }[] = [
     { value: 'MEDICAL', label: 'Medical Cell' },
     { value: 'NAD', label: 'NAD Cell' },
     { value: 'HOD', label: 'HOD' },
+    { value: 'LAB', label: 'Lab In-charge' },
     { value: 'ACCOUNTS', label: 'Accounts' },
     { value: 'ADMINISTRATION', label: 'Administration' },
 ];
@@ -182,7 +183,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                             <div className="erp-board-body">
                                 <ul style={{ margin: 0, paddingLeft: 18, color: '#475569' }}>
                                     <li style={{ marginBottom: 8 }}><strong>No-Dues Portal Active:</strong> Session 2025-2026 clearance is open for graduating students.</li>
-                                    <li style={{ marginBottom: 8 }}>Clear independent sections first; HOD/Accounts/Administration unlock in order.</li>
+                                    <li style={{ marginBottom: 8 }}>Clear independent sections first; after HOD, Accounts and Administration open together.</li>
                                 </ul>
                             </div>
                         </div>
@@ -193,6 +194,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                                 <ul style={{ margin: 0, paddingLeft: 18, color: '#475569' }}>
                                     <li style={{ marginBottom: 8 }}>Students log in with webmail; default password: <code>csepassword</code>.</li>
                                     <li style={{ marginBottom: 8 }}>Officer role = section (e.g. Library, Warden, HOD, Accounts).</li>
+                                    <li style={{ marginBottom: 8 }}>Lab in-charges sign in as <strong>Lab In-charge</strong> with the email their HOD registered.</li>
                                 </ul>
                             </div>
                         </div>
