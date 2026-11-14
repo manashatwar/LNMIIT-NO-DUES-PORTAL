@@ -9,7 +9,7 @@ import re
 
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count, Prefetch, Q
+from django.db.models import Count, Prefetch, Q, prefetch_related_objects
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -18,6 +18,7 @@ from django.views.decorators.http import require_http_methods
 from . import checklist as checklist_service
 from . import engine
 from . import labs as lab_service
+from . import prefetch
 from . import refunds as refund_service
 from . import staff as staff_service
 from .models import (
@@ -82,8 +83,31 @@ def _person(user):
     return {"id": user.id, "name": user.get_full_name() or user.username} if user else None
 
 
-def _staff_dict(p, waiting_by_level=None):
-    """A section staff member as their head sees them (main/staff.py)."""
+def _per_user(qs, field):
+    """{user id: number of rows} — one GROUP BY query."""
+    return dict(qs.values_list(field).annotate(n=Count("id")).order_by())
+
+
+def _staff_counts(profiles):
+    """Each staff member's counts for _staff_dict, for the whole list in two
+    queries rather than two per person: {"pending": {...}, "decided": {...}}."""
+    ids = [p.user_id for p in profiles]
+    if not ids:
+        return {"pending": {}, "decided": {}}
+    if staff_service.is_levelled(profiles[0].role):
+        approved = _per_user(StageApproval.objects.filter(approved_by__in=ids), "approved_by")
+        rejected = _per_user(SectionStatus.objects.filter(decided_by__in=ids, status=STATUS_REJECTED), "decided_by")
+        return {"pending": {}, "decided": {i: approved.get(i, 0) + rejected.get(i, 0) for i in ids}}
+    return {
+        "pending": _per_user(SectionStatus.objects.filter(
+            assigned_to__in=ids, status=STATUS_PENDING, request__is_active=True), "assigned_to"),
+        "decided": _per_user(SectionStatus.objects.filter(decided_by__in=ids), "decided_by"),
+    }
+
+
+def _staff_dict(p, waiting_by_level=None, counts=None):
+    """A section staff member as their head sees them (main/staff.py). `counts`:
+    _staff_counts() for a whole list; without it, this person's own queries."""
     levelled = staff_service.is_levelled(p.role)
     if levelled:
         # By level: what's waiting at their level (shared with anyone else on it),
@@ -91,8 +115,12 @@ def _staff_dict(p, waiting_by_level=None):
         if waiting_by_level is None:
             waiting_by_level = staff_service.waiting_by_level(p.role)
         pending = waiting_by_level.get(p.staff_level, 0) if p.user.is_active else 0
-        decided = (StageApproval.objects.filter(approved_by=p.user).count()
+        decided = (counts["decided"].get(p.user_id, 0) if counts is not None
+                   else StageApproval.objects.filter(approved_by=p.user).count()
                    + SectionStatus.objects.filter(decided_by=p.user, status=STATUS_REJECTED).count())
+    elif counts is not None:
+        pending = counts["pending"].get(p.user_id, 0)
+        decided = counts["decided"].get(p.user_id, 0)
     else:
         # By hand: requests sent to them and still waiting, decisions they've made.
         pending = SectionStatus.objects.filter(
@@ -115,7 +143,8 @@ def _staff_list(head_user, include_removed=False):
     waiting = None
     if profiles and staff_service.is_levelled(profiles[0].role):
         waiting = staff_service.waiting_by_level(profiles[0].role)   # once, not per person
-    return [_staff_dict(p, waiting) for p in profiles]
+    counts = _staff_counts(profiles)
+    return [_staff_dict(p, waiting, counts) for p in profiles]
 
 
 # ─── Department labs: serialisers (engine.py § Department labs) ──────────────────
@@ -191,7 +220,7 @@ def _labs_dict(req):
     if started:
         entries = [_lab_entry(ls) for ls in rows]
     else:
-        hod = req.section_statuses.filter(section__code=SECTION_HOD).first()
+        hod = engine.status_map(req).get(SECTION_HOD)
         dept_labs = list(Lab.objects.filter(department_id=req.student.department_id, is_active=True)
                          .order_by("level", "name"))
         if hod is None or hod.status == STATUS_APPROVED or not dept_labs:
@@ -226,7 +255,20 @@ def _labs_dict(req):
     }
 
 
+def _comments_and_documents(ss):
+    """The section's thread (oldest first) and documents (oldest first) — from
+    prefetched rows when loaded (prefetch.section_detail), else two queries."""
+    comments = prefetch.prefetched(ss, "comments")
+    documents = prefetch.prefetched(ss, "documents")
+    comments = (sorted(comments, key=lambda c: c.created_at) if comments is not None
+                else ss.comments.all().order_by("created_at"))
+    documents = (sorted(documents, key=lambda d: d.uploaded_at) if documents is not None
+                 else ss.documents.all().order_by("uploaded_at"))
+    return comments, documents
+
+
 def _section_dict(ss, request):
+    comments, documents = _comments_and_documents(ss)
     return {
         "code": ss.section.code,
         "name": ss.section.name,
@@ -237,13 +279,13 @@ def _section_dict(ss, request):
         "needs_confirm": ss.section.code in BASIC_CONFIRM_SECTIONS,
         "decided_by": ss.decided_by.username if ss.decided_by else None,
         "decided_at": ss.decided_at.isoformat() if ss.decided_at else None,
-        "comments": [_comment_dict(c) for c in ss.comments.all().order_by("created_at")],
+        "comments": [_comment_dict(c) for c in comments],
         "documents": [
             {"id": d.id, "original_name": d.original_name,
              "event_report_url": d.event_report_url, "ocr_text": d.ocr_text,
              "ocr_fields": d.ocr_fields,
              "download_url": (f"/api/document/{d.id}/download/" if d.file else None)}
-            for d in ss.documents.all().order_by("uploaded_at")
+            for d in documents
         ],
     }
 
@@ -253,9 +295,11 @@ def _intake_upload_state(req):
     and which were rejected (need re-upload)."""
     needed = engine.intake_required_uploads(req.exit_type)
     done, pending, rejected = [], [], []
+    smap = engine.status_map(req)
     for code in needed:
-        ss = req.section_statuses.filter(section__code=code).first()
-        has_doc = ss is not None and ss.documents.exists()
+        ss = smap.get(code)
+        documents = prefetch.prefetched(ss, "documents")
+        has_doc = ss is not None and (bool(documents) if documents is not None else ss.documents.exists())
         if ss is not None and ss.status == STATUS_REJECTED:
             rejected.append(code)
         elif has_doc:
@@ -278,7 +322,10 @@ def _current_page(req):
 
 
 def _request_dict(req):
-    statuses = req.section_statuses.select_related("section").prefetch_related("comments", "documents")
+    # Load the request's sections, threads, documents, labs and refund in a fixed
+    # number of queries, rather than a few per section (main/prefetch.py).
+    prefetch_related_objects([req], *prefetch.request_detail())
+    statuses = prefetch.prefetched(req, "section_statuses")
     needed, done, pending, rejected_intake = _intake_upload_state(req)
     return {
         "id": req.id,
@@ -730,11 +777,6 @@ def section_queue(request):
     if role not in engine.ALL_SECTION_CODES:
         return JsonResponse({"detail": "Not a section officer"}, status=403)
 
-    qs = SectionStatus.objects.filter(
-        section__code=role, request__is_active=True, student_confirmed=True,
-    ).select_related("request", "request__student", "section", "assigned_to").order_by(
-        "request__created_at", "id")   # stable, oldest first (bulk sends rewrite rows)
-
     # Section staff (main/staff.py) see only what reached them; the head sees
     # everything, as a section officer always has. By hand (Library, LUCS, NAD):
     # what the head sent them. By level (Accounts): what's waiting at their
@@ -742,6 +784,22 @@ def section_queue(request):
     is_staff = staff_service.is_staff_member(profile)
     levelled = staff_service.is_levelled(role)
     by_hand = role in staff_service.STAFF_SECTIONS and not levelled
+    # Accounts: whoever sends refunds handles them from Approved, which therefore
+    # lists every request Accounts has approved — not only their own approvals.
+    refund_sender = role == SECTION_ACCOUNTS and refund_service.can_record(profile)
+    # Administration: what the student has to complete at the office, per request.
+    checklist_items = checklist_service.items(role) if checklist_service.enabled(role) else None
+
+    def prepare(rows):
+        """Load everything the rows below read in a fixed number of queries,
+        however many rows there are (main/prefetch.py)."""
+        return prefetch.for_desk(rows, prerequisites=bool(engine.prerequisites(role)), stages=levelled,
+                                 checklist=bool(checklist_items), labs=role == SECTION_HOD,
+                                 refunds=refund_sender)
+
+    qs = prepare(SectionStatus.objects.filter(
+        section__code=role, request__is_active=True, student_confirmed=True,
+    ).order_by("request__created_at", "id"))   # stable, oldest first (bulk sends rewrite rows)
 
     if role == SECTION_WARDEN and profile.hostel_id:
         qs = qs.filter(request__student__hostel_id=profile.hostel_id)
@@ -750,11 +808,8 @@ def section_queue(request):
         qs = qs.filter(request__student__department_id=profile.department_id)
         dept_has_labs = engine.department_has_labs(profile.department_id)
 
-    # Accounts: whoever sends refunds handles them from Approved, which therefore
-    # lists every request Accounts has approved — not only their own approvals.
-    refund_sender = role == SECTION_ACCOUNTS and refund_service.can_record(profile)
     if is_staff and levelled:
-        items = staff_service.level_queue(profile)
+        items = staff_service.level_queue(profile, prepare=prepare)
         if refund_sender:
             mine = {ss.id for ss, _ in items}
             items += [(ss, STATUS_APPROVED) for ss in qs.filter(status=STATUS_APPROVED).exclude(id__in=mine)]
@@ -763,8 +818,6 @@ def section_queue(request):
             qs = qs.filter(assigned_to=request.user)
         items = [(ss, ss.status) for ss in qs]
     names = staff_service.chain_names(role) if levelled else None
-    # Administration: what the student has to complete at the office, per request.
-    checklist_items = checklist_service.items(role) if checklist_service.enabled(role) else None
 
     rows = []
     for ss, status in items:
@@ -779,7 +832,7 @@ def section_queue(request):
             "exit_type": req.exit_type,
             "status": status,
             # Staff only ever get a request at their own level once it's ready.
-            "actionable": True if (is_staff and levelled) else engine.actionable(req, role),
+            "actionable": True if (is_staff and levelled) else engine.actionable(req, role, dept_has_labs),
             "vacant_room_no": req.vacant_room_no,
         }
         if role == SECTION_HOD:
@@ -796,7 +849,7 @@ def section_queue(request):
             row["checklist"] = checklist_service.entries(ss, checklist_items)
         if refund_sender and ss.status == STATUS_APPROVED:
             # The Refund column of the Approved tab: waiting / ready / sent / not due.
-            row["refund"] = refund_service.row_state(req)
+            row["refund"] = refund_service.row_state(req, accounts_ss=ss)
         rows.append(row)
 
     section = Section.objects.filter(code=role).first()
@@ -837,13 +890,19 @@ def section_review(request):
 
     req_id = request.GET.get("request_id")
     ss = SectionStatus.objects.filter(request_id=req_id, section__code=role).select_related(
-        "request", "request__student", "section").first()
+        "request", "request__student__department", "request__student__hostel", "section", "decided_by").first()
     if ss is None:
         return JsonResponse({"detail": "Not found"}, status=404)
     if not _scope_ok(profile, ss.request, role):
         return JsonResponse({"detail": "Out of scope"}, status=403)
     if not _can_see(profile, ss):
         return _not_sent_to_you()
+
+    # Load the request's sections (with threads and documents) and this section's
+    # own details in a fixed number of queries, not a few per section.
+    prefetch_related_objects([ss.request], *prefetch.request_detail())
+    prefetch_related_objects([ss], *prefetch.section_detail(stages=staff_service.is_levelled(role)))
+    smap = engine.status_map(ss.request)
 
     # Every officer sees the full Page-2 tri-gate picture (Library BTP form,
     # TPC offer letter, and the Warden/hostel clearance), regardless of their
@@ -864,7 +923,7 @@ def section_review(request):
         for code in TRI_GATE_REVIEW_SECTIONS:
             if code == role:
                 continue  # already shown as the officer's own section below
-            pss = ss.request.section_statuses.filter(section__code=code).select_related("section").first()
+            pss = smap.get(code)
             if pss is not None:
                 intake_docs.append(_section_dict(pss, ss.request))
 
@@ -903,11 +962,13 @@ def section_review(request):
         for code in engine.ALL_SECTION_CODES:
             if code == SECTION_ADMINISTRATION:
                 continue
-            pss = ss.request.section_statuses.filter(section__code=code).select_related("section").first()
+            pss = smap.get(code)
             if pss is None:
                 continue
             # Final view: only the latest (final) document, no message thread.
-            latest = pss.documents.order_by("-uploaded_at").first()
+            documents = prefetch.prefetched(pss, "documents")
+            latest = (prefetch.latest_document(documents) if documents is not None
+                      else pss.documents.order_by("-uploaded_at").first())
             docs = []
             if latest and (latest.file or latest.event_report_url):
                 docs = [{
@@ -1099,7 +1160,8 @@ def lab_queue(request):
     qs = LabStatus.objects.filter(
         lab=lab, request__is_active=True, sent_at__isnull=False,
     ).select_related("request", "request__student", "request__student__department",
-                     "request__student__hostel").order_by("-sent_at")
+                     "request__student__hostel").order_by("-sent_at").prefetch_related(
+        "request__lab_statuses")   # engine.lab_actionable reads each request's chain from these
     rows = []
     for ls in qs:
         req = ls.request
@@ -1344,12 +1406,13 @@ def section_staff(request):
     levelled = staff_service.is_levelled(head.role)
     profiles = list(staff_service.staff_of(request.user, include_removed=True))
     waiting = staff_service.waiting_by_level(head.role) if levelled else None   # once, not per person
+    counts = _staff_counts(profiles)                                             # likewise
     return JsonResponse({
         "section": head.role,
         "staff_mode": "levels" if levelled else "manual",
         # Levels: requests every level has approved, waiting for the head's final approval.
         "head_waiting": staff_service.waiting_for_final(head.role) if levelled else 0,
-        "staff": [_staff_dict(p, waiting) for p in profiles],
+        "staff": [_staff_dict(p, waiting, counts) for p in profiles],
         # Administration: the checklist the head manages (null = no checklist here).
         "checklist": ([{"id": i.id, "label": i.label} for i in checklist_service.items(head.role)]
                       if checklist_service.enabled(head.role) else None),
