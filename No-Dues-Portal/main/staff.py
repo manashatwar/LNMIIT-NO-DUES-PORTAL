@@ -34,6 +34,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from . import engine
+from . import prefetch
 from .accounts import AccountError, clean_level, clean_name, clean_email, check_password, create_login
 from .models import (
     Comment, SectionStatus, StageApproval, UserProfile,
@@ -135,8 +136,16 @@ def stage_ready(ss):
         return False
     if ss.section.code not in CONFIRMED_SUBMISSION_SECTIONS:
         return True
-    latest = ss.documents.order_by("-uploaded_at", "-id").first()
+    documents = prefetch.prefetched(ss, "documents")
+    latest = (prefetch.latest_document(documents) if documents is not None
+              else ss.documents.order_by("-uploaded_at", "-id").first())
     return latest is not None and bool((latest.ocr_fields or {}).get("confirmed"))
+
+
+def _approvals(ss):
+    """The request's level approvals, with who gave them, lowest level first."""
+    rows = prefetch.prefetched(ss, "stage_approvals")
+    return rows if rows is not None else list(ss.stage_approvals.select_related("approved_by"))
 
 
 def current_level(ss, levels=None):
@@ -147,7 +156,9 @@ def current_level(ss, levels=None):
         return None
     if levels is None:
         levels = list(chain_names(ss.section.code))
-    done = set(ss.stage_approvals.values_list("level", flat=True))
+    rows = prefetch.prefetched(ss, "stage_approvals")
+    done = ({a.level for a in rows} if rows is not None
+            else set(ss.stage_approvals.values_list("level", flat=True)))
     for level in levels:
         if level not in done:
             return level
@@ -174,7 +185,7 @@ def stage_info(ss, names=None):
         "approved": [
             {"level": a.level, "by": _display(a.approved_by) if a.approved_by else None,
              "at": a.approved_at.isoformat()}
-            for a in ss.stage_approvals.select_related("approved_by")
+            for a in _approvals(ss)
         ],
     }
 
@@ -186,7 +197,9 @@ def waiting_for(ss):
     """The earlier sections a request still waits on before this section's turn
     (Accounts: Library, TPC, Warden, HOD), by short name — as engine.actionable
     sees them."""
-    statuses = dict(ss.request.section_statuses.values_list("section__code", "status"))
+    rows = prefetch.prefetched(ss.request, "section_statuses")
+    statuses = ({s.section.code: s.status for s in rows} if rows is not None
+                else dict(ss.request.section_statuses.values_list("section__code", "status")))
     return [_SHORT_NAMES.get(code, code.title()) for code in engine.prerequisites(ss.section.code)
             if statuses.get(code) != STATUS_APPROVED]
 
@@ -274,22 +287,22 @@ def approve(ss, profile, expected=None):
     return True
 
 
-def level_queue(profile):
+def level_queue(profile, prepare=None):
     """A levelled section's staff desk, as [(section status, status for them)]:
     requests waiting at their level (PENDING), requests they approved a level of
-    (APPROVED), and requests they rejected (REJECTED)."""
+    (APPROVED), and requests they rejected (REJECTED). `prepare`: the desk's batch
+    loading for these rows (prefetch.for_desk); by default, what this reads."""
     user = profile.user
     levels = list(chain_names(profile.role))
     rows = (SectionStatus.objects
             .filter(section__code=profile.role, request__is_active=True, student_confirmed=True)
             .filter(Q(status=STATUS_PENDING) | Q(stage_approvals__approved_by=user) | Q(decided_by=user))
             .distinct()
-            .select_related("request", "request__student", "request__student__department",
-                            "request__student__hostel", "section")
             .order_by("request__created_at", "id"))
+    rows = prepare(rows) if prepare is not None else prefetch.for_desk(rows, prerequisites=True, stages=True)
     out = []
     for ss in rows:
-        if ss.stage_approvals.filter(approved_by=user).exists():
+        if any(a.approved_by_id == user.id for a in _approvals(ss)):
             out.append((ss, STATUS_APPROVED))
         elif ss.status == STATUS_REJECTED and ss.decided_by_id == user.id:
             out.append((ss, STATUS_REJECTED))
@@ -299,13 +312,20 @@ def level_queue(profile):
     return out
 
 
+def _pending_in_chain(section_code):
+    """Every pending row of a levelled section, with what current_level() and
+    stage_ready() read, loaded in a fixed number of queries."""
+    return prefetch.for_desk(
+        SectionStatus.objects.filter(section__code=section_code, status=STATUS_PENDING,
+                                     student_confirmed=True, request__is_active=True),
+        prerequisites=True, stages=True)
+
+
 def waiting_by_level(section_code):
     """{level: how many requests are waiting there} — for the head's staff panel."""
     levels = list(chain_names(section_code))
     counts = {}
-    for ss in (SectionStatus.objects.filter(section__code=section_code, status=STATUS_PENDING,
-                                            student_confirmed=True, request__is_active=True)
-               .select_related("request", "section")):
+    for ss in _pending_in_chain(section_code):
         level = current_level(ss, levels)
         if level is not None:
             counts[level] = counts.get(level, 0) + 1
@@ -316,9 +336,7 @@ def waiting_for_final(section_code):
     """How many requests every level has approved, now waiting for the head's
     final approval — for the head's card in its staff panel."""
     levels = list(chain_names(section_code))
-    return sum(1 for ss in (SectionStatus.objects.filter(section__code=section_code, status=STATUS_PENDING,
-                                                         student_confirmed=True, request__is_active=True)
-                            .select_related("request", "section"))
+    return sum(1 for ss in _pending_in_chain(section_code)
                if current_level(ss, levels) is None and stage_ready(ss))
 
 
