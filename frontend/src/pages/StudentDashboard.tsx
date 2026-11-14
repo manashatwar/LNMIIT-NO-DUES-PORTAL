@@ -37,6 +37,12 @@ const Spinner = () => (
     <span style={{ width: 14, height: 14, border: '2px solid #2563eb', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 1s linear infinite' }} />
 );
 
+// "A", "A and B", "A, B and C".
+const joinNames = (names: string[]) =>
+    names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+const mustApproveFirst = (names: string[]) =>
+    names.length ? `${joinNames(names)} must approve first.` : 'The earlier sections must approve first.';
+
 export function StudentDashboard({ request, onReload, onLogout, onRules, onContact }: StudentDashboardProps) {
     const sec = (code: string): SectionInfo | undefined => request.sections.find((s) => s.code === code);
     const has = (code: string) => !!sec(code);
@@ -44,11 +50,16 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
     const uploaded = (code: string) =>
         request.intake.uploaded.includes(code) || (sec(code)?.documents.length ?? 0) > 0;
 
-    // Stage groupings (mirror the Design.md dependency graph / the reference flow)
+    // Stage groupings (the reference flow). Only the sections this student's exit
+    // type has: no TPC on an NEP exit, a withdrawal or an admission cancel.
     const triGate = ['LIBRARY', 'TPC', 'WARDEN'].filter(has);
     const deptField = ['STORE', 'LUCS', 'SPORTS', 'MEDICAL', 'NAD', 'HOD'].filter(has);
     const triGateApproved = triGate.length > 0 && triGate.every(approved);
-    const accountsUnlock = ['LIBRARY', 'TPC', 'WARDEN', 'HOD'].filter(has).every(approved);
+    // Accounts (Page 4) and Administration (Page 5) open when the backend says they
+    // can act: their prerequisites for this student's exit type have approved
+    // (engine.prerequisites). The rule lives there only — not copied here.
+    const accountsUnlock = !!sec('ACCOUNTS')?.actionable;
+    const adminUnlock = !!sec('ADMINISTRATION')?.actionable;
     const accountsApproved = approved('ACCOUNTS');
     const cleared = request.overall_status === 'CLEARED';   // every section approved + refund sent
     const refund = request.refund;
@@ -60,13 +71,19 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
     const labRejected = labsOn && labs.levels.some((lv) => lv.labs.some((e) => e.status === 'REJECTED'));
 
     // Page lock rules. Accounts (Page 4) and Administration (Page 5) sit side by
-    // side: both open once Library, TPC, Warden and HOD have approved.
+    // side: both open once Library, Warden, HOD — and TPC on a graduation — approve.
     const locks = {
         page1: true,
         page2: request.intake_submitted,
         page3: triGateApproved,
         page4: accountsUnlock,
-        page5: accountsUnlock,
+        page5: adminUnlock,
+    };
+    // What a locked page is waiting for, by name (this student's sections only).
+    const lockMsgs = {
+        page3: mustApproveFirst(triGate.filter((c) => !approved(c)).map((c) => sec(c)?.name ?? c)),
+        page4: mustApproveFirst(sec('ACCOUNTS')?.waiting_for ?? []),
+        page5: mustApproveFirst(sec('ADMINISTRATION')?.waiting_for ?? []),
     };
 
     type TabId = 'page1' | 'page2' | 'page3' | 'page4' | 'page5';
@@ -441,9 +458,9 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                     {([
                         { id: 'page1', label: '📄 1 · Intake & Uploads', lockMsg: '' },
                         { id: 'page2', label: '🔑 2 · Core Tri-Gate', lockMsg: 'Submit your intake (Page 1) first.' },
-                        { id: 'page3', label: '🏫 3 · Dept & Field', lockMsg: 'Library, TPC and Warden must approve first.' },
-                        { id: 'page4', label: '💰 4 · Financial', lockMsg: 'HOD (and tri-gate) must approve first.' },
-                        { id: 'page5', label: '🏢 5 · Administration', lockMsg: 'HOD (and tri-gate) must approve first.' },
+                        { id: 'page3', label: '🏫 3 · Dept & Field', lockMsg: lockMsgs.page3 },
+                        { id: 'page4', label: '💰 4 · Financial', lockMsg: lockMsgs.page4 },
+                        { id: 'page5', label: '🏢 5 · Administration', lockMsg: lockMsgs.page5 },
                     ] as { id: TabId; label: string; lockMsg: string }[]).map((t) => {
                         const enabled = locks[t.id];
                         return (
@@ -1289,7 +1306,10 @@ function BasicDetail({ section, icon, subtitle, student, me, onReload }: {
                 </div>
             )}
 
-            {waiting && <div className="text-muted" style={{ fontSize: 12, marginTop: 10 }}>Waiting on prerequisite sections to be approved first.</div>}
+            {waiting && <div className="text-muted" style={{ fontSize: 12, marginTop: 10 }}>
+                {section.waiting_for?.length ? `Waiting for ${joinNames(section.waiting_for)} to approve first.`
+                    : 'Waiting on prerequisite sections to be approved first.'}
+            </div>}
             {rejected && reason && !showForm && <div style={{ marginTop: 10, fontSize: 12, color: '#b91c1c' }}><strong>Officer's reason:</strong> {reason.body}</div>}
             <CommentThread comments={section.comments} me={me} busy={false} onSend={(t) => api.studentComment(section.code, t).then(onReload)} />
         </div>
