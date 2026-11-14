@@ -30,7 +30,7 @@ skipped (at the last level, it is also the head's own final approval). Only the
 head manages staff, and each head only its own.
 """
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
 from . import engine
@@ -83,14 +83,21 @@ def ready_for_staff(section_code):
     """Waiting with the head and ready to review: the student has submitted Page 1,
     confirmed this section (confirm-only sections such as LUCS, NAD and
     Administration) and — for a section that waits on others (Administration:
-    Library, TPC, Warden, HOD) — those have approved, so staff can act on it."""
+    Library, TPC, Warden, HOD; TPC only for the exit types that have it) — those
+    have approved, so staff can act on it."""
     qs = SectionStatus.objects.filter(
         section__code=section_code, status=STATUS_PENDING, assigned_to__isnull=True,
         student_confirmed=True, request__is_active=True, request__intake_submitted=True,
     )
     for code in engine.prerequisites(section_code):
-        qs = qs.filter(request__section_statuses__section__code=code,
-                       request__section_statuses__status=STATUS_APPROVED)
+        if code in engine.OPTIONAL_PREREQUISITES:
+            # Waived for exit types that don't include it (no TPC row on an NEP
+            # exit); blocks only a request that has it and hasn't approved it yet.
+            qs = qs.filter(~Exists(SectionStatus.objects.filter(
+                request=OuterRef("request"), section__code=code).exclude(status=STATUS_APPROVED)))
+        else:
+            qs = qs.filter(request__section_statuses__section__code=code,
+                           request__section_statuses__status=STATUS_APPROVED)
     return qs
 
 
@@ -195,13 +202,10 @@ _SHORT_NAMES ={SECTION_LIBRARY: "Library", SECTION_TPC: "TPC", SECTION_WARDEN: "
 
 def waiting_for(ss):
     """The earlier sections a request still waits on before this section's turn
-    (Accounts: Library, TPC, Warden, HOD), by short name — as engine.actionable
-    sees them."""
-    rows = prefetch.prefetched(ss.request, "section_statuses")
-    statuses = ({s.section.code: s.status for s in rows} if rows is not None
-                else dict(ss.request.section_statuses.values_list("section__code", "status")))
-    return [_SHORT_NAMES.get(code, code.title()) for code in engine.prerequisites(ss.section.code)
-            if statuses.get(code) != STATUS_APPROVED]
+    (Accounts: Library, TPC, Warden, HOD — no TPC for an NEP exit, a withdrawal
+    or an admission cancel), by short name — as engine.actionable sees them."""
+    return [_SHORT_NAMES.get(code, code.title())
+            for code in engine.unapproved_prerequisites(ss.request, ss.section.code)]
 
 
 def not_ready_reason(ss):
