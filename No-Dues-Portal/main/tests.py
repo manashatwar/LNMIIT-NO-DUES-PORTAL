@@ -12,18 +12,21 @@ from datetime import timedelta
 
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connection
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 
 from main import checklist as checklist_service
 from main import engine
 from main import labs as lab_service
+from main import prefetch
 from main import refunds as refund_service
 from main import staff as staff_service
 from main.api import BASIC_CONFIRM_SECTIONS
 from main.management.commands.seed_demo import SECTION_DEFS
 from main.models import (
     Department, Hostel, Section, UserProfile, Student, ClearanceRequest, SectionStatus,
-    Certificate, Comment, Document, Lab, LabStatus, Refund,
+    Certificate, Comment, Document, Lab, LabStatus, Refund, StageApproval,
     DEPARTMENT_CODES, HOSTEL_CODES, ROLE_LAB,
     STATUS_PENDING, STATUS_APPROVED, STATUS_REJECTED, OVERALL_CLEARED, OVERALL_IN_PROGRESS,
     SECTION_LIBRARY, SECTION_TPC, SECTION_WARDEN, SECTION_HOD, SECTION_ACCOUNTS,
@@ -1346,3 +1349,211 @@ class RefundTests(ApiHelpers, TestCase):
         self.approve_all()                                                               # re-approved ...
         self.assertEqual(self.overall(), OVERALL_CLEARED)                                # ... cleared again
         self.assertEqual(self.refunds().json()["pending"], [])
+
+
+@override_settings(PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"])
+class QueryCountTests(ApiHelpers, TestCase):
+    """The N+1 guard (main/prefetch.py): a desk, panel or dashboard runs a fixed
+    number of SQL queries however many rows it shows. Each test counts an
+    endpoint's queries, adds more students (or messages and documents), and counts
+    again: the number must not change. A ceiling also catches a large constant
+    regression. Before the fix, accounts@'s desk ran ~8 queries per student."""
+
+    CEILING = 25
+    FIELD = (SECTION_STORE, SECTION_LUCS, SECTION_SPORTS, SECTION_MEDICAL, SECTION_NAD)
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.dept = {c: Department.objects.create(code=c) for c in DEPARTMENT_CODES}
+        cls.hostel = {c: Hostel.objects.create(code=c) for c in HOSTEL_CODES}
+        for code, name, order, upload, consolidator in SECTION_DEFS:
+            Section.objects.create(code=code, name=name, order=order,
+                                   is_upload_section=upload, is_consolidator=consolidator)
+        checklist_service.ensure_defaults(SECTION_ADMINISTRATION)
+
+        def officer(username, role, hostel=None, dept=None):
+            user = User.objects.create_user(username, password="x")
+            UserProfile.objects.create(user=user, role=role, hostel=cls.hostel.get(hostel),
+                                       department=cls.dept.get(dept))
+            return user
+
+        def staff(head, name, email, level=None):
+            return staff_service.create_staff(head.profile, name=name, email=email,
+                                              password=STAFF_PASSWORD, level=level).user
+
+        cls.library = officer("library@t.in", SECTION_LIBRARY)
+        cls.tpc = officer("tpc@t.in", SECTION_TPC)
+        cls.warden = officer("warden.bh1@t.in", SECTION_WARDEN, hostel="BH1")
+        cls.lucs = officer("lucs@t.in", SECTION_LUCS)
+        cls.hod_cse = officer("hod.cse@t.in", SECTION_HOD, dept="CSE")
+        cls.hod_ece = officer("hod.ece@t.in", SECTION_HOD, dept="ECE")
+        cls.accounts = officer("accounts@t.in", SECTION_ACCOUNTS)
+        cls.admin_office = officer("admin.office@t.in", SECTION_ADMINISTRATION)
+        cls.lib_staff = staff(cls.library, "Library Assistant", "lib.staff@t.in")
+        cls.admin_staff = staff(cls.admin_office, "Admin Assistant", "admin.staff@t.in")
+        cls.clerk = staff(cls.accounts, "Clerk", "clerk@t.in", level=1)
+        cls.assistant = staff(cls.accounts, "Assistant", "assistant@t.in", level=2)
+        cls.acc_officer = staff(cls.accounts, "Officer", "officer@t.in", level=3)
+        cls.microwave = lab_service.create_lab(cls.dept["ECE"], name="Microwave Lab", email="microwave.lab@t.in",
+                                               password=LAB_PASSWORD, level=1, incharge_name="Microwave In-charge")
+        lab_service.create_lab(cls.dept["ECE"], name="DSP Lab", email="dsp.lab@t.in",
+                               password=LAB_PASSWORD, level=2, incharge_name="DSP In-charge")
+        # Two full cycles, so every list (refunds sent *and* still to send) has a row
+        # before the tests count: Django skips a prefetch query when there are no rows.
+        cls.add_students(10)
+
+    @classmethod
+    def add_students(cls, count):
+        """`count` more students, cycling through every state the desks show: not
+        ready, at Accounts level 2 (sent to Library staff, checklist ticked), with
+        accounts@ for the final step (message thread, sent to Administration staff),
+        fully approved (refund sent or still to send), and ECE in its labs."""
+        sections = {s.code: s for s in Section.objects.all()}
+        for _ in range(count):
+            i = Student.objects.count()
+            kind = i % 5
+            dept, hostel = ("ECE", "GH1") if kind == 4 else ("CSE", "BH1")
+            user = User.objects.create_user(f"q{i}@t.in", password="x")
+            UserProfile.objects.create(user=user, role="STUDENT")
+            student = Student.objects.create(user=user, name=f"Student {i}", roll_no=f"25UQC{i:03d}",
+                                             department=cls.dept[dept], hostel=cls.hostel[hostel],
+                                             webmail=user.username)
+            req = ClearanceRequest.objects.create(student=student, exit_type="GRADUATION",
+                                                  vacant_room_no="A102", intake_submitted=True, fund_us_amount=1000)
+            ss = {code: SectionStatus.objects.create(request=req, section=sections[code], student_confirmed=True)
+                  for code in engine.required_sections("GRADUATION")}
+            Document.objects.create(section_status=ss[SECTION_ACCOUNTS], ocr_fields={
+                "review": {"account_holder": student.name, "account_no": f"5010000{i:04d}",
+                           "ifsc": "SBIN0000001", "bank_name": "SBI"}, "confirmed": True})
+            if kind == 0:
+                continue                                                  # not ready for Accounts
+            for code in (SECTION_LIBRARY, SECTION_TPC, SECTION_WARDEN):
+                engine.approve(ss[code], cls.library)
+            if kind == 4:                                                 # ECE: in its department labs
+                engine.send_next_lab_level(req, user)
+                engine.approve_lab(LabStatus.objects.get(request=req, lab=cls.microwave), cls.microwave.user)
+                continue
+            engine.approve(ss[SECTION_HOD], cls.hod_cse)
+            if kind == 1:
+                StageApproval.objects.create(section_status=ss[SECTION_ACCOUNTS], level=1, approved_by=cls.clerk)
+                SectionStatus.objects.filter(pk=ss[SECTION_LIBRARY].pk).update(assigned_to=cls.lib_staff)
+                checklist_service.set_tick(ss[SECTION_ADMINISTRATION], checklist_service.items(
+                    SECTION_ADMINISTRATION)[0].id, True, cls.admin_staff)
+            elif kind == 2:
+                for level, who in ((1, cls.clerk), (2, cls.assistant), (3, cls.acc_officer)):
+                    StageApproval.objects.create(section_status=ss[SECTION_ACCOUNTS], level=level, approved_by=who)
+                Comment.objects.create(section_status=ss[SECTION_ACCOUNTS], author=user, body="Cheque attached.")
+                SectionStatus.objects.filter(pk=ss[SECTION_ADMINISTRATION].pk).update(assigned_to=cls.admin_staff)
+            else:                                                         # every section approved
+                for code in cls.FIELD + (SECTION_ACCOUNTS, SECTION_ADMINISTRATION):
+                    engine.approve(ss[code], cls.accounts)
+                if i % 2 == 0:
+                    refund_service.record(req, cls.accounts, amount="9000", mode="NEFT", reference=f"UTR{i}",
+                                          paid_on=(refund_service.today() - timedelta(days=1)).isoformat())
+
+    def count_queries(self, user, url):
+        self.client.force_login(user)
+        with CaptureQueriesContext(connection) as ctx:
+            response = self.client.get(url)
+        self.assertEqual(response.status_code, 200, response.content)
+        return len(ctx)
+
+    def assert_flat(self, cases, grow):
+        """Query counts of `cases` [(label, user, url)] are the same after `grow()`."""
+        before = {label: self.count_queries(user, url) for label, user, url in cases}
+        grow()
+        for label, user, url in cases:
+            with self.subTest(label):
+                after = self.count_queries(user, url)
+                self.assertEqual(after, before[label], f"{label}: {before[label]} → {after} queries (N+1)")
+                self.assertLessEqual(after, self.CEILING)
+
+    def test_officer_desks_run_the_same_queries_for_more_students(self):
+        desks = [("accounts@ (levels, final step, refunds)", self.accounts), ("Accounts level 1", self.clerk),
+                 ("Accounts level 2", self.assistant), ("admin.office@ (checklist)", self.admin_office),
+                 ("Administration staff", self.admin_staff), ("library@ (by hand)", self.library),
+                 ("Library staff", self.lib_staff), ("lucs@", self.lucs), ("tpc@", self.tpc),
+                 ("warden@", self.warden), ("hod.cse@", self.hod_cse), ("hod.ece@ (labs)", self.hod_ece)]
+        self.assert_flat([(label, user, "/api/section/queue/") for label, user in desks],
+                         grow=lambda: self.add_students(10))
+
+    def test_lab_desk_staff_panels_and_refund_list_too(self):
+        self.assert_flat([
+            ("lab desk", self.microwave.user, "/api/lab/queue/"),
+            ("accounts@ staff panel", self.accounts, "/api/section/staff/"),
+            ("library@ staff panel", self.library, "/api/section/staff/"),
+            ("refund list", self.accounts, "/api/accounts/refunds/"),
+        ], grow=lambda: self.add_students(10))
+
+    def test_staff_panels_and_desks_dont_grow_with_staff(self):
+        def more_staff():
+            for n in range(4):
+                for head, level in ((self.library, None), (self.accounts, 2)):
+                    staff_service.create_staff(head.profile, name=f"Extra {n}", email=f"extra{n}.{head.id}@t.in",
+                                               password=STAFF_PASSWORD, level=level)
+
+        self.assert_flat([
+            ("accounts@ staff panel", self.accounts, "/api/section/staff/"),
+            ("library@ staff panel", self.library, "/api/section/staff/"),
+            ("accounts@ desk", self.accounts, "/api/section/queue/"),
+            ("library@ desk", self.library, "/api/section/queue/"),
+        ], grow=more_staff)
+
+    def test_dashboard_and_reviews_dont_grow_with_messages_and_documents(self):
+        req = ClearanceRequest.objects.get(student__webmail="q2@t.in")   # at accounts@'s final step
+        ece = ClearanceRequest.objects.get(student__webmail="q4@t.in")
+
+        def more_threads():
+            for ss in SectionStatus.objects.filter(request__in=[req, ece]):
+                Comment.objects.create(section_status=ss, author=self.library, body="Please check.")
+                Comment.objects.create(section_status=ss, author=ss.request.student.user, body="Done.")
+                Document.objects.create(section_status=ss, ocr_fields={"confirmed": True})
+
+        self.assert_flat([
+            ("student dashboard", req.student.user, "/api/student/request/"),
+            ("ECE student dashboard", ece.student.user, "/api/student/request/"),
+            ("accounts@ review", self.accounts, f"/api/section/review/?request_id={req.id}"),
+            ("admin.office@ review", self.admin_office, f"/api/section/review/?request_id={req.id}"),
+            ("hod.ece@ review", self.hod_ece, f"/api/section/review/?request_id={ece.id}"),
+        ], grow=more_threads)
+
+    def test_prefetched_rows_give_the_same_answers_without_queries(self):
+        """The business-rule helpers read batch-loaded rows on a desk and query on a
+        lone row; both must give the same answers, and the desk path no queries."""
+        names = staff_service.chain_names(SECTION_ACCOUNTS)
+        lone = SectionStatus.objects.select_related("section", "request__student__department")
+        desk = lambda code, **kw: {ss.id: ss for ss in prefetch.for_desk(   # noqa: E731
+            SectionStatus.objects.filter(section__code=code), **kw)}
+
+        loaded = desk(SECTION_ACCOUNTS, prerequisites=True, stages=True, refunds=True)
+        for ss in lone.filter(section__code=SECTION_ACCOUNTS):
+            with self.subTest(f"Accounts {ss.request.student.roll_no}"):
+                fast = loaded[ss.id]
+                with self.assertNumQueries(0):
+                    answers = (staff_service.stage_info(fast, names), engine.actionable(fast.request, SECTION_ACCOUNTS),
+                               refund_service.row_state(fast.request, accounts_ss=fast))
+                self.assertEqual(answers, (staff_service.stage_info(ss, names),
+                                           engine.actionable(ss.request, SECTION_ACCOUNTS),
+                                           refund_service.row_state(ss.request)))
+
+        items = checklist_service.items(SECTION_ADMINISTRATION)
+        loaded = desk(SECTION_ADMINISTRATION, prerequisites=True, checklist=True)
+        for ss in lone.filter(section__code=SECTION_ADMINISTRATION):
+            with self.subTest(f"Administration {ss.request.student.roll_no}"):
+                fast = loaded[ss.id]
+                with self.assertNumQueries(0):
+                    answers = (checklist_service.entries(fast, items),
+                               engine.actionable(fast.request, SECTION_ADMINISTRATION))
+                self.assertEqual(answers, (checklist_service.entries(ss, items),
+                                           engine.actionable(ss.request, SECTION_ADMINISTRATION)))
+
+        has_labs = engine.department_has_labs(self.dept["ECE"].id)
+        loaded = desk(SECTION_HOD, labs=True)
+        for ss in lone.filter(section__code=SECTION_HOD, request__student__department__code="ECE"):
+            with self.subTest(f"HOD {ss.request.student.roll_no}"):
+                fast = loaded[ss.id]
+                with self.assertNumQueries(0):
+                    answers = (engine.lab_progress(fast.request, dept_has_labs=has_labs),
+                               engine.actionable(fast.request, SECTION_HOD, dept_has_labs=has_labs))
+                self.assertEqual(answers, (engine.lab_progress(ss.request),
+                                           engine.actionable(ss.request, SECTION_HOD)))
