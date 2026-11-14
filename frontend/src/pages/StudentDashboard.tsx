@@ -1,7 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { Layout } from '../components/Layout';
-import { ClearanceRequest, SectionInfo, CertificateData } from '../types';
+import { OfficeChecklist } from '../components/OfficeChecklist';
+import { labBadge } from '../labBadge';
+import { ClearanceRequest, SectionInfo, CertificateData, LabChain } from '../types';
 import { api } from '../api';
+
+// The certificate is assembled as an HTML string (rendered off-screen for
+// html2canvas), so every value from the server is escaped first — lab names,
+// for one, are free text typed in by HODs.
+const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (ch) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] as string));
+
+const rupees = (v: string) => `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
 interface StudentDashboardProps {
     request: ClearanceRequest;
@@ -40,15 +50,23 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
     const triGateApproved = triGate.length > 0 && triGate.every(approved);
     const accountsUnlock = ['LIBRARY', 'TPC', 'WARDEN', 'HOD'].filter(has).every(approved);
     const accountsApproved = approved('ACCOUNTS');
-    const cleared = request.overall_status === 'CLEARED';
+    const cleared = request.overall_status === 'CLEARED';   // every section approved + refund sent
+    const refund = request.refund;
 
-    // Page lock rules
+    // Department labs: when the student's department has them, the HOD card is
+    // the lab chain (sent level by level) followed by HOD's final approval.
+    const labs = request.labs;
+    const labsOn = !!labs?.enabled;
+    const labRejected = labsOn && labs.levels.some((lv) => lv.labs.some((e) => e.status === 'REJECTED'));
+
+    // Page lock rules. Accounts (Page 4) and Administration (Page 5) sit side by
+    // side: both open once Library, TPC, Warden and HOD have approved.
     const locks = {
         page1: true,
         page2: request.intake_submitted,
         page3: triGateApproved,
         page4: accountsUnlock,
-        page5: accountsApproved,
+        page5: accountsUnlock,
     };
 
     type TabId = 'page1' | 'page2' | 'page3' | 'page4' | 'page5';
@@ -180,12 +198,56 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
     };
 
     const buildCertificateMarkup = (c: CertificateData) => {
+        // A certificate exists only once everything is approved, so each row just says so (no names).
+        const approved = '<span style="color:#15803d;font-weight:bold;">Approved</span>';
         const rows = c.sections.map((s) => `
             <tr>
-                <td style="padding:8px 12px;border-bottom:1px solid #dbe3ee;">${s.name}</td>
-                <td style="padding:8px 12px;border-bottom:1px solid #dbe3ee;">${s.approved_by || '—'}</td>
-                <td style="padding:8px 12px;border-bottom:1px solid #dbe3ee;">${s.decided_at ? new Date(s.decided_at).toLocaleDateString() : '—'}</td>
+                <td style="padding:8px 12px;border-bottom:1px solid #dbe3ee;">${esc(s.name)}</td>
+                <td style="padding:8px 12px;border-bottom:1px solid #dbe3ee;">${approved}</td>
+                <td style="padding:8px 12px;border-bottom:1px solid #dbe3ee;">${s.decided_at ? esc(new Date(s.decided_at).toLocaleDateString()) : '—'}</td>
             </tr>`).join('');
+        // Department labs cleared before HOD (none for departments without labs).
+        const labRows = (c.labs || []).map((l) => `
+            <tr>
+                <td style="padding:6px 12px;border-bottom:1px solid #dbe3ee;">${esc(l.name)}</td>
+                <td style="padding:6px 12px;border-bottom:1px solid #dbe3ee;">Level ${esc(l.level)}</td>
+                <td style="padding:6px 12px;border-bottom:1px solid #dbe3ee;">${approved}</td>
+                <td style="padding:6px 12px;border-bottom:1px solid #dbe3ee;">${l.decided_at ? esc(new Date(l.decided_at).toLocaleDateString()) : '—'}</td>
+            </tr>`).join('');
+        const labsTable = labRows ? `
+                <div style="font-size:14px;font-weight:bold;margin:0 0 8px;">Department Lab Clearance (before HOD)</div>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:24px;">
+                    <thead>
+                        <tr style="background:#f5f3ff;">
+                            <th style="text-align:left;padding:6px 12px;border-bottom:2px solid #1b365d;">Lab</th>
+                            <th style="text-align:left;padding:6px 12px;border-bottom:2px solid #1b365d;">Level</th>
+                            <th style="text-align:left;padding:6px 12px;border-bottom:2px solid #1b365d;">Status</th>
+                            <th style="text-align:left;padding:6px 12px;border-bottom:2px solid #1b365d;">Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>${labRows}</tbody>
+                </table>` : '';
+        // Staff levels that approved a section (Accounts), in order.
+        const stageRows = (c.stages || []).map((s) => `
+            <tr>
+                <td style="padding:6px 12px;border-bottom:1px solid #dbe3ee;">${esc(s.section)}</td>
+                <td style="padding:6px 12px;border-bottom:1px solid #dbe3ee;">Level ${esc(s.level)}</td>
+                <td style="padding:6px 12px;border-bottom:1px solid #dbe3ee;">${approved}</td>
+                <td style="padding:6px 12px;border-bottom:1px solid #dbe3ee;">${esc(new Date(s.approved_at).toLocaleDateString())}</td>
+            </tr>`).join('');
+        const stagesTable = stageRows ? `
+                <div style="font-size:14px;font-weight:bold;margin:0 0 8px;">Approvals by Staff Level</div>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:24px;">
+                    <thead>
+                        <tr style="background:#eff6ff;">
+                            <th style="text-align:left;padding:6px 12px;border-bottom:2px solid #1b365d;">Section</th>
+                            <th style="text-align:left;padding:6px 12px;border-bottom:2px solid #1b365d;">Level</th>
+                            <th style="text-align:left;padding:6px 12px;border-bottom:2px solid #1b365d;">Status</th>
+                            <th style="text-align:left;padding:6px 12px;border-bottom:2px solid #1b365d;">Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>${stageRows}</tbody>
+                </table>` : '';
         return `
             <div style="width:760px;padding:40px;font-family:Arial,Helvetica,sans-serif;color:#0f2748;background:#ffffff;border:6px solid #1b365d;">
                 <div style="text-align:center;border-bottom:3px solid #1b365d;padding-bottom:16px;margin-bottom:24px;">
@@ -193,24 +255,27 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                     <div style="font-size:16px;color:#475569;margin-top:4px;">No-Dues Certificate</div>
                 </div>
                 <table style="width:100%;font-size:14px;margin-bottom:20px;">
-                    <tr><td style="padding:4px 0;color:#475569;width:160px;">Student Name</td><td style="font-weight:bold;">${c.student}</td></tr>
-                    <tr><td style="padding:4px 0;color:#475569;">Roll Number</td><td style="font-weight:bold;">${c.roll_no}</td></tr>
-                    <tr><td style="padding:4px 0;color:#475569;">Exit Type</td><td style="font-weight:bold;">${EXIT_LABELS[c.exit_type] || c.exit_type}</td></tr>
-                    <tr><td style="padding:4px 0;color:#475569;">Fund-Us Contribution</td><td style="font-weight:bold;">₹${c.fund_us_amount}</td></tr>
+                    <tr><td style="padding:4px 0;color:#475569;width:160px;">Student Name</td><td style="font-weight:bold;">${esc(c.student)}</td></tr>
+                    <tr><td style="padding:4px 0;color:#475569;">Roll Number</td><td style="font-weight:bold;">${esc(c.roll_no)}</td></tr>
+                    <tr><td style="padding:4px 0;color:#475569;">Exit Type</td><td style="font-weight:bold;">${esc(EXIT_LABELS[c.exit_type] || c.exit_type)}</td></tr>
+                    <tr><td style="padding:4px 0;color:#475569;">Fund-Us Contribution</td><td style="font-weight:bold;">₹${esc(c.fund_us_amount)}</td></tr>
+                    <tr><td style="padding:4px 0;color:#475569;">Refund</td><td style="font-weight:bold;">${c.refund && c.refund.status === 'sent'
+                        ? `${esc(rupees(c.refund.amount))} · ${esc(c.refund.mode)} · UTR ${esc(c.refund.reference)}${c.refund.paid_on ? ` · ${esc(new Date(c.refund.paid_on).toLocaleDateString())}` : ''}`
+                        : 'No refund due'}</td></tr>
                 </table>
                 <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:24px;">
                     <thead>
                         <tr style="background:#eef4ff;">
                             <th style="text-align:left;padding:8px 12px;border-bottom:2px solid #1b365d;">Section</th>
-                            <th style="text-align:left;padding:8px 12px;border-bottom:2px solid #1b365d;">Approved By</th>
+                            <th style="text-align:left;padding:8px 12px;border-bottom:2px solid #1b365d;">Status</th>
                             <th style="text-align:left;padding:8px 12px;border-bottom:2px solid #1b365d;">Date</th>
                         </tr>
                     </thead>
                     <tbody>${rows}</tbody>
-                </table>
+                </table>${labsTable}${stagesTable}
                 <div style="font-size:12px;color:#64748b;display:flex;justify-content:space-between;border-top:1px solid #dbe3ee;padding-top:12px;">
-                    <span>Certificate ID: NDC-${c.request_id}</span>
-                    <span>Generated: ${new Date(c.generated_at).toLocaleString()}</span>
+                    <span>Certificate ID: NDC-${esc(c.request_id)}</span>
+                    <span>Generated: ${esc(new Date(c.generated_at).toLocaleString())}</span>
                 </div>
             </div>`;
     };
@@ -334,7 +399,7 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
         NAD: { icon: '🎓', subtitle: 'NAD-related verification' },
         HOD: { icon: '🏛️', subtitle: 'Departmental consolidation' },
         ACCOUNTS: { icon: '💰', subtitle: 'Refund & cancelled cheque' },
-        ADMINISTRATION: { icon: '🏢', subtitle: 'Final all-green approval' },
+        ADMINISTRATION: { icon: '🏢', subtitle: 'Alongside Accounts · ID card & office checklist' },
     };
 
     return (
@@ -346,10 +411,30 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                         page2: 'PAGE 2 · CORE TRI-GATE VERIFICATION',
                         page3: 'PAGE 3 · DEPARTMENTAL & FIELD CLEARANCE',
                         page4: 'PAGE 4 · FINANCIAL CLEARANCE (ACCOUNTS)',
-                        page5: 'PAGE 5 · FINAL ADMINISTRATION RELEASE',
+                        page5: 'PAGE 5 · ADMINISTRATION CLEARANCE & CERTIFICATE',
                     }[activeTab]}</span>
                     <span style={{ fontSize: 12, fontWeight: 'normal' }}>{request.student.roll_no} · {request.student.department} · {EXIT_LABELS[request.exit_type] || request.exit_type}</span>
                 </div>
+
+                {/* Accounts has paid the refund (or none was due): tell the student on every page. */}
+                {(refund.status === 'sent' || refund.status === 'not_due') && (
+                    <div className="well" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', padding: '12px 16px', marginBottom: 16, background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 6 }}>
+                        <span style={{ fontSize: 14, color: '#166534' }}>
+                            {refund.status === 'sent'
+                                ? <>💸 <strong>Your refund of {rupees(refund.amount)} has been sent</strong>
+                                    {refund.account ? ` to your account ${refund.account}` : ''} by {refund.mode}
+                                    {refund.paid_on ? ` on ${new Date(refund.paid_on).toLocaleDateString()}` : ''}
+                                    {refund.reference ? <> · UTR <code>{refund.reference}</code></> : null}.</>
+                                : <>✅ <strong>No refund was due</strong> (your caution money went to your Fund-Us donation / dues).</>}
+                            {cleared ? ' Your No-Dues certificate is ready.' : ''}
+                        </span>
+                        {cleared && activeTab !== 'page5' && (
+                            <button className="btn btn-success" style={{ fontSize: 12, padding: '6px 14px' }} onClick={() => setActiveTab('page5')}>
+                                🎓 Get your certificate
+                            </button>
+                        )}
+                    </div>
+                )}
 
                 {/* Tabs — sequential pages, each locked until the previous clears */}
                 <div style={{ display: 'flex', gap: 6, borderBottom: '2px solid #cbd5e1', marginBottom: 24, flexWrap: 'wrap' }}>
@@ -358,7 +443,7 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                         { id: 'page2', label: '🔑 2 · Core Tri-Gate', lockMsg: 'Submit your intake (Page 1) first.' },
                         { id: 'page3', label: '🏫 3 · Dept & Field', lockMsg: 'Library, TPC and Warden must approve first.' },
                         { id: 'page4', label: '💰 4 · Financial', lockMsg: 'HOD (and tri-gate) must approve first.' },
-                        { id: 'page5', label: '🏢 5 · Administration', lockMsg: 'Accounts must approve first.' },
+                        { id: 'page5', label: '🏢 5 · Administration', lockMsg: 'HOD (and tri-gate) must approve first.' },
                     ] as { id: TabId; label: string; lockMsg: string }[]).map((t) => {
                         const enabled = locks[t.id];
                         return (
@@ -562,8 +647,12 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
                             {deptField.map((code) => {
                                 const s = sec(code)!;
-                                const meta = SECTION_META[code] || { icon: '📋', subtitle: '' };
-                                const ok = s.status === 'APPROVED', rej = s.status === 'REJECTED';
+                                const labView = code === 'HOD' && labsOn;
+                                const meta = labView
+                                    ? { icon: '🏛️', subtitle: `Labs (${labs.approved}/${labs.total} approved) → HOD approval` }
+                                    : SECTION_META[code] || { icon: '📋', subtitle: '' };
+                                const ok = s.status === 'APPROVED';
+                                const rej = s.status === 'REJECTED' || (labView && !ok && labRejected);
                                 const needsUpload = !!UPLOAD_SECTION_CONFIG[code];
                                 return (
                                     <div key={code} onClick={() => setOpenStageSection(code)}
@@ -584,6 +673,13 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                                         </div>
                                         <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                             {(() => {
+                                                if (labView && s.status === 'PENDING') {
+                                                    const [label, color] = !labs.started ? ['NOT SENT', '#b45309']
+                                                        : labRejected ? ['LAB REJECTED ✗', '#b91c1c']
+                                                            : !labs.cleared ? [`LABS ${labs.approved}/${labs.total}`, '#b45309']
+                                                                : ['WITH HOD', '#b45309'];
+                                                    return <span style={{ fontSize: 11, color, fontWeight: 700 }}>{label}</span>;
+                                                }
                                                 const notSent = s.needs_confirm && !s.student_confirmed;
                                                 const label = ok ? 'APPROVED ✓' : rej ? 'REJECTED ✗' : notSent ? 'NOT SENT' : (!s.actionable ? 'WAITING' : 'IN PROGRESS');
                                                 const color = ok ? '#15803d' : rej ? '#b91c1c' : notSent ? '#b45309' : (!s.actionable ? '#94a3b8' : '#b45309');
@@ -616,6 +712,13 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                             {cfg ? (
                                 <UploadReview
                                     section={s} icon={meta.icon} config={cfg}
+                                    student={{ name: request.student.name, roll_no: request.student.roll_no, department: request.student.department }}
+                                    me={request.student.webmail}
+                                    onReload={onReload}
+                                />
+                            ) : openStageSection === 'HOD' && labsOn ? (
+                                <LabChainDetail
+                                    chain={labs} hod={s}
                                     student={{ name: request.student.name, roll_no: request.student.roll_no, department: request.student.department }}
                                     me={request.student.webmail}
                                     onReload={onReload}
@@ -666,31 +769,44 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                                             <Row k="Net Refund" v={`₹${net.toLocaleString()}`} bold />
                                         </>);
                                     })()}
-                                    <p className="text-muted" style={{ fontSize: 11, marginTop: 8 }}>Amount is refunded to your registered bank account after final Administration release.</p>
+                                    <div style={{
+                                        marginTop: 10, padding: '8px 10px', borderRadius: 6, fontSize: 12,
+                                        background: refund.status === 'sent' || refund.status === 'not_due' ? '#f0fdf4' : '#f8fafc',
+                                        color: refund.status === 'sent' || refund.status === 'not_due' ? '#166534' : '#475569',
+                                    }}>
+                                        {refund.status === 'sent' ? <>✅ <strong>Paid {rupees(refund.amount)}</strong> by {refund.mode}
+                                            {refund.paid_on ? ` on ${new Date(refund.paid_on).toLocaleDateString()}` : ''} · UTR {refund.reference}</>
+                                            : refund.status === 'not_due' ? <>✅ No refund was due.</>
+                                                : refund.status === 'pending' ? <>⏳ Every section has approved: Accounts is sending your refund
+                                                    {refund.account ? ` to your account ${refund.account}` : ''}.</>
+                                                    : <>Your refund is sent to the bank account on your cancelled cheque once every section has approved.</>}
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                        <div style={{ marginTop: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>Accounts must approve to proceed to Administration.</p>
-                            <button onClick={() => accountsApproved && setActiveTab('page5')} disabled={!accountsApproved} className={accountsApproved ? 'btn btn-success' : 'btn btn-secondary'} style={{ padding: '10px 20px', fontSize: 13, fontWeight: 700 }}>
-                                {accountsApproved ? 'Proceed to Administration ➔' : '🔒 Page 5 Locked'}
+                        <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+                            <button onClick={() => setActiveTab('page5')} className="btn btn-success" style={{ padding: '10px 20px', fontSize: 13, fontWeight: 700 }}>
+                                Go to Administration ➔
                             </button>
                         </div>
                     </div>
                 )}
 
-                {/* ── PAGE 5: Final Administration Release + Certificate ── */}
+                {/* ── PAGE 5: Administration (alongside Accounts) + Certificate ── */}
                 {activeTab === 'page5' && (
                     <div>
                         {has('ADMINISTRATION') && (
-                            <BasicDetail
-                                section={sec('ADMINISTRATION')!}
-                                icon={SECTION_META.ADMINISTRATION.icon}
-                                subtitle={SECTION_META.ADMINISTRATION.subtitle}
-                                student={{ name: request.student.name, roll_no: request.student.roll_no, department: request.student.department }}
-                                me={request.student.webmail}
-                                onReload={onReload}
-                            />
+                            <>
+                                <BasicDetail
+                                    section={sec('ADMINISTRATION')!}
+                                    icon={SECTION_META.ADMINISTRATION.icon}
+                                    subtitle={SECTION_META.ADMINISTRATION.subtitle}
+                                    student={{ name: request.student.name, roll_no: request.student.roll_no, department: request.student.department }}
+                                    me={request.student.webmail}
+                                    onReload={onReload}
+                                />
+                                <OfficeChecklist items={sec('ADMINISTRATION')!.checklist ?? []} />
+                            </>
                         )}
                         <div className="well" style={{ marginTop: 16, textAlign: 'center', background: cleared ? '#f0fdf4' : '#fff', border: cleared ? '1px solid #86efac' : '1px solid #cbd5e1' }}>
                             {cleared ? (
@@ -703,10 +819,17 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                                 </>
                             ) : (
                                 <>
-                                    <h3 style={{ color: '#1b365d', marginTop: 0 }}>Administration Sign-Off</h3>
-                                    <p style={{ color: '#64748b', fontSize: 13 }}>Once you confirm your details above, the Administration Office does the final all-green review and releases your certificate here.</p>
+                                    <h3 style={{ color: '#1b365d', marginTop: 0 }}>Your No-Dues Certificate</h3>
+                                    <p style={{ color: '#64748b', fontSize: 13 }}>
+                                        It is released here once every section has approved and Accounts has sent your refund.
+                                    </p>
                                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                                        <Spinner /><span style={{ color: '#475569', fontSize: 13 }}>Pending Administration Release…</span>
+                                        <Spinner />
+                                        <span style={{ color: '#475569', fontSize: 13 }}>
+                                            {refund.status === 'pending'
+                                                ? `Every section has approved ✓. Waiting for Accounts to send your refund of ${rupees(refund.amount)}${refund.account ? ` to ${refund.account}` : ''}.`
+                                                : `Still waiting for: ${request.sections.filter((s) => s.status !== 'APPROVED').map((s) => s.name).join(', ')}`}
+                                        </span>
                                     </div>
                                 </>
                             )}
@@ -925,6 +1048,154 @@ function UploadReview({ section, icon, config, student, me, onReload }: {
             </div>
 
             <CommentThread comments={section.comments} me={me} busy={false} onSend={(t) => api.studentComment(section.code, t).then(onReload)} />
+        </div>
+    );
+}
+
+// ── HOD card for a department with labs: the lab chain, level by level, then HOD ──
+// Replaces the paper "No Dues Form for Department Purpose": the student sends the
+// request to one level of labs at a time; labs on a level get it together, and the
+// next level can be sent only once every lab on the current one has approved.
+function LabChainDetail({ chain, hod, student, me, onReload }: {
+    chain: LabChain;
+    hod: SectionInfo;
+    student: { name: string; roll_no: string; department: string };
+    me: string;
+    onReload: () => void;
+}) {
+    const [busy, setBusy] = useState<string | null>(null);
+    const [note, setNote] = useState('');
+    const [noteErr, setNoteErr] = useState(false);
+
+    const run = async (key: string, action: () => Promise<string | void>) => {
+        setBusy(key); setNote('');
+        try {
+            const done = await action();
+            setNoteErr(false); setNote(done || '');
+            onReload();
+        } catch (e) { setNoteErr(true); setNote(e instanceof Error ? e.message : 'Something went wrong'); }
+        finally { setBusy(null); }
+    };
+
+    const sendNext = () => run('send', async () => {
+        const res = await api.sendToLabs();
+        return `✓ Request sent to ${res.sent_to.join(', ')}.`;
+    });
+    const resend = (labId: number, name: string) => run('resend-' + labId, async () => {
+        await api.resendToLab(labId);
+        return `✓ Request re-sent to ${name}.`;
+    });
+    const comment = (labId: number, text: string) => run('c-' + labId, async () => {
+        await api.labCommentFromStudent(labId, text.trim());
+    });
+
+    const next = chain.levels.find((lv) => lv.level === chain.next_level);
+    const hodStatus = hod.status === 'APPROVED' ? '✓ APPROVED' : hod.status === 'REJECTED' ? '✗ REJECTED'
+        : chain.cleared ? 'WITH HOD' : '🔒 after every lab approves';
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div className="well" style={{ background: '#fff', border: '1px solid #cbd5e1', borderRadius: 8, margin: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ fontSize: 24, background: '#dbeafe', padding: 8, borderRadius: 8 }}>🏛️</div>
+                        <div>
+                            <h3 style={{ margin: 0, color: '#1b365d', fontSize: 16 }}>{hod.name} — {student.department} Labs</h3>
+                            <span style={{ fontSize: 12, color: '#64748b' }}>Your department's labs clear you first; HOD gives the final approval.</span>
+                        </div>
+                    </div>
+                    <span style={{
+                        padding: '4px 12px', borderRadius: 20, fontWeight: 700, fontSize: 12,
+                        background: chain.cleared ? '#dcfce7' : '#f5f3ff', color: chain.cleared ? '#15803d' : '#5b21b6',
+                    }}>{chain.approved}/{chain.total} labs approved</span>
+                </div>
+                <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 12px' }}>
+                    Labs on the same level get your request together. Once every lab on a level approves, send the request to the next level.
+                </p>
+
+                {note && (noteErr
+                    ? <div className="alert alert-danger" style={{ fontSize: 13 }}>⚠️ {note}</div>
+                    : <div style={{ fontSize: 12, color: '#15803d', marginBottom: 10 }}>{note}</div>)}
+
+                {next && (chain.can_send ? (
+                    <button className="btn btn-success" style={{ marginBottom: 12, fontSize: 13, fontWeight: 700, whiteSpace: 'normal', textAlign: 'left' }}
+                        disabled={busy === 'send'} onClick={sendNext}>
+                        {busy === 'send' ? 'Sending…' : `📨 Send request to Level ${next.level}: ${next.labs.map((e) => e.name).join(', ')}`}
+                    </button>
+                ) : chain.started && (
+                    <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
+                        ⏳ Level {next.level} can be sent once every lab on the earlier level has approved.
+                    </div>
+                ))}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {chain.levels.map((lv) => (
+                        <div key={lv.level}>
+                            <div style={{
+                                background: lv.approved ? '#f0fdf4' : '#f5f3ff', borderRadius: 8, padding: 10,
+                                border: `1px solid ${lv.approved ? '#bbf7d0' : '#ddd6fe'}`,
+                            }}>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: '#5b21b6', marginBottom: 8 }}>
+                                    Level {lv.level}{lv.labs.length > 1 ? ' · these labs get it together' : ''}{!lv.sent ? ' · not sent yet' : ''}
+                                </div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                    {lv.labs.map((e) => {
+                                        const b = labBadge(e);
+                                        return (
+                                            <div key={e.lab_id} style={{
+                                                background: '#fff', borderRadius: 8, padding: 10, flex: '1 1 240px',
+                                                border: `1px solid ${e.status === 'REJECTED' ? '#fca5a5' : '#e2e8f0'}`,
+                                            }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                                                    <div>
+                                                        <strong style={{ fontSize: 13, color: '#1e293b' }}>🧪 {e.name}</strong>
+                                                        {e.incharge_name && <div style={{ fontSize: 11, color: '#64748b' }}>{e.incharge_name}</div>}
+                                                    </div>
+                                                    <span style={{ fontSize: 11, fontWeight: 700, color: b.color, background: b.bg, padding: '2px 8px', borderRadius: 12, whiteSpace: 'nowrap' }}>{b.label}</span>
+                                                </div>
+                                                {e.status === 'APPROVED' && e.decided_at && (
+                                                    <div style={{ fontSize: 11, color: '#15803d', marginTop: 4 }}>No dues — cleared on {new Date(e.decided_at).toLocaleDateString()}</div>
+                                                )}
+                                                {e.sent && e.status === 'PENDING' && !e.actionable && (
+                                                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>Waiting for an earlier lab to approve again.</div>
+                                                )}
+                                                {e.status === 'REJECTED' && (
+                                                    <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 6 }}>
+                                                        <strong>Lab's reason:</strong> {e.reason || '—'}
+                                                        <div style={{ marginTop: 6 }}>
+                                                            <button className="btn btn-primary" style={{ fontSize: 11, padding: '3px 10px' }}
+                                                                disabled={busy === 'resend-' + e.lab_id} onClick={() => resend(e.lab_id, e.name)}>
+                                                                {busy === 'resend-' + e.lab_id ? 'Re-sending…' : `↻ Re-send to ${e.name}`}
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {e.sent && (
+                                                    <CommentThread comments={e.comments || []} me={me} busy={busy === 'c-' + e.lab_id}
+                                                        onSend={(t) => comment(e.lab_id, t)} />
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                            <div style={{ textAlign: 'center', fontSize: 11, color: '#64748b', padding: '2px 0' }}>↓</div>
+                        </div>
+                    ))}
+                    <div style={{
+                        background: hod.status === 'APPROVED' ? '#f0fdf4' : '#eef4ff', border: '1px solid #bfdbfe', borderRadius: 8,
+                        padding: 10, fontSize: 13, color: '#1b365d', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    }}>
+                        <strong>🏛️ HOD — final departmental approval</strong>
+                        <span style={{ fontSize: 11, fontWeight: 700 }}>{hodStatus}</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* HOD's own status, thread, and re-send (if HOD rejects) — once it's HOD's turn. */}
+            {(chain.cleared || hod.status !== 'PENDING') && (
+                <BasicDetail section={hod} icon="🏛️" subtitle="Final departmental approval" student={student} me={me} onReload={onReload} />
+            )}
         </div>
     );
 }
