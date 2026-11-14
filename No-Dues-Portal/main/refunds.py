@@ -26,6 +26,7 @@ from decimal import Decimal, InvalidOperation
 from zoneinfo import ZoneInfo
 
 from django.db import transaction
+from django.db.models import Prefetch
 from django.utils import timezone
 
 from . import engine
@@ -34,6 +35,7 @@ from .models import (
     ClearanceRequest, Comment, Refund, SectionStatus, UserProfile, SECTION_ACCOUNTS,
     STATUS_PENDING, STATUS_REJECTED, STATUS_APPROVED,
 )
+from .prefetch import latest_document, prefetched
 
 CAUTION_MONEY = Decimal("10000")   # what the student's Refund Ledger (Page 4) starts from
 MODES = ["NEFT", "IMPS", "RTGS", "UPI", "CHEQUE"]
@@ -96,10 +98,44 @@ def suggested_amount(req):
     return max(CAUTION_MONEY - donation, Decimal("0")).quantize(Decimal("0.01"))
 
 
-def bank_details(req):
-    """The bank account the student confirmed with Accounts (their cancelled cheque)."""
-    ss = SectionStatus.objects.filter(request=req, section__code=SECTION_ACCOUNTS).first()
-    latest = ss.documents.order_by("-uploaded_at", "-id").first() if ss is not None else None
+# The refund lists load each request's Accounts row and its documents in one go
+# (pending(), recent()), into `request.accounts_rows`.
+_ACCOUNTS_ROWS = dict(queryset=SectionStatus.objects.filter(section__code=SECTION_ACCOUNTS)
+                      .prefetch_related("documents"), to_attr="accounts_rows")
+
+
+def _accounts_row(req):
+    """The request's Accounts row — from what was already loaded when possible."""
+    loaded = getattr(req, "accounts_rows", None)              # a refund list
+    if loaded is not None:
+        return loaded[0] if loaded else None
+    statuses = prefetched(req, "section_statuses")           # a dashboard
+    if statuses is not None:
+        return next((s for s in statuses if s.section.code == SECTION_ACCOUNTS), None)
+    return SectionStatus.objects.filter(request=req, section__code=SECTION_ACCOUNTS).first()
+
+
+def _refund_of(req):
+    """The request's Refund (with who recorded it), or None — without a query when
+    it was loaded with select_related / prefetch_related("…refund")."""
+    if ClearanceRequest.refund.is_cached(req):
+        try:
+            return req.refund
+        except Refund.DoesNotExist:
+            return None
+    return Refund.objects.filter(request=req).select_related("recorded_by").first()
+
+
+def bank_details(req, accounts_ss=None):
+    """The bank account the student confirmed with Accounts (their cancelled cheque).
+    `accounts_ss`: the request's Accounts row, when the caller already has it."""
+    ss = accounts_ss if accounts_ss is not None else _accounts_row(req)
+    if ss is None:
+        latest = None
+    else:
+        documents = prefetched(ss, "documents")
+        latest = (latest_document(documents) if documents is not None
+                  else ss.documents.order_by("-uploaded_at", "-id").first())
     review = ((latest.ocr_fields or {}).get("review") or {}) if latest is not None else {}
     return {key: str(review.get(key) or "") for key in ("account_holder", "account_no", "ifsc", "bank_name")}
 
@@ -114,12 +150,13 @@ def pending():
     return (ClearanceRequest.objects
             .filter(is_active=True, refund__isnull=True, section_statuses__isnull=False)
             .exclude(section_statuses__status__in=[STATUS_PENDING, STATUS_REJECTED])
-            .distinct().select_related("student").order_by("created_at", "id"))
+            .distinct().select_related("student__department").order_by("created_at", "id")
+            .prefetch_related(Prefetch("section_statuses", **_ACCOUNTS_ROWS)))
 
 
 def status_for(req):
     """The refund as the student sees it."""
-    refund = Refund.objects.filter(request=req).first()
+    refund = _refund_of(req)
     if refund is not None:
         return {
             "status": "sent" if refund.amount > 0 else "not_due",
@@ -210,25 +247,30 @@ def reject(req, user, reason):
     return accounts_ss
 
 
-def row_state(req):
+def row_state(req, accounts_ss=None):
     """A request's refund, as the refund sender's Approved tab shows it:
     waiting (other sections still to approve — listed), ready (send it now),
-    sent, or not_due — plus the bank details, suggested amount and the record."""
-    refund = Refund.objects.filter(request=req).select_related("recorded_by").first()
-    statuses = list(req.section_statuses.select_related("section"))
+    sent, or not_due — plus the bank details, suggested amount and the record.
+    `accounts_ss`: the request's Accounts row, when the caller (a desk) has it."""
+    refund = _refund_of(req)
+    statuses = prefetched(req, "section_statuses")
+    if statuses is None:
+        statuses = list(req.section_statuses.select_related("section").order_by("section__order", "id"))
     pending = [s.section.name for s in statuses if s.status != STATUS_APPROVED]
     state = (("sent" if refund.amount > 0 else "not_due") if refund is not None
              else "waiting" if pending or not statuses else "ready")
-    return {**row(req, refund), "state": state, "waiting_for": pending if state == "waiting" else []}
+    return {**row(req, refund, accounts_ss=accounts_ss), "state": state,
+            "waiting_for": pending if state == "waiting" else []}
 
 
 def recent(limit=200):
     """Refunds already recorded, newest first (for the Accounts head's list)."""
     return (Refund.objects.filter(request__is_active=True)
-            .select_related("request__student", "recorded_by").order_by("-recorded_at")[:limit])
+            .select_related("request__student__department", "recorded_by").order_by("-recorded_at")
+            .prefetch_related(Prefetch("request__section_statuses", **_ACCOUNTS_ROWS))[:limit])
 
 
-def row(req, refund=None):
+def row(req, refund=None, accounts_ss=None):
     """A request with its refund, as the refund sender sees it."""
     return {
         "request_id": req.id,
@@ -237,7 +279,7 @@ def row(req, refund=None):
         "department": req.student.department.code if req.student.department_id else "",
         "fund_us_amount": str(req.fund_us_amount),
         "suggested_amount": str(suggested_amount(req)),
-        "bank": bank_details(req),
+        "bank": bank_details(req, accounts_ss=accounts_ss),
         "refund": None if refund is None else {
             "amount": str(refund.amount), "mode": refund.mode, "reference": refund.reference,
             "paid_on": refund.paid_on.isoformat() if refund.paid_on else None,
