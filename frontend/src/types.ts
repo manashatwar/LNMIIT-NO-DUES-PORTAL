@@ -58,6 +58,7 @@ export interface SectionInfo {
   comments: SectionComment[];
   documents: SectionDocument[];
   checklist?: { label: string; done: boolean }[];     // Administration: what to complete at the office
+  waiting_for?: string[];   // earlier sections it still waits for, for this student's exit type (no TPC on an NEP exit)
 }
 
 // Administration's checklist for one request (e.g. "Physical ID card submitted"):
