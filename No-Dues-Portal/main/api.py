@@ -269,11 +269,16 @@ def _comments_and_documents(ss):
 
 def _section_dict(ss, request):
     comments, documents = _comments_and_documents(ss)
+    smap = engine.status_map(request)
     return {
         "code": ss.section.code,
         "name": ss.section.name,
         "status": ss.status,
         "actionable": engine.actionable(request, ss.section.code),
+        # The earlier sections this one still waits for, for this student's exit
+        # type (no TPC on an NEP exit) — the student's lock messages name them.
+        "waiting_for": [smap[code].section.name if code in smap else code.title()
+                        for code in engine.unapproved_prerequisites(request, ss.section.code)],
         "is_upload_section": ss.section.is_upload_section,
         "student_confirmed": ss.student_confirmed,
         "needs_confirm": ss.section.code in BASIC_CONFIRM_SECTIONS,
