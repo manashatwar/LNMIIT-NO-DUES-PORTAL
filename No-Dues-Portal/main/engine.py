@@ -6,12 +6,14 @@ reverse-hierarchy cascade — for the fixed sections and for each department's
 HOD-managed lab chain (§ Department labs). Pure-Python graph helpers +
 DB-aware operations.
 """
+from collections import deque
+
 from django.db import transaction
 from django.utils import timezone
 
 from .models import (
     Section, SectionStatus, Comment, Certificate, ClearanceRequest, Lab, LabStatus, StageApproval, Refund,
-    STATUS_PENDING, STATUS_APPROVED, STATUS_REJECTED,
+    EXIT_TYPES, STATUS_PENDING, STATUS_APPROVED, STATUS_REJECTED,
     OVERALL_IN_PROGRESS, OVERALL_CLEARED,
     SECTION_LIBRARY, SECTION_TPC, SECTION_WARDEN, SECTION_STORE, SECTION_LUCS,
     SECTION_SPORTS, SECTION_MEDICAL, SECTION_NAD, SECTION_HOD,
@@ -36,16 +38,24 @@ from .prefetch import prefetched
 # when the HOD has set any up — see § Department labs below.
 
 #
-# Accounts and Administration sit side by side: both open once Library, TPC,
-# Warden and HOD have approved (the student's Pages 4 and 5 unlock together),
-# and neither waits for the other. The request is cleared only when every one of
-# its sections is approved (recompute_overall).
+# Accounts and Administration sit side by side: both open once Library, TPC
+# (graduation only — see OPTIONAL_PREREQUISITES), Warden and HOD have approved
+# (the student's Pages 4 and 5 unlock together), and neither waits for the
+# other. The request is cleared only when every one of its sections is approved
+# (recompute_overall).
 _AFTER_DEPT_AND_FIELD = [SECTION_LIBRARY, SECTION_TPC, SECTION_WARDEN, SECTION_HOD]
 
 PREREQUISITES = {
     SECTION_ACCOUNTS: list(_AFTER_DEPT_AND_FIELD),
     SECTION_ADMINISTRATION: list(_AFTER_DEPT_AND_FIELD),
 }
+
+# Prerequisites that only apply when the student's exit type includes them.
+# TPC (placement) is part of a graduation only: for an NEP exit, a withdrawal or
+# an admission cancel, Accounts and Administration don't wait for it. Any other
+# prerequisite an exit type lacks is a configuration error — workflow_problems()
+# reports it, and Django's system check (main/checks.py) refuses to start.
+OPTIONAL_PREREQUISITES = {SECTION_TPC}
 
 # Independent sections (actionable immediately after submission)
 INDEPENDENT_SECTIONS = [
@@ -54,6 +64,16 @@ INDEPENDENT_SECTIONS = [
 ]
 
 ALL_SECTION_CODES = INDEPENDENT_SECTIONS + [SECTION_ACCOUNTS, SECTION_ADMINISTRATION]
+
+# ─── Exit type → the sections a request goes through (Design.md § Routing) ─────
+# Graduation uses the full set. Other exit types omit sections that don't apply.
+REQUIRED_SECTIONS = {
+    "GRADUATION": list(ALL_SECTION_CODES),
+    # NEP exit / withdrawal / admission-cancel: no placement (TPC) obligation.
+    "NEP_EXIT": [c for c in ALL_SECTION_CODES if c != SECTION_TPC],
+    "WITHDRAWAL": [c for c in ALL_SECTION_CODES if c != SECTION_TPC],
+    "ADMISSION_CANCEL": [c for c in ALL_SECTION_CODES if c != SECTION_TPC],
+}
 
 
 class PermissionError_(Exception):
@@ -64,16 +84,103 @@ class ValidationError_(Exception):
     """Raised when a rejection has no reason."""
 
 
-def prerequisites(section_code):
-    """Direct prerequisite section codes for a section."""
-    return PREREQUISITES.get(section_code, [])
+def required_sections(exit_type):
+    """Section codes required for a given exit type."""
+    return REQUIRED_SECTIONS.get(exit_type, list(ALL_SECTION_CODES))
 
 
-def downstream_closure(section_code):
-    """Transitive set of section codes that depend on `section_code`."""
+def prerequisites(section_code, exit_type=None):
+    """The sections that must approve before `section_code` can act. With an
+    `exit_type`: for a request of that exit type — an optional prerequisite the
+    exit type doesn't include is dropped (no TPC to wait for on an NEP exit).
+    Without one: the full rule, for every exit type (e.g. "does this section
+    wait on anything at all?")."""
+    prereqs = list(PREREQUISITES.get(section_code, []))
+    if exit_type is None:
+        return prereqs
+    included = set(required_sections(exit_type))
+    return [p for p in prereqs if p in included or p not in OPTIONAL_PREREQUISITES]
+
+
+def workflow(exit_type):
+    """One exit type's approval graph: {section: [its prerequisites]} for every
+    section a request of that exit type has."""
+    return {code: prerequisites(code, exit_type) for code in required_sections(exit_type)}
+
+
+# ─── Validating a workflow: Kahn's algorithm ───────────────────────────────────
+
+def analyze_workflow(graph):
+    """Kahn's topological sort over {section: [prerequisites]}, in O(V + E).
+
+    Returns (order, missing, blocked):
+      order   — an order in which the sections can be approved, prerequisites first
+      missing — [(section, prerequisite)] where the prerequisite isn't in the graph:
+                that section could never act (the original NEP-exit bug: Accounts
+                waited for a TPC section the request didn't have)
+      blocked — sections caught on, or after, a cycle: never approvable
+    A workflow is valid when `missing` and `blocked` are both empty."""
+    missing = [(code, p) for code, prereqs in graph.items() for p in prereqs if p not in graph]
+    # Edges run prerequisite → dependent; in-degree = number of (distinct)
+    # prerequisites inside the graph. Missing ones are reported above and left
+    # out here, so whatever Kahn can't order really is on or after a cycle.
+    indegree = {code: 0 for code in graph}
+    dependents = {code: [] for code in graph}
+    for code, prereqs in graph.items():
+        for p in set(prereqs):
+            if p in graph:
+                indegree[code] += 1
+                dependents[p].append(code)
+    ready = deque(code for code in graph if indegree[code] == 0)   # declaration order: deterministic
+    order = []
+    while ready:
+        code = ready.popleft()
+        order.append(code)
+        for dependent in dependents[code]:
+            indegree[dependent] -= 1
+            if indegree[dependent] == 0:
+                ready.append(dependent)
+    done = set(order)
+    blocked = [code for code in graph if code not in done]
+    return order, missing, blocked
+
+
+def approval_order(graph):
+    """The order in which every section of `graph` can be approved; raises
+    WorkflowError if the graph has a missing prerequisite or a cycle."""
+    order, missing, blocked = analyze_workflow(graph)
+    problems = _describe(missing, blocked)
+    if problems:
+        raise WorkflowError("; ".join(problems))
+    return order
+
+
+class WorkflowError(Exception):
+    """An approval workflow that some request could never get through."""
+
+
+def _describe(missing, blocked):
+    return ([f"{code} waits for {p}, which isn't part of this workflow" for code, p in missing]
+            + ([f"{', '.join(blocked)} can never be approved (a cycle)"] if blocked else []))
+
+
+def workflow_problems():
+    """Every problem in every exit type's workflow, as sentences ([] = all valid).
+    Checked when Django starts (main/checks.py) and by the test suite."""
+    problems = []
+    for exit_type in EXIT_TYPES:
+        _, missing, blocked = analyze_workflow(workflow(exit_type))
+        problems += [f"{exit_type}: {problem}" for problem in _describe(missing, blocked)]
+    return problems
+
+
+def downstream_closure(section_code, exit_type=None):
+    """Transitive set of section codes that depend on `section_code` (for a
+    request of `exit_type`, when given) — what a reopen of it resets."""
+    graph = workflow(exit_type) if exit_type is not None else PREREQUISITES
     # Build reverse adjacency
     reverse = {}
-    for sec, prereqs in PREREQUISITES.items():
+    for sec, prereqs in graph.items():
         for p in prereqs:
             reverse.setdefault(p, []).append(sec)
 
@@ -101,12 +208,21 @@ def status_map(request):
     return _status_map(request)
 
 
+def unapproved_prerequisites(request, section_code):
+    """The prerequisites of `section_code` — for this request's exit type — that
+    haven't approved yet, in order (what "Waiting for …" lists)."""
+    smap = _status_map(request)
+    return [code for code in prerequisites(section_code, request.exit_type)
+            if smap.get(code) is None or smap[code].status != STATUS_APPROVED]
+
+
 def actionable(request, section_code, dept_has_labs=None):
-    """True iff every prerequisite of `section_code` is APPROVED for this request
-    (for HOD, that includes every lab in the student's department lab chain).
-    `dept_has_labs`: for HOD, whether the student's department has labs, when
-    the caller already knows it (a desk asks once, not once per row)."""
-    prereqs = prerequisites(section_code)
+    """True iff every prerequisite of `section_code` — for this request's exit
+    type — is APPROVED (for HOD, that includes every lab in the student's
+    department lab chain). `dept_has_labs`: for HOD, whether the student's
+    department has labs, when the caller already knows it (a desk asks once, not
+    once per row)."""
+    prereqs = prerequisites(section_code, request.exit_type)
     if prereqs:
         smap = _status_map(request)
         for prereq in prereqs:
@@ -167,7 +283,7 @@ def _on_status_change(section_status, previous):
         StageApproval.objects.filter(section_status=section_status).delete()
         request = section_status.request
         smap = _status_map(request)
-        for dep_code in downstream_closure(section_status.section.code):
+        for dep_code in downstream_closure(section_status.section.code, request.exit_type):
             ds = smap.get(dep_code)
             if ds is not None and ds.status == STATUS_APPROVED:
                 ds.status = STATUS_PENDING
@@ -417,25 +533,6 @@ def drop_lab_from_open_requests(lab, actor):
         ls.delete()
         released += 1
     return released
-
-
-# ─── Exit-type → required section set (Design.md § Routing & Scoping) ────────────
-
-from .models import EXIT_TYPES  # noqa: E402
-
-# Graduation uses the full set. Other exit types omit sections that don't apply.
-REQUIRED_SECTIONS = {
-    "GRADUATION": list(ALL_SECTION_CODES),
-    # NEP exit / withdrawal / admission-cancel: no placement (TPC) obligation.
-    "NEP_EXIT": [c for c in ALL_SECTION_CODES if c != SECTION_TPC],
-    "WITHDRAWAL": [c for c in ALL_SECTION_CODES if c != SECTION_TPC],
-    "ADMISSION_CANCEL": [c for c in ALL_SECTION_CODES if c != SECTION_TPC],
-}
-
-
-def required_sections(exit_type):
-    """Section codes required for a given exit type."""
-    return REQUIRED_SECTIONS.get(exit_type, list(ALL_SECTION_CODES))
 
 
 # ─── Page 1 intake: sections the student uploads to before the tri-gate opens ───
