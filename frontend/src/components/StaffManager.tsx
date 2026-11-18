@@ -278,7 +278,7 @@ export function StaffManager({ sectionName, levels = false, onChanged }: StaffMa
                     <p style={{ fontSize: 12, color: '#64748b', marginTop: 0 }}>
                         What every student must complete in person, e.g. handing in their physical ID card. Your office ticks each item
                         on the request (<strong>Checklist</strong> column in Incoming); <strong>Approve stays locked</strong> until all
-                        are ticked. Students see this list on their Page 5.
+                        are ticked. Students see this list on their Page 4.
                     </p>
                     {checklist.length === 0 ? (
                         <div style={{ fontSize: 12, color: '#64748b', background: '#f8fafc', padding: 10, borderRadius: 6 }}>
