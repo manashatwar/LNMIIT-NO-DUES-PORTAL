@@ -1336,6 +1336,46 @@ class RefundTests(ApiHelpers, TestCase):
         self.assertEqual(self.overall(), OVERALL_CLEARED)
         self.assertEqual((self.mine()["refund"]["status"], self.mine()["refund"]["amount"]), ("not_due", "0.00"))
 
+    def donate(self, amount):
+        return self.post(self.student, "/api/student/donation/", {"fund_us_amount": amount})
+
+    def test_the_student_sets_their_donation_on_the_financial_page_until_accounts_approves(self):
+        self.assertEqual(self.mine()["donation_locked"], "")
+        r = self.donate("2500")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual((r.json()["request"]["fund_us_amount"], r.json()["request"]["refund"]["amount"]),
+                         ("2500.00", "7500.00"))                                  # it comes out of the caution money
+        for bad in ("-1", "10000.01", "abc", "NaN", "Infinity", "1e30", [5]):
+            self.assertEqual(self.donate(bad).status_code, 400, bad)
+        self.assertEqual(self.donate(None).status_code, 200)                       # none
+        self.assertEqual(self.donate(10000).status_code, 200)                      # all of it
+        self.assertEqual(self.donate("1500").status_code, 200)
+
+        # Submitting the intake again (after a re-upload) no longer changes it.
+        for code in (SECTION_LIBRARY, SECTION_TPC):
+            Document.objects.create(section_status=self.ss(code))
+        r = self.post(self.student, "/api/student/submit-intake/", {"vacant_room_no": "A102", "fund_us_amount": 99})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.json()["request"]["fund_us_amount"], "1500.00")
+
+        self.approve_all()                                    # Accounts approved: it works from ₹1,500
+        self.assertIn("Accounts has approved", self.mine()["donation_locked"])
+        self.assertEqual(self.donate("500").status_code, 409)
+        self.assertEqual(self.refunds().json()["pending"][0]["suggested_amount"], "8500.00")
+
+        self.send(reject=True, reason="Cheque is unclear")    # Accounts sent back: it can change again
+        self.assertEqual(self.mine()["donation_locked"], "")
+        self.assertEqual(self.donate("500").status_code, 200)
+        engine.approve(self.ss(SECTION_ACCOUNTS), self.officer)
+        self.assertEqual(self.refunds().json()["pending"][0]["suggested_amount"], "9500.00")
+
+        self.send(no_refund=True)                             # the refund is recorded: final
+        engine.reject(self.ss(SECTION_ACCOUNTS), self.officer, "Recheck")   # even if Accounts reopens later
+        self.assertIn("refund has been recorded", self.mine()["donation_locked"])
+        self.assertEqual(self.donate("0").status_code, 409)
+        self.req.refresh_from_db()
+        self.assertEqual(str(self.req.fund_us_amount), "500.00")
+
     def test_a_correction_or_a_reopen_never_asks_for_a_second_payment(self):
         self.approve_all()
         self.send(amount="9000", mode="NEFT", reference="UTR-TYPO")
