@@ -135,6 +135,7 @@ export interface ClearanceRequest {
   exit_type: ExitType;
   overall_status: 'IN_PROGRESS' | 'CLEARED';
   fund_us_amount: string;
+  donation_locked: string;      // why the donation can no longer change ("" = it can)
   vacant_room_no: string;
   intake_submitted: boolean;
   current_page: number;         // 1 = intake, 2 = dashboard
