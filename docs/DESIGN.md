@@ -410,7 +410,7 @@ Code: `main/checklist.py`, `ChecklistItem` / `ChecklistTick`, enabled through `C
 - **What it is.** A list of things every student must complete in person at the Administration office, starting with **"Physical ID card submitted"**. `admin.office@` manages the list under **Manage staff → Checklist at the office**. An item that was ever ticked is kept, inactive, when removed, so past ticks stay on record.
 - **Ticking.** The office ticks each item on the request, in the **Checklist** column of Incoming, when the student hands it in. Whoever can decide the request can tick it: the head, or the staff member it was sent to. Only while the request is `PENDING`.
 - **The gate.** Approve is refused (`409`, naming the missing items), for the head and staff alike, until every active item is ticked. A new item applies to requests already in progress. Ticks survive a reopen: what was handed in stays handed in.
-- **The student** sees the checklist on Page 5 ("📋 Complete at the Administration office"), with each item marked received or pending.
+- **The student** sees the checklist on Page 4, under Administration and beside Accounts ("📋 Complete at the Administration office"), with each item marked received or pending.
 
 ### Officer visibility
 
@@ -462,7 +462,7 @@ def process_upload(uploaded_file, section_status, student):
 ## Certificate & Fund Us
 
 - When `overall_status == CLEARED`, a "Download Certificate" action produces a document listing the student, exit type, and every section with its approver and timestamp.
-- The **Fund Us** amount captured at initiation is stored on the request; Accounts deducts it from the refund and it appears on the certificate/refund ledger.
+- The student sets the optional **Fund-Us** donation on Page 4 (Financial), beside the Refund Ledger: ₹0 up to the ₹10,000 caution money it comes out of. It can change until Accounts approves or the refund is recorded (`refunds.set_donation` locks the Accounts row and the request, so an approval can't slip in between). Accounts deducts it from the refund, and it appears on the certificate and the refund ledger.
 - Certificate generation is idempotent and is invalidated if a reverse cascade reopens any section.
 
 ## Screen Flow & Routes
@@ -470,7 +470,7 @@ def process_upload(uploaded_file, section_status, student):
 | Route | Role | Purpose |
 |---|---|---|
 | `/login` | all | Role-based login |
-| `/student/initiate` | Student | Select exit type, set Fund-Us amount |
+| `/student/initiate` | Student | Select exit type |
 | `/student/upload` | Student | Upload per-section documents (Library, TPC, Accounts) |
 | `/student/dashboard` | Student | Per-section status matrix, comments, re-upload, certificate |
 | `/section/<code>/queue` | Section officer | Scoped queue of pending requests |
