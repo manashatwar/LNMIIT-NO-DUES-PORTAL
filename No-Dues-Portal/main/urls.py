@@ -15,6 +15,7 @@ urlpatterns = [
     path('api/student/initiate/', api.initiate, name='initiate'),
     path('api/student/upload/', api.upload_document, name='upload_document'),
     path('api/student/submit-intake/', api.submit_intake, name='submit_intake'),
+    path('api/student/donation/', api.student_donation, name='student_donation'),
     path('api/student/confirm-review/', api.confirm_review, name='confirm_review'),
     path('api/student/comment/', api.student_comment, name='student_comment'),
     path('api/student/confirm-section/', api.confirm_section, name='confirm_section'),
