@@ -37,7 +37,7 @@ from .models import (
 )
 from .prefetch import latest_document, prefetched
 
-CAUTION_MONEY = Decimal("10000")   # what the student's Refund Ledger (Page 4) starts from
+CAUTION_MONEY = Decimal("10000")   # what the student's Refund Ledger (Page 4) starts from; the most they can donate
 MODES = ["NEFT", "IMPS", "RTGS", "UPI", "CHEQUE"]
 MAX_AMOUNT = Decimal("99999999.99")
 # Payment dates are the institute's calendar dates (LNMIIT, Jaipur), whatever
@@ -96,6 +96,56 @@ def suggested_amount(req):
     """Caution money less the student's Fund-Us donation (never below zero)."""
     donation = Decimal(str(req.fund_us_amount)) if req.fund_us_amount is not None else Decimal("0")
     return max(CAUTION_MONEY - donation, Decimal("0")).quantize(Decimal("0.01"))
+
+
+# ─── The student's Fund-Us donation ──────────────────────────────────────────────
+# Set on the student's Financial page (Page 4). It comes out of the caution money,
+# so it lowers the refund. It's final once Accounts has approved (Accounts works
+# from that amount) or the refund is recorded.
+
+class DonationLocked(RefundError):
+    """The donation can no longer change."""
+
+
+def donation_amount(value):
+    """A donation from the student: ₹0 (none) up to the caution money."""
+    try:
+        amount = Decimal(str(0 if value in (None, "") else value)).quantize(Decimal("0.01"))
+        valid = amount.is_finite() and Decimal("0") <= amount <= CAUTION_MONEY
+    except (InvalidOperation, ValueError, TypeError):
+        valid = False
+    if not valid:
+        raise RefundError(f"The donation comes out of your ₹{CAUTION_MONEY:,.0f} caution money: "
+                          f"enter an amount from ₹0 to ₹{CAUTION_MONEY:,.0f}.")
+    return amount
+
+
+def donation_locked(req, accounts_ss=None):
+    """Why the student's donation can no longer change; "" while it can."""
+    if _refund_of(req) is not None:
+        return "Your refund has been recorded, so your donation can no longer change."
+    ss = accounts_ss if accounts_ss is not None else _accounts_row(req)
+    if ss is not None and ss.status == STATUS_APPROVED:
+        return "Accounts has approved your financial clearance, so your donation can no longer change."
+    return ""
+
+
+@transaction.atomic
+def set_donation(req, value):
+    """Set the student's Fund-Us donation (₹0 = none). Returns the saved request."""
+    amount = donation_amount(value)
+    # Lock the Accounts row, then the request (engine.approve's order), so an
+    # Accounts approval or a refund being recorded can't land between the check
+    # and the save.
+    accounts_ss = (SectionStatus.objects.select_for_update(of=("self",))
+                   .filter(request=req, section__code=SECTION_ACCOUNTS).first())
+    req = ClearanceRequest.objects.select_for_update().get(pk=req.pk)
+    reason = donation_locked(req, accounts_ss)
+    if reason:
+        raise DonationLocked(reason)
+    req.fund_us_amount = amount
+    req.save(update_fields=["fund_us_amount"])
+    return req
 
 
 # The refund lists load each request's Accounts row and its documents in one go
