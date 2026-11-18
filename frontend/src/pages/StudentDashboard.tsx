@@ -55,12 +55,13 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
     const triGate = ['LIBRARY', 'TPC', 'WARDEN'].filter(has);
     const deptField = ['STORE', 'LUCS', 'SPORTS', 'MEDICAL', 'NAD', 'HOD'].filter(has);
     const triGateApproved = triGate.length > 0 && triGate.every(approved);
-    // Accounts (Page 4) and Administration (Page 5) open when the backend says they
-    // can act: their prerequisites for this student's exit type have approved
-    // (engine.prerequisites). The rule lives there only — not copied here.
+    // Accounts and Administration work in parallel on Page 4. It opens when the
+    // backend says they can act: their prerequisites for this student's exit type
+    // have approved (engine.prerequisites). The rule lives there only — not copied here.
     const accountsUnlock = !!sec('ACCOUNTS')?.actionable;
     const adminUnlock = !!sec('ADMINISTRATION')?.actionable;
-    const accountsApproved = approved('ACCOUNTS');
+    const financeUnlock = accountsUnlock || adminUnlock;
+    const financeApproved = ['ACCOUNTS', 'ADMINISTRATION'].filter(has).every(approved);
     const cleared = request.overall_status === 'CLEARED';   // every section approved + refund sent
     const refund = request.refund;
 
@@ -70,20 +71,24 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
     const labsOn = !!labs?.enabled;
     const labRejected = labsOn && labs.levels.some((lv) => lv.labs.some((e) => e.status === 'REJECTED'));
 
-    // Page lock rules. Accounts (Page 4) and Administration (Page 5) sit side by
-    // side: both open once Library, Warden, HOD — and TPC on a graduation — approve.
+    // Page lock rules. Page 4 holds Accounts and Administration side by side: both
+    // open once Library, Warden, HOD — and TPC on a graduation — approve. Page 5
+    // (the certificate) opens with it, showing what it still waits for.
     const locks = {
         page1: true,
         page2: request.intake_submitted,
         page3: triGateApproved,
-        page4: accountsUnlock,
-        page5: adminUnlock,
+        page4: financeUnlock,
+        page5: financeUnlock,
     };
     // What a locked page is waiting for, by name (this student's sections only).
+    const financeWaiting = mustApproveFirst([...new Set([
+        ...(sec('ACCOUNTS')?.waiting_for ?? []), ...(sec('ADMINISTRATION')?.waiting_for ?? []),
+    ])]);
     const lockMsgs = {
         page3: mustApproveFirst(triGate.filter((c) => !approved(c)).map((c) => sec(c)?.name ?? c)),
-        page4: mustApproveFirst(sec('ACCOUNTS')?.waiting_for ?? []),
-        page5: mustApproveFirst(sec('ADMINISTRATION')?.waiting_for ?? []),
+        page4: financeWaiting,
+        page5: financeWaiting,
     };
 
     type TabId = 'page1' | 'page2' | 'page3' | 'page4' | 'page5';
@@ -91,8 +96,8 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
     const resumeTab: TabId =
         !request.intake_submitted ? 'page1'
             : !triGateApproved ? 'page2'
-                : !accountsUnlock ? 'page3'
-                    : !accountsApproved ? 'page4'
+                : !financeUnlock ? 'page3'
+                    : !financeApproved ? 'page4'
                         : 'page5';
     const [activeTab, setActiveTab] = useState<TabId>(resumeTab);
     // Which section the student clicked to fix (drives back-to-page1 re-upload)
@@ -133,8 +138,6 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
     const [btpConfirmed, setBtpConfirmed] = useState(initConfirmed);
 
     const [room, setRoom] = useState(request.vacant_room_no || '');
-    const [donate, setDonate] = useState(Number(request.fund_us_amount) > 0);
-    const [amount, setAmount] = useState(Number(request.fund_us_amount) || 1000);
 
     const [busy, setBusy] = useState<string | null>(null);
     const [msg, setMsg] = useState('');
@@ -207,7 +210,7 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
         if (missing.length) { setIntakeError(missing.join('\n• ')); return; }
         setIntakeError(''); setBusy('submit');
         try {
-            await api.submitIntake(roomTrimmed.toUpperCase(), donate ? Number(amount) || 0 : 0);
+            await api.submitIntake(roomTrimmed.toUpperCase());
             setFixingSectionAndAdvance();
             onReload();
         } catch (e) { setIntakeError(e instanceof Error ? e.message : 'Submit failed'); }
@@ -427,8 +430,8 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                         page1: 'PAGE 1 · STUDENT INTAKE & OFFLINE VERIFICATION UPLOADS',
                         page2: 'PAGE 2 · CORE TRI-GATE VERIFICATION',
                         page3: 'PAGE 3 · DEPARTMENTAL & FIELD CLEARANCE',
-                        page4: 'PAGE 4 · FINANCIAL CLEARANCE (ACCOUNTS)',
-                        page5: 'PAGE 5 · ADMINISTRATION CLEARANCE & CERTIFICATE',
+                        page4: 'PAGE 4 · FINANCIAL & ADMINISTRATION CLEARANCE (IN PARALLEL)',
+                        page5: 'PAGE 5 · NO-DUES CERTIFICATE',
                     }[activeTab]}</span>
                     <span style={{ fontSize: 12, fontWeight: 'normal' }}>{request.student.roll_no} · {request.student.department} · {EXIT_LABELS[request.exit_type] || request.exit_type}</span>
                 </div>
@@ -459,8 +462,8 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                         { id: 'page1', label: '📄 1 · Intake & Uploads', lockMsg: '' },
                         { id: 'page2', label: '🔑 2 · Core Tri-Gate', lockMsg: 'Submit your intake (Page 1) first.' },
                         { id: 'page3', label: '🏫 3 · Dept & Field', lockMsg: lockMsgs.page3 },
-                        { id: 'page4', label: '💰 4 · Financial', lockMsg: lockMsgs.page4 },
-                        { id: 'page5', label: '🏢 5 · Administration', lockMsg: lockMsgs.page5 },
+                        { id: 'page4', label: '💰 4 · Financial & 🏢 Administration', lockMsg: lockMsgs.page4 },
+                        { id: 'page5', label: '🎓 5 · Certificate', lockMsg: lockMsgs.page5 },
                     ] as { id: TabId; label: string; lockMsg: string }[]).map((t) => {
                         const enabled = locks[t.id];
                         return (
@@ -573,11 +576,6 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                                     <input className="erp-input" value={request.student.hostel} readOnly style={{ ...ocrInput, background: '#f1f5f9' }} /></div>
                                 <div><label style={ocrLabel}>Vacant Room Number</label>
                                     <input className="erp-input" value={room} onChange={(e) => setRoom(e.target.value)} placeholder="e.g. A102" style={ocrInput} /></div>
-                            </div>
-                            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <input type="checkbox" checked={donate} onChange={(e) => setDonate(e.target.checked)} />
-                                <span style={{ fontSize: 13 }}>Donate to Students' Welfare Fund</span>
-                                {donate && <input className="erp-input" type="number" min={0} value={amount} onChange={(e) => setAmount(Number(e.target.value))} style={{ ...ocrInput, width: 120 }} />}
                             </div>
                         </div>
 
@@ -709,9 +707,9 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                             })}
                         </div>
                         <div style={{ marginTop: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>All departmental sections must be approved to proceed to Accounts.</p>
-                            <button onClick={() => accountsUnlock && setActiveTab('page4')} disabled={!accountsUnlock} className={accountsUnlock ? 'btn btn-success' : 'btn btn-secondary'} style={{ padding: '10px 20px', fontSize: 13, fontWeight: 700 }}>
-                                {accountsUnlock ? 'Proceed to Financial ➔' : '🔒 Page 4 Locked'}
+                            <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>All departmental sections must be approved to proceed to Accounts and Administration.</p>
+                            <button onClick={() => financeUnlock && setActiveTab('page4')} disabled={!financeUnlock} className={financeUnlock ? 'btn btn-success' : 'btn btn-secondary'} style={{ padding: '10px 20px', fontSize: 13, fontWeight: 700 }}>
+                                {financeUnlock ? 'Proceed to Financial & Administration ➔' : '🔒 Page 4 Locked'}
                             </button>
                         </div>
                     </div>
@@ -752,13 +750,18 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                     );
                 })()}
 
-                {/* ── PAGE 4: Financial Clearance (Accounts) ── */}
+                {/* ── PAGE 4: Accounts and Administration side by side — they work in parallel ── */}
                 {activeTab === 'page4' && (
                     <div>
+                        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#475569' }}>
+                            ⇉ <strong>Accounts</strong> and <strong>Administration</strong> work on your request at the same time. Finish both.
+                            Your certificate (Page 5) unlocks once both have approved and Accounts has sent your refund.
+                        </div>
                         <div className="row">
-                            <div className="col-sm-7">
+                            <div className="col-sm-6">
                                 {has('ACCOUNTS') && (
                                     <UploadReview
+                                        stacked
                                         section={sec('ACCOUNTS')!} icon={SECTION_META.ACCOUNTS.icon}
                                         config={UPLOAD_SECTION_CONFIG.ACCOUNTS}
                                         student={{ name: request.student.name, roll_no: request.student.roll_no, department: request.student.department }}
@@ -766,95 +769,163 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                                         onReload={onReload}
                                     />
                                 )}
+                                <RefundLedger request={request} onReload={onReload} />
                             </div>
-                            <div className="col-sm-5">
-                                <div className="well" style={{ background: '#fff' }}>
-                                    <h4 style={{ marginTop: 0, color: '#1b365d' }}>Refund Ledger</h4>
-                                    {(() => {
-                                        const caution = 10000, dues = 0;
-                                        const donation = Number(request.fund_us_amount) || 0;
-                                        const net = caution - dues - donation;
-                                        const Row = ({ k, v, bold }: { k: string; v: string; bold?: boolean }) => (
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', fontWeight: bold ? 700 : 400, borderTop: bold ? '1px solid #cbd5e1' : 'none' }}>
-                                                <span>{k}</span><span>{v}</span>
-                                            </div>
-                                        );
-                                        return (<>
-                                            <Row k="Caution Money (refundable)" v={`₹${caution.toLocaleString()}`} />
-                                            <Row k="Total Dues" v={`₹${dues}`} />
-                                            <Row k="Voluntary Donation (Fund-Us)" v={`₹${donation.toLocaleString()}`} />
-                                            <Row k="Net Refund" v={`₹${net.toLocaleString()}`} bold />
-                                        </>);
-                                    })()}
-                                    <div style={{
-                                        marginTop: 10, padding: '8px 10px', borderRadius: 6, fontSize: 12,
-                                        background: refund.status === 'sent' || refund.status === 'not_due' ? '#f0fdf4' : '#f8fafc',
-                                        color: refund.status === 'sent' || refund.status === 'not_due' ? '#166534' : '#475569',
-                                    }}>
-                                        {refund.status === 'sent' ? <>✅ <strong>Paid {rupees(refund.amount)}</strong> by {refund.mode}
-                                            {refund.paid_on ? ` on ${new Date(refund.paid_on).toLocaleDateString()}` : ''} · UTR {refund.reference}</>
-                                            : refund.status === 'not_due' ? <>✅ No refund was due.</>
-                                                : refund.status === 'pending' ? <>⏳ Every section has approved: Accounts is sending your refund
-                                                    {refund.account ? ` to your account ${refund.account}` : ''}.</>
-                                                    : <>Your refund is sent to the bank account on your cancelled cheque once every section has approved.</>}
-                                    </div>
-                                </div>
+                            <div className="col-sm-6">
+                                {has('ADMINISTRATION') && (
+                                    <>
+                                        <BasicDetail
+                                            section={sec('ADMINISTRATION')!}
+                                            icon={SECTION_META.ADMINISTRATION.icon}
+                                            subtitle={SECTION_META.ADMINISTRATION.subtitle}
+                                            student={{ name: request.student.name, roll_no: request.student.roll_no, department: request.student.department }}
+                                            me={request.student.webmail}
+                                            onReload={onReload}
+                                        />
+                                        <OfficeChecklist items={sec('ADMINISTRATION')!.checklist ?? []} />
+                                    </>
+                                )}
                             </div>
                         </div>
                         <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
                             <button onClick={() => setActiveTab('page5')} className="btn btn-success" style={{ padding: '10px 20px', fontSize: 13, fontWeight: 700 }}>
-                                Go to Administration ➔
+                                Go to Certificate ➔
                             </button>
                         </div>
                     </div>
                 )}
 
-                {/* ── PAGE 5: Administration (alongside Accounts) + Certificate ── */}
+                {/* ── PAGE 5: the No-Dues certificate ── */}
                 {activeTab === 'page5' && (
-                    <div>
-                        {has('ADMINISTRATION') && (
+                    <div className="well" style={{ textAlign: 'center', background: cleared ? '#f0fdf4' : '#fff', border: cleared ? '1px solid #86efac' : '1px solid #cbd5e1' }}>
+                        {cleared ? (
                             <>
-                                <BasicDetail
-                                    section={sec('ADMINISTRATION')!}
-                                    icon={SECTION_META.ADMINISTRATION.icon}
-                                    subtitle={SECTION_META.ADMINISTRATION.subtitle}
-                                    student={{ name: request.student.name, roll_no: request.student.roll_no, department: request.student.department }}
-                                    me={request.student.webmail}
-                                    onReload={onReload}
-                                />
-                                <OfficeChecklist items={sec('ADMINISTRATION')!.checklist ?? []} />
+                                <h3 style={{ color: '#15803d', marginTop: 0 }}>✅ Released Successfully!</h3>
+                                <p style={{ color: '#475569', fontSize: 13 }}>Your clearance is complete. Download your digital No-Dues certificate below.</p>
+                                <button className="btn btn-success" style={{ padding: '12px 24px', fontSize: 14, fontWeight: 700 }} onClick={downloadCertificate}>
+                                    🎓 Download Complete Digital No-Dues Certificate
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <h3 style={{ color: '#1b365d', marginTop: 0 }}>Your No-Dues Certificate</h3>
+                                <p style={{ color: '#64748b', fontSize: 13 }}>
+                                    It is released here once every section has approved and Accounts has sent your refund.
+                                </p>
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                                    <Spinner />
+                                    <span style={{ color: '#475569', fontSize: 13 }}>
+                                        {refund.status === 'pending'
+                                            ? `Every section has approved ✓. Waiting for Accounts to send your refund of ${rupees(refund.amount)}${refund.account ? ` to ${refund.account}` : ''}.`
+                                            : `Still waiting for: ${request.sections.filter((s) => s.status !== 'APPROVED').map((s) => s.name).join(', ')}`}
+                                    </span>
+                                </div>
                             </>
                         )}
-                        <div className="well" style={{ marginTop: 16, textAlign: 'center', background: cleared ? '#f0fdf4' : '#fff', border: cleared ? '1px solid #86efac' : '1px solid #cbd5e1' }}>
-                            {cleared ? (
-                                <>
-                                    <h3 style={{ color: '#15803d', marginTop: 0 }}>✅ Released Successfully!</h3>
-                                    <p style={{ color: '#475569', fontSize: 13 }}>Your clearance is complete. Download your digital No-Dues certificate below.</p>
-                                    <button className="btn btn-success" style={{ padding: '12px 24px', fontSize: 14, fontWeight: 700 }} onClick={downloadCertificate}>
-                                        🎓 Download Complete Digital No-Dues Certificate
-                                    </button>
-                                </>
-                            ) : (
-                                <>
-                                    <h3 style={{ color: '#1b365d', marginTop: 0 }}>Your No-Dues Certificate</h3>
-                                    <p style={{ color: '#64748b', fontSize: 13 }}>
-                                        It is released here once every section has approved and Accounts has sent your refund.
-                                    </p>
-                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                                        <Spinner />
-                                        <span style={{ color: '#475569', fontSize: 13 }}>
-                                            {refund.status === 'pending'
-                                                ? `Every section has approved ✓. Waiting for Accounts to send your refund of ${rupees(refund.amount)}${refund.account ? ` to ${refund.account}` : ''}.`
-                                                : `Still waiting for: ${request.sections.filter((s) => s.status !== 'APPROVED').map((s) => s.name).join(', ')}`}
-                                        </span>
-                                    </div>
-                                </>
-                            )}
-                        </div>
                     </div>
                 )}
             </div>
         </Layout>
+    );
+}
+
+// ── Page 4: the Fund-Us donation and the Refund Ledger ──
+// The donation comes out of the caution money, so it lowers the refund. The
+// student sets it here until Accounts approves (`donation_locked` says why not).
+const CAUTION_MONEY = 10000;   // refunds.CAUTION_MONEY on the server
+
+function RefundLedger({ request, onReload }: { request: ClearanceRequest; onReload: () => void }) {
+    const saved = Number(request.fund_us_amount) || 0;
+    const refund = request.refund;
+    const locked = request.donation_locked;
+    const [donate, setDonate] = useState(saved > 0);
+    const [amount, setAmount] = useState(String(saved > 0 ? saved : 1000));
+    const [busy, setBusy] = useState(false);
+    const [note, setNote] = useState<{ text: string; err: boolean } | null>(null);
+    // Follow the saved value (after a save, or a reload from another tab).
+    useEffect(() => {
+        setDonate(saved > 0);
+        if (saved > 0) setAmount(String(saved));
+    }, [saved]);
+
+    const value = donate ? amount.trim() : '0';
+    const changed = Number(value) !== saved;
+    const save = async () => {
+        if (value === '' || !Number.isFinite(Number(value))) {
+            setNote({ text: 'Enter the donation in rupees, e.g. 1000.', err: true });
+            return;
+        }
+        setBusy(true); setNote(null);
+        try {
+            await api.setDonation(value);
+            setNote({ text: Number(value) > 0 ? '✓ Donation saved. Thank you!' : '✓ Saved: no donation.', err: false });
+            onReload();
+        } catch (e) { setNote({ text: e instanceof Error ? e.message : 'Could not save the donation', err: true }); }
+        finally { setBusy(false); }
+    };
+
+    const dues = 0;
+    const net = Math.max(CAUTION_MONEY - dues - saved, 0);
+    const Row = ({ k, v, bold }: { k: string; v: string; bold?: boolean }) => (
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '4px 0', fontWeight: bold ? 700 : 400, borderTop: bold ? '1px solid #cbd5e1' : 'none' }}>
+            <span>{k}</span><span>{v}</span>
+        </div>
+    );
+    const paid = refund.status === 'sent' || refund.status === 'not_due';
+
+    return (
+        <div className="well" style={{ background: '#fff', border: '1px solid #cbd5e1', borderRadius: 8 }}>
+            <h4 style={{ marginTop: 0, color: '#1b365d' }}>Refund Ledger</h4>
+
+            {/* Fund-Us donation: editable until Accounts approves */}
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, padding: '10px 12px', marginBottom: 12 }}>
+                {locked ? (
+                    <div style={{ fontSize: 13 }}>
+                        🤝 Students' Welfare Fund (Fund-Us) donation: <strong>₹{saved.toLocaleString('en-IN')}</strong>
+                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>🔒 {locked}</div>
+                    </div>
+                ) : (
+                    <>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                            <input type="checkbox" checked={donate} disabled={busy} onChange={(e) => { setDonate(e.target.checked); setNote(null); }} />
+                            🤝 Donate to Students' Welfare Fund (Fund-Us)
+                        </label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                            {donate && (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13 }}>₹
+                                    <input className="erp-input" type="number" min={0} max={CAUTION_MONEY} step={1} value={amount} disabled={busy}
+                                        aria-label="Donation amount in rupees"
+                                        onChange={(e) => { setAmount(e.target.value); setNote(null); }} style={{ ...ocrInput, width: 110 }} />
+                                </span>
+                            )}
+                            <button className="btn btn-primary" style={{ fontSize: 12, padding: '5px 12px' }} disabled={busy || !changed} onClick={save}>
+                                {busy ? 'Saving…' : 'Save donation'}
+                            </button>
+                        </div>
+                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 6 }}>
+                            Optional. It comes out of your ₹{CAUTION_MONEY.toLocaleString('en-IN')} caution money, so it lowers your refund. You can change it until Accounts approves.
+                        </div>
+                    </>
+                )}
+                {note && <div style={{ fontSize: 12, marginTop: 6, color: note.err ? '#b91c1c' : '#15803d' }}>{note.err ? '⚠️ ' : ''}{note.text}</div>}
+            </div>
+
+            <Row k="Caution Money (refundable)" v={`₹${CAUTION_MONEY.toLocaleString('en-IN')}`} />
+            <Row k="Total Dues" v={`₹${dues}`} />
+            <Row k="Voluntary Donation (Fund-Us)" v={`₹${saved.toLocaleString('en-IN')}`} />
+            <Row k="Net Refund" v={`₹${net.toLocaleString('en-IN')}`} bold />
+            <div style={{
+                marginTop: 10, padding: '8px 10px', borderRadius: 6, fontSize: 12,
+                background: paid ? '#f0fdf4' : '#f8fafc', color: paid ? '#166534' : '#475569',
+            }}>
+                {refund.status === 'sent' ? <>✅ <strong>Paid {rupees(refund.amount)}</strong> by {refund.mode}
+                    {refund.paid_on ? ` on ${new Date(refund.paid_on).toLocaleDateString()}` : ''} · UTR {refund.reference}</>
+                    : refund.status === 'not_due' ? <>✅ No refund was due.</>
+                        : refund.status === 'pending' ? <>⏳ Every section has approved: Accounts is sending your refund
+                            {refund.account ? ` to your account ${refund.account}` : ''}.</>
+                            : <>Your refund is sent to the bank account on your cancelled cheque once every section has approved.</>}
+            </div>
+        </div>
     );
 }
 
@@ -912,13 +983,14 @@ function CommentThread({ comments, me, busy, onSend }: {
 }
 
 // ── Upload + OCR review detail for LUCS / Department-Purpose (like Library) ──
-function UploadReview({ section, icon, config, student, me, onReload }: {
+function UploadReview({ section, icon, config, student, me, onReload, stacked = false }: {
     section: SectionInfo;
     icon: string;
     config: { formUrl?: string; formLabel?: string; allowLink?: boolean; fields: { key: string; label: string }[] };
     student: { name: string; roll_no: string; department: string };
     me: string;
     onReload: () => void;
+    stacked?: boolean;   // upload above the review (a half-width column) instead of beside it
 }) {
     const doc = section.documents[0];
     const savedReview = (doc?.ocr_fields?.review as Record<string, string>) || {};
@@ -1009,9 +1081,9 @@ function UploadReview({ section, icon, config, student, me, onReload }: {
                 ? <div className="alert alert-danger" style={{ marginBottom: 12, fontSize: 13 }}>⚠️ {note}</div>
                 : <div style={{ marginBottom: 12, fontSize: 12, color: '#15803d' }}>{note}</div>)}
 
-            <div className="row">
-                <div className="col-sm-6">
-                    <label style={{ ...dropzone, cursor: locked ? 'default' : 'pointer', border: rejected ? '2px dashed #f87171' : locked ? '2px solid #bbf7d0' : '2px dashed #cbd5e1', background: rejected ? '#fef2f2' : locked ? '#f0fdf4' : '#f8fafc' }}>
+            <div className="row" style={stacked ? { rowGap: 12 } : undefined}>
+                <div className={stacked ? 'col-sm-12' : 'col-sm-6'}>
+                    <label style={{ ...dropzone, ...(stacked ? { minHeight: 120, padding: 16 } : {}), cursor: locked ? 'default' : 'pointer', border: rejected ? '2px dashed #f87171' : locked ? '2px solid #bbf7d0' : '2px dashed #cbd5e1', background: rejected ? '#fef2f2' : locked ? '#f0fdf4' : '#f8fafc' }}>
                         <input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: 'none' }} disabled={locked}
                             onChange={(e) => doUpload(e.target.files && e.target.files[0] ? e.target.files[0] : null)} />
                         <div style={{ fontSize: 32, marginBottom: 8 }}>{rejected ? '⚠️' : approvedOk ? '✅' : uploaded ? '✅' : '☁️'}</div>
@@ -1027,7 +1099,7 @@ function UploadReview({ section, icon, config, student, me, onReload }: {
                         </button>
                     )}
                 </div>
-                <div className="col-sm-6">
+                <div className={stacked ? 'col-sm-12' : 'col-sm-6'}>
                     <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 16 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                             <strong style={{ fontSize: 13, color: '#334155' }}>Review <span style={{ color: '#64748b', fontWeight: 'normal' }}>(auto-filled)</span></strong>
@@ -1295,9 +1367,12 @@ function BasicDetail({ section, icon, subtitle, student, me, onReload }: {
                 </>
             ) : (
                 <div style={{ fontSize: 13, color: '#334155' }}>
-                    <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: '#1e40af' }}>
-                        ✓ Request sent to this office. They verify from the details below and approve/reject.
-                    </div>
+                    {/* Only while the office is still deciding: once approved there's nothing left to explain. */}
+                    {!ok && (
+                        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: '#1e40af' }}>
+                            ✓ Request sent to this office. They verify from the details below and approve/reject.
+                        </div>
+                    )}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, background: '#f8fafc', padding: 12, borderRadius: 6 }}>
                         <div><strong>Name:</strong> {savedReview.name || student.name}</div>
                         <div><strong>Roll No:</strong> {savedReview.roll_no || student.roll_no}</div>
