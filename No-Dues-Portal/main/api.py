@@ -337,6 +337,8 @@ def _request_dict(req):
         "exit_type": req.exit_type,
         "overall_status": req.overall_status,
         "fund_us_amount": str(req.fund_us_amount),
+        # Why the donation can no longer change on the Financial page ("" = it can).
+        "donation_locked": refund_service.donation_locked(req),
         "vacant_room_no": req.vacant_room_no,
         "intake_submitted": req.intake_submitted,
         "current_page": _current_page(req),
@@ -498,7 +500,10 @@ def initiate(request):
     if exit_type not in EXIT_TYPES:
         return JsonResponse({"detail": "Invalid exit_type"}, status=400)
 
-    fund_us = body.get("fund_us_amount") or 0
+    try:
+        fund_us = refund_service.donation_amount(body.get("fund_us_amount"))
+    except refund_service.RefundError as e:
+        return JsonResponse({"detail": str(e)}, status=400)
     vacant_room = (body.get("vacant_room_no") or "").strip().upper()
     if vacant_room and not VACANT_ROOM_RE.match(vacant_room):
         return JsonResponse(
@@ -533,13 +538,9 @@ def submit_intake(request):
         return JsonResponse({"detail": "No active request"}, status=400)
 
     body = _json_body(request)
+    # The Fund-Us donation is set on the Financial page (student_donation), not here.
     if "vacant_room_no" in body:
         req.vacant_room_no = (body.get("vacant_room_no") or "").strip().upper()
-    if "fund_us_amount" in body:
-        try:
-            req.fund_us_amount = body.get("fund_us_amount") or 0
-        except (TypeError, ValueError):
-            pass
 
     if not req.vacant_room_no:
         return JsonResponse({"detail": "Vacated room number is required"}, status=400)
@@ -556,7 +557,7 @@ def submit_intake(request):
         return JsonResponse({"detail": f"Upload pending for: {names}"}, status=400)
 
     req.intake_submitted = True
-    req.save(update_fields=["vacant_room_no", "intake_submitted", "fund_us_amount"])
+    req.save(update_fields=["vacant_room_no", "intake_submitted"])
 
     # Warden has no document — it verifies the vacated room. If it was REJECTED,
     # re-submitting the intake (with a corrected room) sends a fresh request to the warden.
@@ -572,6 +573,32 @@ def submit_intake(request):
             body=f"Student updated vacated room to '{req.vacant_room_no}' and re-submitted.",
         )
 
+    return JsonResponse({"has_request": True, "request": _request_dict(req)})
+
+
+@login_required
+@require_http_methods(["POST"])
+def student_donation(request):
+    """
+    Financial page (Page 4): set the Fund-Us donation, {fund_us_amount} (0 = none).
+    It comes out of the caution money, so it lowers the refund. 400 for an amount
+    outside ₹0–caution money; 409 once Accounts has approved or the refund is recorded.
+    """
+    stud = Student.objects.filter(user=request.user).first()
+    if stud is None:
+        return JsonResponse({"detail": "Student record not found"}, status=404)
+    req = _active_request(stud)
+    if req is None:
+        return JsonResponse({"detail": "No active request"}, status=400)
+    body = _json_body(request)
+    if not isinstance(body, dict):
+        body = {}
+    try:
+        req = refund_service.set_donation(req, body.get("fund_us_amount"))
+    except refund_service.DonationLocked as e:
+        return JsonResponse({"detail": str(e)}, status=409)
+    except refund_service.RefundError as e:
+        return JsonResponse({"detail": str(e)}, status=400)
     return JsonResponse({"has_request": True, "request": _request_dict(req)})
 
 
