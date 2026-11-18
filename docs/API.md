@@ -20,8 +20,9 @@ All require an authenticated **Student** session; most operate on that student's
 | Method + path | Purpose | Key request fields | Notes |
 |---|---|---|---|
 | `GET /api/student/request/` | Full clearance state | — | `{has_request: false, exit_types}` if none started yet; otherwise `{has_request: true, request: {...}}` (see shape below) |
-| `POST /api/student/initiate/` | Start a clearance request | `exit_type`, `fund_us_amount?`, `vacant_room_no?` | `409` if an active request already exists (Property 12: one active request per student) |
-| `POST /api/student/submit-intake/` | Lock intake (page 1 → page 2) | `vacant_room_no`, `fund_us_amount?` | `400` if the vacated room is empty or an intake upload (Library/TPC) is still pending |
+| `POST /api/student/initiate/` | Start a clearance request | `exit_type`, `fund_us_amount?`, `vacant_room_no?` | `409` if an active request already exists (Property 12: one active request per student); `400` for a `fund_us_amount` outside ₹0–₹10,000 |
+| `POST /api/student/submit-intake/` | Lock intake (page 1 → page 2) | `vacant_room_no` | `400` if the vacated room is empty or an intake upload (Library/TPC) is still pending. The Fund-Us donation isn't set here any more (see `donation/`) |
+| `POST /api/student/donation/` | Set the Fund-Us donation (Page 4, Financial) | `fund_us_amount` (`0` = none) | It comes out of the ₹10,000 caution money, so it lowers the refund. `400` unless ₹0–₹10,000; `409` once Accounts has approved or the refund is recorded (`refunds.set_donation`; the reason is the request's `donation_locked`). Returns `{has_request, request}` |
 | `POST /api/student/upload/` (multipart) | Upload a document to one section | `section`, `file` or `event_report_url` (LUCS link mode) | `400` if > 10 MB or not JPG/PNG/PDF; re-opens a `REJECTED` section to `PENDING` on new upload; runs advisory OCR and returns `{warnings, autofill}` |
 | `POST /api/student/confirm-review/` | Confirm OCR-prefilled fields for a section | `section`, `review: {name, roll_no, department}` | Marks the document's review payload `confirmed: true` |
 | `POST /api/student/confirm-section/` | Confirm a basic (name/roll only) section | `section`, `name`, `roll_no`, `department` | Required before Store/Sports/Medical/NAD/Administration reach the officer's queue (`student_confirmed`) |
@@ -39,6 +40,7 @@ All require an authenticated **Student** session; most operate on that student's
   "exit_type": "GRADUATION",
   "overall_status": "IN_PROGRESS",       // or "CLEARED"
   "fund_us_amount": "1000.00",
+  "donation_locked": "",                // why the donation can no longer change; "" = it can
   "vacant_room_no": "A102",  // one block letter + 3 digits
   "intake_submitted": true,
   "current_page": 2,                     // 1 = intake, 2 = dashboard
