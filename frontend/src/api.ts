@@ -79,10 +79,16 @@ export const api = {
             method: 'POST',
             body: JSON.stringify({ request_id: requestId, body }),
         }),
-    submitIntake: (vacant_room_no: string, fund_us_amount: number) =>
+    submitIntake: (vacant_room_no: string) =>
         request<StudentRequestResponse>('/api/student/submit-intake/', {
             method: 'POST',
-            body: JSON.stringify({ vacant_room_no, fund_us_amount }),
+            body: JSON.stringify({ vacant_room_no }),
+        }),
+    // Financial page: the Fund-Us donation (0 = none), until Accounts approves.
+    setDonation: (fund_us_amount: number | string) =>
+        request<StudentRequestResponse>('/api/student/donation/', {
+            method: 'POST',
+            body: JSON.stringify({ fund_us_amount }),
         }),
     certificate: () => request<{ ok: boolean; certificate: CertificateData }>('/api/student/certificate/', { method: 'POST' }),
 
