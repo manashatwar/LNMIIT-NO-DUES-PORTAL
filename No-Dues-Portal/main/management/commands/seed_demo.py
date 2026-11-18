@@ -98,7 +98,7 @@ class Command(BaseCommand):
             "--demo-accounts", type=int, default=0, metavar="N",
             help="Also create N demo students (acct001@lnmiit.ac.in, ...) whose requests have "
                  "reached Accounts and Administration — Library, TPC, Warden and HOD approved, "
-                 "cancelled-cheque details submitted, Page 5 details confirmed — to try Accounts' "
+                 "cancelled-cheque details submitted, Administration details confirmed — to try Accounts' "
                  "staff levels, and Administration's staff and checklist. Max 999.",
         )
         parser.add_argument(
@@ -297,7 +297,7 @@ class Command(BaseCommand):
     def _demo_accounts(self, n, dept, hostel):
         """N demo students whose requests have reached Accounts and Administration
         (side by side): Library, TPC, Warden (BH1) and HOD (CSE) approved,
-        cancelled-cheque details submitted, Page 5 details confirmed."""
+        cancelled-cheque details submitted, Administration details confirmed."""
         from main.api import BASIC_CONFIRM_SECTIONS
 
         hashed = make_password(PASSWORD)   # hash once; hashing per account is slow
@@ -323,7 +323,7 @@ class Command(BaseCommand):
                 student=student, exit_type="GRADUATION", vacant_room_no=f"C{i:03d}",
                 intake_submitted=True)
             for code in engine.required_sections("GRADUATION"):
-                # Administration's details are confirmed too (Page 5 opens with Page 4).
+                # Administration's details are confirmed too (it sits beside Accounts on Page 4).
                 confirmed = code not in BASIC_CONFIRM_SECTIONS or code == SECTION_ADMINISTRATION
                 SectionStatus.objects.create(request=req, section=sections[code], student_confirmed=confirmed)
             for code, officer in approvers.items():
