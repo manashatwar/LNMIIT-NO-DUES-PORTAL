@@ -7,7 +7,6 @@ interface LoginPageProps {
 
 const EXIT_OPTIONS: { value: ExitType; label: string }[] = [
     { value: 'GRADUATION', label: 'Graduation' },
-    { value: 'NEP_EXIT', label: 'NEP Exit' },
     { value: 'WITHDRAWAL', label: 'Withdrawal' },
     { value: 'ADMISSION_CANCEL', label: 'Admission Cancel' },
 ];
