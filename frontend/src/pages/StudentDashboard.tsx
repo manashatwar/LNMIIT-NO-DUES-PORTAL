@@ -23,7 +23,7 @@ interface StudentDashboardProps {
 }
 
 const EXIT_LABELS: Record<string, string> = {
-    GRADUATION: 'Graduation', NEP_EXIT: 'NEP Exit',
+    GRADUATION: 'Graduation',
     WITHDRAWAL: 'Withdrawal', ADMISSION_CANCEL: 'Admission Cancellation',
 };
 
@@ -50,7 +50,7 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
         request.intake.uploaded.includes(code) || (sec(code)?.documents.length ?? 0) > 0;
 
     // Stage groupings (the reference flow). Only the sections this student's exit
-    // type has: no TPC on an NEP exit, a withdrawal or an admission cancel.
+    // type has: no TPC on a withdrawal or an admission cancel.
     const triGate = ['LIBRARY', 'TPC', 'WARDEN'].filter(has);
     const deptField = ['STORE', 'LUCS', 'SPORTS', 'MEDICAL', 'NAD', 'HOD'].filter(has);
     const triGateApproved = triGate.length > 0 && triGate.every(approved);
