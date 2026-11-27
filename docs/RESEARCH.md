@@ -57,7 +57,7 @@ For each section below we answer three questions: **What does it do? · What doe
 
 **Central Library**
 - *Does:* reviews the student's details and any document relevant to library clearance.
-- *Needs:* basic identity details, with [central library form](./LNMIIT_DOCUMENTS/IMG-20260628-WA0009%20%281%29.jpg) uploaded by the student.
+- *Needs:* basic identity details, with [central library form](./paper-forms/library-document-submission-form.jpg) uploaded by the student.
 - *Found:* library checking can depend on document-based verification, so upload is a genuine requirement here, not optional.
 
 **TPC / Placement**
@@ -95,12 +95,12 @@ For each section below we answer three questions: **What does it do? · What doe
 **HOD / Department**
 - *Does:* acts as a departmental checkpoint, confirming departmental clearance.
 - *Needs:* nothing directly from the student — consolidates the sub-sections below.
-- *Found:* the HOD's approval depends on the linked subordinate clearances — Store, LUCS, Sports, Medical Cell, and NAD Cell — so the HOD is not re-doing each office's work, only confirming it after those steps are satisfied. The [department-purpose no-dues form](./LNMIIT_DOCUMENTS/IMG-20260628-WA0008.jpg) has every lab in-charge sign for their lab before the HOD signs. It was first scoped as a signed-sheet upload, then dropped, and is now digitized directly as an HOD-managed lab hierarchy:
+- *Found:* the HOD's approval depends on the linked subordinate clearances — Store, LUCS, Sports, Medical Cell, and NAD Cell — so the HOD is not re-doing each office's work, only confirming it after those steps are satisfied. The [department-purpose no-dues form](./paper-forms/department-lab-no-dues-form.jpg) has every lab in-charge sign for their lab before the HOD signs. It was first scoped as a signed-sheet upload, then dropped, and is now digitized directly as an HOD-managed lab hierarchy:
   - each HOD registers their department's labs, which creates each in-charge's portal login, and arranges them in levels;
   - labs on a level review the request in parallel, and the next level opens only when they all approve;
   - the HOD approves last.
 
-  See [`docs/DESIGN.md` § Department labs](./docs/DESIGN.md#department-labs-hod-managed-hierarchy).
+  See [`docs/DESIGN.md` § Department labs](./DESIGN.md#department-labs-hod-managed-hierarchy).
 
 **Accounts**
 - *Does:* handles the financial clearance and refund stage.
@@ -110,12 +110,12 @@ For each section below we answer three questions: **What does it do? · What doe
 **Administration**
 - *Does:* the final approving authority; views the overall status across all sections and issues final approval only after every required section is cleared.It just keeps final No-dues form.
 - *Needs:* nothing from the student directly — it acts on the complete "all-green" picture.
-[Final form](./LNMIIT_DOCUMENTS/WhatsApp%20Image%202026-04-16%20at%207.02.53%20PM.jpeg)
+[Final form](./paper-forms/student-no-dues-form.jpg)
 ---
 
 ## 3. Design
 
-**See [`docs/DESIGN.md`](./docs/DESIGN.md)** for the full design.
+**See [`docs/DESIGN.md`](./DESIGN.md)** for the full design.
 
 ---
 
