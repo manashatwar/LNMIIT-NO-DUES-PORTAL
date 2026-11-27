@@ -36,7 +36,7 @@ export function RulesPage({ onLogout, onHome }: RulesPageProps) {
                     <div className="col-sm-9" style={{ textAlign: 'left' }}>
                         {rules.map((rule, i) => (
                             <p key={i}>
-                                &nbsp;&nbsp;➤&nbsp;{rule}
+                                {rule}
                             </p>
                         ))}
                     </div>
