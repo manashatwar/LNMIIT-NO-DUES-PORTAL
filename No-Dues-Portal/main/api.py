@@ -34,15 +34,10 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB — matches the original UI design 
 # Hostel room numbers: one block letter + exactly 3 digits, e.g. A102, B501.
 VACANT_ROOM_RE = re.compile(r"^[A-Za-z]\d{3}$")
 
-# Basic (name/roll) sections that require an explicit student "Confirm & Send" before
-# the request reaches the officer's queue. LUCS moved here (no longer an
-# upload section) — same confirm-only flow as Store/Sports/Medical/NAD.
-from .models import (  # noqa: E402
-    SECTION_STORE, SECTION_LUCS, SECTION_SPORTS, SECTION_MEDICAL, SECTION_NAD, SECTION_ADMINISTRATION,
-)
-BASIC_CONFIRM_SECTIONS = {
-    SECTION_STORE, SECTION_LUCS, SECTION_SPORTS, SECTION_MEDICAL, SECTION_NAD, SECTION_ADMINISTRATION,
-}
+# Basic (name/roll) sections: the request reaches each of these offices by itself
+# once its prerequisites approve — no "Confirm & Send". After a rejection the
+# student sends it back from the section's card (resend_section).
+RESEND_SECTIONS = set(engine.DEPARTMENT_SECTIONS) | {SECTION_ADMINISTRATION}
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "application/pdf"}
 ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".pdf"}
 
@@ -280,8 +275,6 @@ def _section_dict(ss, request):
         "waiting_for": [smap[code].section.name if code in smap else code.title()
                         for code in engine.unapproved_prerequisites(request, ss.section.code)],
         "is_upload_section": ss.section.is_upload_section,
-        "student_confirmed": ss.student_confirmed,
-        "needs_confirm": ss.section.code in BASIC_CONFIRM_SECTIONS,
         "decided_by": ss.decided_by.username if ss.decided_by else None,
         "decided_at": ss.decided_at.isoformat() if ss.decided_at else None,
         "comments": [_comment_dict(c) for c in comments],
@@ -515,11 +508,7 @@ def initiate(request):
         student=stud, exit_type=exit_type, fund_us_amount=fund_us, vacant_room_no=vacant_room,
     )
     for code in engine.required_sections(exit_type):
-        section = Section.objects.get(code=code)
-        SectionStatus.objects.get_or_create(
-            request=req, section=section,
-            defaults={"student_confirmed": code not in BASIC_CONFIRM_SECTIONS},
-        )
+        SectionStatus.objects.get_or_create(request=req, section=Section.objects.get(code=code))
     return JsonResponse({"has_request": True, "request": _request_dict(req)}, status=201)
 
 
@@ -677,10 +666,12 @@ def upload_document(request):
 
 @login_required
 @require_http_methods(["POST"])
-def confirm_section(request):
+def resend_section(request):
     """
-    Student confirms a basic (name/roll) section with (optionally edited) details.
-    Only after this does the request reach that office's queue.
+    Student sends a rejected basic section (a Page-3 department, HOD included,
+    or Administration) back to its office: PENDING again. The HOD card sends the
+    student's (optionally edited) name / roll / department with it, kept so the
+    office sees what was re-submitted; the other cards send nothing.
     """
     stud = Student.objects.filter(user=request.user).first()
     if stud is None:
@@ -692,26 +683,23 @@ def confirm_section(request):
     ss = req.section_statuses.filter(section__code=body.get("section")).first()
     if ss is None:
         return JsonResponse({"detail": "Section not part of this request"}, status=400)
+    if ss.section.code not in RESEND_SECTIONS:
+        return JsonResponse({"detail": "This section is re-sent from its own upload form"}, status=400)
+    if ss.status != STATUS_REJECTED:
+        return JsonResponse({"detail": "Only a rejected request can be re-sent"}, status=400)
 
-    details = {
-        "name": (body.get("name") or "").strip(),
-        "roll_no": (body.get("roll_no") or "").strip(),
-        "department": (body.get("department") or "").strip(),
-    }
-    # Store the confirmed details (no file) so the officer can see what was submitted.
-    doc = ss.documents.first() or Document(section_status=ss)
-    doc.ocr_fields = {"review": details, "confirmed": True}
-    doc.save()
+    details = {key: (body.get(key) or "").strip() for key in ("name", "roll_no", "department")}
+    if any(details.values()):
+        doc = ss.documents.first() or Document(section_status=ss)
+        doc.ocr_fields = {"review": details, "confirmed": True}
+        doc.save()
 
-    ss.student_confirmed = True
-    # If it was rejected, re-confirming re-sends a fresh request → back to PENDING.
-    if ss.status == STATUS_REJECTED:
-        ss.status = STATUS_PENDING
-        ss.decided_by = None
-        ss.decided_at = None
-        Comment.objects.create(section_status=ss, author=request.user, is_system=True,
-                               body="Student re-submitted details after rejection.")
-    ss.save(update_fields=["student_confirmed", "status", "decided_by", "decided_at"])
+    ss.status = STATUS_PENDING
+    ss.decided_by = None
+    ss.decided_at = None
+    ss.save(update_fields=["status", "decided_by", "decided_at"])
+    Comment.objects.create(section_status=ss, author=request.user, is_system=True,
+                           body="Student re-sent the request after rejection.")
     return JsonResponse({"ok": True})
 
 
@@ -830,7 +818,7 @@ def section_queue(request):
                                  refunds=refund_sender)
 
     qs = prepare(SectionStatus.objects.filter(
-        section__code=role, request__is_active=True, student_confirmed=True,
+        section__code=role, request__is_active=True,
     ).order_by("request__created_at", "id"))   # stable, oldest first (bulk sends rewrite rows)
 
     if role == SECTION_WARDEN and profile.hostel_id:
@@ -849,6 +837,12 @@ def section_queue(request):
         if is_staff:
             qs = qs.filter(assigned_to=request.user)
         items = [(ss, ss.status) for ss in qs]
+    if role != SECTION_ACCOUNTS:
+        # A pending request reaches a section once the sections before it have
+        # approved: the departments after the tri-gate, Administration after
+        # every department. (Accounts' head instead lists those as "Not ready yet".)
+        items = [(ss, status) for ss, status in items
+                 if status != STATUS_PENDING or not engine.unapproved_prerequisites(ss.request, role)]
     names = staff_service.chain_names(role) if levelled else None
 
     rows = []
@@ -1013,8 +1007,6 @@ def section_review(request):
                 "code": pss.section.code, "name": pss.section.name, "status": pss.status,
                 "actionable": engine.actionable(ss.request, pss.section.code),
                 "is_upload_section": pss.section.is_upload_section,
-                "student_confirmed": pss.student_confirmed,
-                "needs_confirm": pss.section.code in BASIC_CONFIRM_SECTIONS,
                 "decided_by": pss.decided_by.username if pss.decided_by else None,
                 "decided_at": pss.decided_at.isoformat() if pss.decided_at else None,
                 "documents": docs, "comments": [],   # no messages for Administration
@@ -1233,7 +1225,6 @@ def lab_review(request):
         "section": {
             "code": ROLE_LAB, "name": lab.name, "status": ls.status,
             "actionable": engine.lab_actionable(ls), "is_upload_section": False,
-            "student_confirmed": True, "needs_confirm": False,
             "decided_by": ls.decided_by.username if ls.decided_by else None,
             "decided_at": ls.decided_at.isoformat() if ls.decided_at else None,
             "comments": [_comment_dict(c) for c in
