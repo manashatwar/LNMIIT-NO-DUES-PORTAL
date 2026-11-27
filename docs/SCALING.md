@@ -2,15 +2,15 @@
 
 This portal needs to survive the real-world traffic pattern of an institute clearance system: near-idle most of the semester, then **thousands of students logging in and refreshing their status within the same few-day window** right before an exit deadline, plus dozens of section officers polling their queues throughout. This document is the concrete plan for that: what's been implemented, what's still just a recommendation, and how to load-test it before trusting it with the real clearance window.
 
-> **Deploying somewhere first?** See [`docs/DEPLOY.md`](./DEPLOY.md) for Railway step-by-step instructions (+ Render/Fly.io/VPS notes) — both Dockerfiles here (`No-Dues-Portal/Dockerfile`, `frontend/Dockerfile`) are already built with that in mind (env-driven backend host/port, no hardcoded service names).
+> **Deploying somewhere first?** See [`docs/DEPLOY.md`](./DEPLOY.md) for Railway step-by-step instructions (+ Render/Fly.io/VPS notes) — both Dockerfiles here (`backend/Dockerfile`, `frontend/Dockerfile`) are already built with that in mind (env-driven backend host/port, no hardcoded service names).
 
 ## 1. Current state vs. what production needs
 
 | Concern | Status | Detail |
 |---|---|---|
-| Secrets / debug / hosts | ✅ Done | Env-driven: `DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS` (`No-Dues-Portal/myproject/settings.py`) |
+| Secrets / debug / hosts | ✅ Done | Env-driven: `DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS` (`backend/config/settings.py`) |
 | Database | ✅ Done | PostgreSQL via `DATABASE_URL` (`dj-database-url`) — the only supported database, no SQLite fallback. `docker-compose.yml` runs Postgres — see §2 |
-| App server | ✅ Done | gunicorn (3 workers) in `No-Dues-Portal/Dockerfile`; nginx (`frontend/Dockerfile` + `nginx.conf`) in front — see §3 |
+| App server | ✅ Done | gunicorn (3 workers) in `backend/Dockerfile`; nginx (`frontend/Dockerfile` + `nginx.conf`) in front — see §3 |
 | Static/media files | ✅ Done | The SPA build is served by nginx; Django's own static files (admin) are served by WhiteNoise from within the backend container and proxied through nginx — see §4 |
 | Sessions | 🟡 Open | Django DB-backed sessions (default) — fine at moderate scale or a single `backend` replica; move to a cache-backed store before running more than one — see §5 |
 | DB indexes | 🟡 Open | Not yet added — see §2 |
@@ -24,7 +24,7 @@ This portal needs to survive the real-world traffic pattern of an institute clea
 
 **Implemented — Postgres is mandatory, not a production upgrade path.** This branch deliberately has no SQLite fallback: a database that behaves differently in dev than in production (SQLite's single-writer file lock vs. Postgres's real concurrency control) is exactly the kind of gap that hides a bug until the real clearance window. With a few thousand students and dozens of officers submitting approvals concurrently, write contention (`SectionStatus` updates, `Comment` creation, the reverse-cascade transaction) needs a database that actually handles concurrent writes — which is also why local (non-Docker) development now requires a real Postgres instance (see the root `README.md` Quickstart — `docker compose up -d db` is the fastest way to get one).
 
-`myproject/settings.py`:
+`config/settings.py`:
 
 ```python
 DATABASES = {
@@ -49,7 +49,7 @@ DATABASES = {
 
 **Implemented.** `manage.py runserver` is single-threaded and explicitly documented by Django as unsafe for production — the Docker setup replaces it end to end:
 
-- **`No-Dues-Portal/Dockerfile`** builds a gunicorn image: `gunicorn myproject.wsgi:application --workers 3 --bind 0.0.0.0:8000 --timeout 30`. `docker-entrypoint.sh` waits for Postgres to accept connections, runs `migrate`, then execs gunicorn.
+- **`backend/Dockerfile`** builds a gunicorn image: `gunicorn config.wsgi:application --workers 3 --bind 0.0.0.0:8000 --timeout 30`. `docker-entrypoint.sh` waits for Postgres to accept connections, runs `migrate`, then execs gunicorn.
 - **`frontend/Dockerfile`** builds the SPA (`npm run build`) and serves the static output through nginx (`frontend/nginx.conf`), which also proxies `/api/`, `/admin/`, and `/static/` to the `backend` service — so the browser only ever talks to one origin, same as the Vite dev proxy in local development (see `docs/ARCHITECTURE.md`).
 - **`docker-compose.yml`** wires `db` (Postgres) → `backend` (gunicorn) → `frontend` (nginx) together with a healthcheck-gated startup order.
 
