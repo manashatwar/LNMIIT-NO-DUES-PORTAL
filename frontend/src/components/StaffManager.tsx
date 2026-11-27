@@ -15,7 +15,7 @@ const label: React.CSSProperties = { display: 'block', color: '#64748b', marginB
 const smallBtn: React.CSSProperties = { fontSize: 11, padding: '3px 8px' };
 const refundBadge = (
     <span style={{ fontSize: 10, fontWeight: 700, color: '#166534', background: '#dcfce7', borderRadius: 8, padding: '1px 6px', marginLeft: 6 }}>
-        💸 Refund manager
+        Refund manager
     </span>
 );
 
@@ -90,7 +90,7 @@ export function StaffManager({ sectionName, levels = false, onChanged }: StaffMa
                 name: form.name, email: form.email, password: form.password,
                 ...(levels ? { level: Number(form.level) } : {}),
             });
-            say(`✓ Added ${s.name}${levels ? ` at level ${s.level}` : ''}. `
+            say(`Added ${s.name}${levels ? ` at level ${s.level}` : ''}. `
                 + `They can now sign in with user type "${sectionName}" as ${s.email}.`);
             setForm({ name: '', email: '', password: '', level: String(s.level ?? 1) });
             setShowPassword(false);
@@ -103,13 +103,13 @@ export function StaffManager({ sectionName, levels = false, onChanged }: StaffMa
             ...(levels ? { level: Number(edit.level), refund_manager: edit.refund } : {}),
         });
         setEditId(null);
-        say(`✓ Saved ${edit.name}.`);
+        say(`Saved ${edit.name}.`);
     });
 
     const savePassword = (s: StaffMember) => run(async () => {
         await api.updateStaff(s.id, { password: pwValue });
         setPwId(null); setPwValue('');
-        say(`✓ Password changed for ${s.name} (${s.email}).`);
+        say(`Password changed for ${s.name} (${s.email}).`);
     });
 
     const removeStaff = (s: StaffMember) => {
@@ -118,14 +118,14 @@ export function StaffManager({ sectionName, levels = false, onChanged }: StaffMa
         if (!window.confirm(`Remove ${s.name} from the ${sectionName} desk?${back}${level}\n\nTheir login (${s.email}) will stop working.`)) return;
         run(async () => {
             const res = await api.removeStaff(s.id);
-            say(`✓ ${s.name} removed${res.returned ? ` — ${res.returned} request(s) are back with you` : ''}.`
+            say(`${s.name} removed${res.returned ? ` — ${res.returned} request(s) are back with you` : ''}.`
                 + (res.outcome === 'deactivated' ? ' Kept under "Removed staff" because their past decisions are on record.' : ''));
         });
     };
 
     const restore = (s: StaffMember) => run(async () => {
         await api.updateStaff(s.id, { is_active: true });
-        say(`✓ ${s.name} restored; their login works again.`);
+        say(`${s.name} restored; their login works again.`);
     });
 
     const addItem = (ev: React.FormEvent) => {
@@ -133,7 +133,7 @@ export function StaffManager({ sectionName, levels = false, onChanged }: StaffMa
         run(async () => {
             const { item } = await api.addChecklistItem(newItem);
             setNewItem('');
-            say(`✓ Added "${item.label}" to the checklist. Approve now waits for it on every pending request too.`);
+            say(`Added "${item.label}" to the checklist. Approve now waits for it on every pending request too.`);
         });
     };
 
@@ -141,7 +141,7 @@ export function StaffManager({ sectionName, levels = false, onChanged }: StaffMa
         if (!window.confirm(`Remove "${item.label}" from the checklist?\n\nRequests will no longer need it ticked.`)) return;
         run(async () => {
             await api.removeChecklistItem(item.id);
-            say(`✓ Removed "${item.label}" from the checklist.`);
+            say(`Removed "${item.label}" from the checklist.`);
         });
     };
 
@@ -149,10 +149,10 @@ export function StaffManager({ sectionName, levels = false, onChanged }: StaffMa
         <div style={{ textAlign: 'center', fontSize: 11, color: '#64748b', padding: '2px 0' }}>↓ {text}</div>
     );
 
-    if (loading) return <div className="well">Loading staff…</div>;
+    if (loading) return <div className="well loading-block"><span>Loading staff…</span><div className="loading-bar" /></div>;
 
     const card = (s: StaffMember) => (
-        <div key={s.id} style={{ background: '#fff', border: editId === s.id ? '2px solid #2563eb' : '1px solid #dbeafe', borderRadius: 8, padding: 10, minWidth: 240, flex: '1 1 240px' }}>
+        <div key={s.id} style={{ background: '#fff', border: editId === s.id ? '2px solid #1b365d' : '1px solid #c9d6e6', borderRadius: 8, padding: 10, minWidth: 240, flex: '1 1 240px' }}>
             {editId === s.id ? (
                 <>
                     <div style={{ display: 'grid', gridTemplateColumns: levels ? '1fr 90px' : '1fr', gap: 6 }}>
@@ -175,23 +175,23 @@ export function StaffManager({ sectionName, levels = false, onChanged }: StaffMa
                 </>
             ) : (
                 <>
-                    <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 14 }}>👤 {s.name}{s.refund_manager && refundBadge}</div>
-                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>🔑 Login: <code>{s.email}</code></div>
+                    <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 14 }}>{s.name}{s.refund_manager && refundBadge}</div>
+                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Login: <code>{s.email}</code></div>
                     <div style={{ fontSize: 11, marginTop: 4 }}>
-                        <span style={{ color: s.pending ? '#b45309' : '#64748b' }}>⏳ {s.pending} waiting{levels ? ' at this level' : ''}</span>
-                        <span style={{ color: '#64748b' }}> · ✔ {s.decided} decided</span>
+                        <span style={{ color: s.pending ? '#b45309' : '#64748b' }}>{s.pending} waiting{levels ? ' at this level' : ''}</span>
+                        <span style={{ color: '#64748b' }}> · {s.decided} decided</span>
                     </div>
                     {pwId === s.id ? (
                         <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
                             <input className="erp-input" style={{ ...input, flex: 1 }} type="text" autoComplete="new-password" autoFocus
                                 placeholder="New password" value={pwValue} onChange={(e) => setPwValue(e.target.value)} />
                             <button className="btn btn-success" style={smallBtn} disabled={busy || !pwValue} onClick={() => savePassword(s)}>Set</button>
-                            <button className="btn btn-secondary" style={smallBtn} onClick={() => { setPwId(null); setPwValue(''); }}>✕</button>
+                            <button className="btn btn-secondary" style={smallBtn} onClick={() => { setPwId(null); setPwValue(''); }}>Cancel</button>
                         </div>
                     ) : (
                         <div style={{ display: 'flex', gap: 4, marginTop: 8, flexWrap: 'wrap' }}>
                             <button className="btn btn-primary" style={smallBtn} onClick={() => { setPwId(null); setEditId(s.id); setEdit({ name: s.name, email: s.email, level: s.level ?? 1, refund: s.refund_manager }); }}>Edit</button>
-                            <button className="btn btn-warning" style={smallBtn} onClick={() => { setEditId(null); setPwId(s.id); setPwValue(''); }}>Reset password</button>
+                            <button className="btn btn-secondary" style={smallBtn} onClick={() => { setEditId(null); setPwId(s.id); setPwValue(''); }}>Reset password</button>
                             <button className="btn btn-danger" style={smallBtn} disabled={busy} onClick={() => removeStaff(s)}>Remove</button>
                         </div>
                     )}
@@ -203,9 +203,9 @@ export function StaffManager({ sectionName, levels = false, onChanged }: StaffMa
     // The main account: always the final step after every level, and always the refund manager.
     const headCard = (
         <div style={{ background: '#fefce8', border: '2px solid #facc15', borderRadius: 8, padding: 10 }}>
-            <div style={{ fontWeight: 700, color: '#a16207', fontSize: 14 }}>👑 You (main account){refundBadge}</div>
+            <div style={{ fontWeight: 700, color: '#b45309', fontSize: 14 }}>You (main account){refundBadge}</div>
             <div style={{ fontSize: 11, marginTop: 4, color: headWaiting ? '#b45309' : '#64748b' }}>
-                ⏳ {headWaiting} waiting for your final approval: approve them from <strong>Incoming</strong>
+                {headWaiting} waiting for your final approval: approve them from <strong>Incoming</strong>
             </div>
         </div>
     );
@@ -213,11 +213,11 @@ export function StaffManager({ sectionName, levels = false, onChanged }: StaffMa
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {note && (noteErr
-                ? <div className="alert alert-danger" style={{ fontSize: 13, margin: 0 }}>⚠️ {note}</div>
+                ? <div className="alert alert-danger" style={{ fontSize: 13, margin: 0 }}>{note}</div>
                 : <div className="well" style={{ padding: '8px 12px', fontSize: 13, margin: 0, color: '#15803d' }}>{note}</div>)}
 
             <div className="well" style={{ background: '#fff', border: '1px solid #cbd5e1', borderRadius: 8, margin: 0 }}>
-                <h3 style={{ marginTop: 0, color: '#1b365d', fontSize: 16 }}>👥 {sectionName} Staff{levels ? ' — levels' : ''}</h3>
+                <h3 style={{ marginTop: 0, color: '#1b365d', fontSize: 16 }}>{sectionName} Staff{levels ? ' — levels' : ''}</h3>
                 {!levels && (
                     <p style={{ fontSize: 12, color: '#64748b', marginTop: 0 }}>
                         Every request comes to <strong>you</strong> first. From the <strong>Incoming</strong> tab, send requests to a staff
@@ -239,8 +239,8 @@ export function StaffManager({ sectionName, levels = false, onChanged }: StaffMa
                             const here = active.filter((s) => (s.level ?? 1) === lv);
                             return (
                                 <div key={lv}>
-                                    <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: 10 }}>
-                                        <div style={{ fontSize: 12, fontWeight: 700, color: '#1d4ed8', marginBottom: 8 }}>
+                                    <div style={{ background: '#f4f7fb', border: '1px solid #c9d6e6', borderRadius: 8, padding: 10 }}>
+                                        <div style={{ fontSize: 12, fontWeight: 700, color: '#1b365d', marginBottom: 8 }}>
                                             Level {lv}{here.length > 1 ? ' · either of these can approve' : ''}
                                         </div>
                                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{here.map(card)}</div>
@@ -250,16 +250,16 @@ export function StaffManager({ sectionName, levels = false, onChanged }: StaffMa
                             );
                         })}
                         <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: 10 }}>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: '#a16207', marginBottom: 8 }}>Final approval</div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: '#b45309', marginBottom: 8 }}>Final approval</div>
                             {headCard}
                         </div>
                         {arrow('once you approve')}
                         <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: 10, fontSize: 13, fontWeight: 700, color: '#15803d' }}>
-                            ✅ {sectionName} approved · once every section has approved and the refund is sent, the certificate is released
+                            {sectionName} approved · once every section has approved and the refund is sent, the certificate is released
                         </div>
                         {refundSenders && refundSenders.length > 0 && (
                             <div style={{ fontSize: 12, color: '#475569', marginTop: 6 }}>
-                                💸 Refunds are sent by <strong>{refundSenders.join(', ')}</strong>.
+                                Refunds are sent by <strong>{refundSenders.join(', ')}</strong>.
                             </div>
                         )}
                     </div>
@@ -274,7 +274,7 @@ export function StaffManager({ sectionName, levels = false, onChanged }: StaffMa
 
             {checklist !== null && (
                 <div className="well" style={{ background: '#fff', border: '1px solid #cbd5e1', borderRadius: 8, margin: 0 }}>
-                    <h4 style={{ marginTop: 0, color: '#1b365d', fontSize: 15 }}>📋 Checklist at the office</h4>
+                    <h4 style={{ marginTop: 0, color: '#1b365d', fontSize: 15 }}>Checklist at the office</h4>
                     <p style={{ fontSize: 12, color: '#64748b', marginTop: 0 }}>
                         What every student must complete in person, e.g. handing in their physical ID card. Your office ticks each item
                         on the request (<strong>Checklist</strong> column in Incoming); <strong>Approve stays locked</strong> until all
@@ -288,7 +288,7 @@ export function StaffManager({ sectionName, levels = false, onChanged }: StaffMa
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                             {checklist.map((item) => (
                                 <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, background: '#f8fafc', padding: '6px 10px', borderRadius: 6 }}>
-                                    <span>☑ {item.label}</span>
+                                    <span>{item.label}</span>
                                     <button className="btn btn-danger" style={smallBtn} disabled={busy} onClick={() => removeItem(item)}>Remove</button>
                                 </div>
                             ))}
@@ -304,7 +304,7 @@ export function StaffManager({ sectionName, levels = false, onChanged }: StaffMa
             )}
 
             <form onSubmit={addStaff} className="well" style={{ background: '#fff', border: '1px solid #cbd5e1', borderRadius: 8, margin: 0 }} autoComplete="off">
-                <h4 style={{ marginTop: 0, color: '#1b365d', fontSize: 15 }}>➕ Add a staff member</h4>
+                <h4 style={{ marginTop: 0, color: '#1b365d', fontSize: 15 }}>Add a staff member</h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
                     <div><label style={label}>Name *</label>
                         <input className="erp-input" style={input} placeholder="e.g. Anita Rao" value={form.name}
@@ -343,7 +343,7 @@ export function StaffManager({ sectionName, levels = false, onChanged }: StaffMa
                 <div className="well" style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, margin: 0 }}>
                     <button onClick={() => setShowRemoved((v) => !v)}
                         style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 700, color: '#475569', fontSize: 13 }}>
-                        🗄️ Removed staff ({removed.length}) {showRemoved ? '▲' : '▼'}
+                        Removed staff ({removed.length}) {showRemoved ? '▲' : '▼'}
                     </button>
                     {showRemoved && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
