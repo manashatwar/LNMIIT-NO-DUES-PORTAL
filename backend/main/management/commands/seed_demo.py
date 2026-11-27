@@ -24,7 +24,7 @@ from main.models import (
 PASSWORD = "csepassword"
 
 # ECE labs from the paper "No Dues Form for Department Purpose"
-# (LNMIIT_DOCUMENTS/IMG-20260628-WA0008.jpg), arranged the way an HOD might in
+# (docs/paper-forms/department-lab-no-dues-form.jpg), arranged the way an HOD might in
 # "Manage Labs": three labs in parallel first, then DSP, then E-CAD and BE.
 # name, in-charge (from the form), login, level
 ECE_LABS = [
