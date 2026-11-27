@@ -1,6 +1,6 @@
 # API Reference
 
-Base path: `/api/` (proxied from the SPA's `/api/*` in dev — see [ARCHITECTURE.md](./ARCHITECTURE.md)). All endpoints use Django session auth; all mutating endpoints (`POST`) require the `X-CSRFToken` header, which `frontend/src/api.ts` attaches automatically. Source of truth: `No-Dues-Portal/main/urls.py` + `main/api.py`.
+Base path: `/api/` (proxied from the SPA's `/api/*` in dev — see [ARCHITECTURE.md](./ARCHITECTURE.md)). All endpoints use Django session auth; all mutating endpoints (`POST`) require the `X-CSRFToken` header, which `frontend/src/api.ts` attaches automatically. Source of truth: `backend/main/urls.py` + `main/api.py`.
 
 Unless noted, error responses are `{"detail": "..."}` with a `4xx`/`5xx` status.
 
