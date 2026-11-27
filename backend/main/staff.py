@@ -30,7 +30,7 @@ skipped (at the last level, it is also the head's own final approval). Only the
 head manages staff, and each head only its own.
 """
 from django.db import transaction
-from django.db.models import Exists, OuterRef, Q
+from django.db.models import Count, Exists, OuterRef, Q, Subquery
 from django.utils import timezone
 
 from . import engine
@@ -88,15 +88,22 @@ def ready_for_staff(section_code):
         section__code=section_code, status=STATUS_PENDING, assigned_to__isnull=True,
         request__is_active=True, request__intake_submitted=True,
     )
-    for code in engine.prerequisites(section_code):
-        if code in engine.OPTIONAL_PREREQUISITES:
-            # Waived for exit types that don't include it (no TPC row on an NEP
-            # exit); blocks only a request that has it and hasn't approved it yet.
-            qs = qs.filter(~Exists(SectionStatus.objects.filter(
-                request=OuterRef("request"), section__code=code).exclude(status=STATUS_APPROVED)))
-        else:
-            qs = qs.filter(request__section_statuses__section__code=code,
-                           request__section_statuses__status=STATUS_APPROVED)
+    prereqs = engine.prerequisites(section_code)
+    if not prereqs:
+        return qs
+    # Two subqueries, however many prerequisites there are. (One join per
+    # prerequisite — sixteen tables for Administration — pushed Postgres onto its
+    # randomised planner, which could pick a plan that never finished.)
+    rows = SectionStatus.objects.filter(request=OuterRef("request"), section__code__in=prereqs)
+    # No prerequisite row of the request is unapproved. An optional one the exit
+    # type lacks (no TPC row on an NEP exit) has no row, so nothing to wait for…
+    qs = qs.filter(~Exists(rows.exclude(status=STATUS_APPROVED)))
+    # …and every required one has its row (one per section: unique_together).
+    required = [code for code in prereqs if code not in engine.OPTIONAL_PREREQUISITES]
+    if required:
+        present = (rows.filter(section__code__in=required).order_by()
+                   .values("request").annotate(n=Count("pk")).values("n"))
+        qs = qs.annotate(required_rows=Subquery(present)).filter(required_rows=len(required))
     return qs
 
 
