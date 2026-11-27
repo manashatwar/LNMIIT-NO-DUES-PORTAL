@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Layout } from '../components/Layout';
 import { OfficeChecklist } from '../components/OfficeChecklist';
 import { labBadge } from '../labBadge';
+import { Icon } from '../components/Icon';
 import { ClearanceRequest, SectionInfo, CertificateData, LabChain } from '../types';
 import { api } from '../api';
 
@@ -33,9 +34,7 @@ const circle = (n: number) => (
     <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#1b365d', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: 14 }}>{n}</div>
 );
 
-const Spinner = () => (
-    <span style={{ width: 14, height: 14, border: '2px solid #2563eb', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 1s linear infinite' }} />
-);
+const Spinner = () => <span className="spinner" role="status" aria-label="Loading" />;
 
 // "A", "A and B", "A, B and C".
 const joinNames = (names: string[]) =>
@@ -176,7 +175,7 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                 setMsg('OCR complete — review the auto-filled details and Confirm.');
             } else {
                 await api.upload(code, file);
-                setMsg(`✓ Uploaded to ${code}`);
+                setMsg(`Uploaded to ${code}`);
             }
             onReload();
         } catch (e) { setOcrProcessing(false); setMsgErr(true); setMsg(e instanceof Error ? e.message : 'Upload failed'); }
@@ -191,7 +190,7 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                 author, roll_no: rollNo, department,
             });
             setBtpConfirmed(true);
-            setMsg('✓ OCR data confirmed and sent to the Library.');
+            setMsg('OCR data confirmed and sent to the Library.');
             onReload();
         } catch (e) { setMsg(e instanceof Error ? e.message : 'Could not confirm'); }
         finally { setBusy(null); }
@@ -238,7 +237,7 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                 <div style="font-size:14px;font-weight:bold;margin:0 0 8px;">Department Lab Clearance (before HOD)</div>
                 <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:24px;">
                     <thead>
-                        <tr style="background:#f5f3ff;">
+                        <tr style="background:#f4f7fb;">
                             <th style="text-align:left;padding:6px 12px;border-bottom:2px solid #1b365d;">Lab</th>
                             <th style="text-align:left;padding:6px 12px;border-bottom:2px solid #1b365d;">Level</th>
                             <th style="text-align:left;padding:6px 12px;border-bottom:2px solid #1b365d;">Status</th>
@@ -259,7 +258,7 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                 <div style="font-size:14px;font-weight:bold;margin:0 0 8px;">Approvals by Staff Level</div>
                 <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:24px;">
                     <thead>
-                        <tr style="background:#eff6ff;">
+                        <tr style="background:#f4f7fb;">
                             <th style="text-align:left;padding:6px 12px;border-bottom:2px solid #1b365d;">Section</th>
                             <th style="text-align:left;padding:6px 12px;border-bottom:2px solid #1b365d;">Level</th>
                             <th style="text-align:left;padding:6px 12px;border-bottom:2px solid #1b365d;">Status</th>
@@ -285,7 +284,7 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                 </table>
                 <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:24px;">
                     <thead>
-                        <tr style="background:#eef4ff;">
+                        <tr style="background:#f4f7fb;">
                             <th style="text-align:left;padding:8px 12px;border-bottom:2px solid #1b365d;">Section</th>
                             <th style="text-align:left;padding:8px 12px;border-bottom:2px solid #1b365d;">Status</th>
                             <th style="text-align:left;padding:8px 12px;border-bottom:2px solid #1b365d;">Date</th>
@@ -356,7 +355,7 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
             >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                        <div style={{ fontSize: 26, background: '#dbeafe', padding: 10, borderRadius: 8 }}>{icon}</div>
+                        <div className="section-mark">{icon}</div>
                         <div>
                             <h4 style={{ margin: 0, color: '#1e293b', fontSize: 15 }}>{t}</h4>
                             <span style={{ fontSize: 12, color: '#64748b' }}>{subtitle}</span>
@@ -364,9 +363,9 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                         </div>
                     </div>
                     {ok ? (
-                        <span style={{ background: '#dcfce7', color: '#15803d', padding: '6px 16px', borderRadius: 20, fontWeight: 700, fontSize: 12 }}>APPROVED ✓</span>
+                        <span style={{ background: '#dcfce7', color: '#15803d', padding: '6px 16px', borderRadius: 20, fontWeight: 700, fontSize: 12 }}>APPROVED</span>
                     ) : rejected ? (
-                        <span style={{ background: '#fee2e2', color: '#b91c1c', padding: '6px 16px', borderRadius: 20, fontWeight: 700, fontSize: 12 }}>REJECTED ✗</span>
+                        <span style={{ background: '#fee2e2', color: '#b91c1c', padding: '6px 16px', borderRadius: 20, fontWeight: 700, fontSize: 12 }}>REJECTED</span>
                     ) : (
                         <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <Spinner />
@@ -412,14 +411,14 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
 
     // Section metadata for stage pages
     const SECTION_META: Record<string, { icon: string; subtitle: string }> = {
-        STORE: { icon: '📦', subtitle: 'Outstanding store material check' },
-        LUCS: { icon: '📅', subtitle: 'Event / activity clearance check' },
-        SPORTS: { icon: '🏅', subtitle: 'Sports equipment & records' },
-        MEDICAL: { icon: '🏥', subtitle: 'Medical-cell dues' },
-        NAD: { icon: '🎓', subtitle: 'NAD-related verification' },
-        HOD: { icon: '🏛️', subtitle: 'Departmental consolidation' },
-        ACCOUNTS: { icon: '💰', subtitle: 'Refund & cancelled cheque' },
-        ADMINISTRATION: { icon: '🏢', subtitle: 'Alongside Accounts · ID card & office checklist' },
+        STORE: { icon: 'ST', subtitle: 'Outstanding store material check' },
+        LUCS: { icon: 'LU', subtitle: 'Event / activity clearance check' },
+        SPORTS: { icon: 'SP', subtitle: 'Sports equipment & records' },
+        MEDICAL: { icon: 'MC', subtitle: 'Medical-cell dues' },
+        NAD: { icon: 'NA', subtitle: 'NAD-related verification' },
+        HOD: { icon: 'HD', subtitle: 'Departmental consolidation' },
+        ACCOUNTS: { icon: 'AC', subtitle: 'Refund & cancelled cheque' },
+        ADMINISTRATION: { icon: 'AD', subtitle: 'Alongside Accounts · ID card & office checklist' },
     };
 
     return (
@@ -441,16 +440,16 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                     <div className="well" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', padding: '12px 16px', marginBottom: 16, background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 6 }}>
                         <span style={{ fontSize: 14, color: '#166534' }}>
                             {refund.status === 'sent'
-                                ? <>💸 <strong>Your refund of {rupees(refund.amount)} has been sent</strong>
+                                ? <><strong>Your refund of {rupees(refund.amount)} has been sent</strong>
                                     {refund.account ? ` to your account ${refund.account}` : ''} by {refund.mode}
                                     {refund.paid_on ? ` on ${new Date(refund.paid_on).toLocaleDateString()}` : ''}
                                     {refund.reference ? <> · UTR <code>{refund.reference}</code></> : null}.</>
-                                : <>✅ <strong>No refund was due</strong> (your caution money went to your Fund-Us donation / dues).</>}
+                                : <><strong>No refund was due</strong> (your caution money went to your Fund-Us donation / dues).</>}
                             {cleared ? ' Your No-Dues certificate is ready.' : ''}
                         </span>
                         {cleared && activeTab !== 'page5' && (
                             <button className="btn btn-success" style={{ fontSize: 12, padding: '6px 14px' }} onClick={() => setActiveTab('page5')}>
-                                🎓 Get your certificate
+                                Get your certificate
                             </button>
                         )}
                     </div>
@@ -459,24 +458,24 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                 {/* Tabs — sequential pages, each locked until the previous clears */}
                 <div style={{ display: 'flex', gap: 6, borderBottom: '2px solid #cbd5e1', marginBottom: 24, flexWrap: 'wrap' }}>
                     {([
-                        { id: 'page1', label: '📄 1 · Intake & Uploads', lockMsg: '' },
-                        { id: 'page2', label: '🔑 2 · Core Tri-Gate', lockMsg: 'Submit your intake (Page 1) first.' },
-                        { id: 'page3', label: '🏫 3 · Dept & Field', lockMsg: lockMsgs.page3 },
-                        { id: 'page4', label: '💰 4 · Financial & 🏢 Administration', lockMsg: lockMsgs.page4 },
-                        { id: 'page5', label: '🎓 5 · Certificate', lockMsg: lockMsgs.page5 },
+                        { id: 'page1', label: '1 · Intake & Uploads', lockMsg: '' },
+                        { id: 'page2', label: '2 · Core Tri-Gate', lockMsg: 'Submit your intake (Page 1) first.' },
+                        { id: 'page3', label: '3 · Dept & Field', lockMsg: lockMsgs.page3 },
+                        { id: 'page4', label: '4 · Financial & Administration', lockMsg: lockMsgs.page4 },
+                        { id: 'page5', label: '5 · Certificate', lockMsg: lockMsgs.page5 },
                     ] as { id: TabId; label: string; lockMsg: string }[]).map((t) => {
                         const enabled = locks[t.id];
                         return (
                             <button key={t.id} style={tabStyle(activeTab === t.id, enabled)}
-                                onClick={() => { if (!enabled) { alert('🔒 Locked. ' + t.lockMsg); return; } setActiveTab(t.id); }}>
-                                {enabled ? t.label : '🔒 ' + t.label}
+                                onClick={() => { if (!enabled) { alert('Locked. ' + t.lockMsg); return; } setActiveTab(t.id); }}>
+                                {!enabled && <Icon name="lock" size={12} style={{ marginRight: 6, marginTop: -2 }} />}{t.label}
                             </button>
                         );
                     })}
                 </div>
 
                 {msg && (msgErr
-                    ? <div className="alert alert-danger" style={{ marginBottom: 16, fontSize: 13 }}>⚠️ {msg}</div>
+                    ? <div className="alert alert-danger" style={{ marginBottom: 16, fontSize: 13 }}>{msg}</div>
                     : <div className="well" style={{ padding: '8px 12px', marginBottom: 16, fontSize: 13 }}>{msg}</div>)}
 
                 {/* ── PAGE 1: intake upload form ── */}
@@ -499,7 +498,7 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>{circle(1)}<h3 style={{ margin: 0, color: '#1b365d', fontSize: 16 }}>Library BTP Document Submission</h3></div>
                                 <a href="/Thesis_Article_BTP_Report_submission_form.pdf" download target="_blank" rel="noreferrer"
-                                    style={{ color: '#2563eb', fontWeight: 600, fontSize: 13, textDecoration: 'underline' }}>📥 Download Form</a>
+                                    style={{ color: '#1b365d', fontWeight: 600, fontSize: 13, textDecoration: 'underline' }}>Download Form</a>
                             </div>
                             <p style={{ color: '#64748b', fontSize: 13, margin: '0 0 12px' }}>Download the form, get it signed by the Librarian, then scan &amp; upload it below.</p>
                             <div className="row">
@@ -511,9 +510,9 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                                             <label style={{ ...dropzone, border: isRejected ? '2px dashed #f87171' : '2px dashed #cbd5e1', background: isRejected ? '#fef2f2' : '#f8fafc' }}>
                                                 <input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: 'none' }}
                                                     onChange={(e) => upload('LIBRARY', e.target.files && e.target.files[0] ? e.target.files[0] : null)} />
-                                                <div style={{ fontSize: 32, marginBottom: 8 }}>{isRejected ? '⚠️' : isDone ? '✅' : '☁️'}</div>
+                                                <div style={{ marginBottom: 8, color: isRejected ? '#b42318' : isDone ? '#157347' : '#64748b' }}><Icon name={isRejected ? 'alert' : isDone ? 'check' : 'upload'} size={30} /></div>
                                                 <strong style={{ fontSize: 14, color: isRejected ? '#b91c1c' : '#1e293b' }}>
-                                                    {isRejected ? 'Rejected — click to re-upload' : isDone ? 'Uploaded ✓ (click to replace)' : 'Upload Signed Document'}
+                                                    {isRejected ? 'Rejected — click to re-upload' : isDone ? 'Uploaded (click to replace)' : 'Upload Signed Document'}
                                                 </strong>
                                                 <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 8 }}>PDF, JPG, PNG · max 10 MB</span>
                                             </label>
@@ -525,12 +524,12 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, alignItems: 'center' }}>
                                             <strong style={{ fontSize: 13, color: '#334155' }}>OCR Review <span style={{ color: '#64748b', fontWeight: 'normal' }}>(auto-filled from the form)</span></strong>
                                             <span style={{
-                                                background: ocrProcessing ? '#fef3c7' : btpConfirmed ? '#dcfce7' : uploaded('LIBRARY') ? '#dbeafe' : '#f1f5f9',
-                                                color: ocrProcessing ? '#b45309' : btpConfirmed ? '#15803d' : uploaded('LIBRARY') ? '#1e40af' : '#64748b',
+                                                background: ocrProcessing ? '#fef3c7' : btpConfirmed ? '#dcfce7' : uploaded('LIBRARY') ? '#eef2f8' : '#f1f5f9',
+                                                color: ocrProcessing ? '#b45309' : btpConfirmed ? '#15803d' : uploaded('LIBRARY') ? '#1b365d' : '#64748b',
                                                 padding: '2px 8px', borderRadius: 12, fontSize: 11, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6,
                                             }}>
                                                 {ocrProcessing && <Spinner />}
-                                                {ocrProcessing ? 'Scanning…' : btpConfirmed ? 'Confirmed ✓' : uploaded('LIBRARY') ? 'Review & Confirm' : 'Awaiting upload'}
+                                                {ocrProcessing ? 'Scanning…' : btpConfirmed ? 'Confirmed' : uploaded('LIBRARY') ? 'Review & Confirm' : 'Awaiting upload'}
                                             </span>
                                         </div>
 
@@ -561,7 +560,7 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                                         <button onClick={confirmOcr} className="btn btn-primary"
                                             disabled={!uploaded('LIBRARY') || ocrProcessing || btpConfirmed || busy === 'confirm'}
                                             style={{ width: '100%', marginTop: 12, fontSize: 13 }}>
-                                            {btpConfirmed ? '✓ OCR Confirmed' : busy === 'confirm' ? 'Confirming…' : 'Confirm OCR Data'}
+                                            {btpConfirmed ? 'OCR Confirmed' : busy === 'confirm' ? 'Confirming…' : 'Confirm OCR Data'}
                                         </button>
                                     </div>
                                 </div>
@@ -595,10 +594,10 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                                         }}>
                                             <input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: 'none' }}
                                                 onChange={(e) => upload('TPC', e.target.files && e.target.files[0] ? e.target.files[0] : null)} />
-                                            <div style={{ fontSize: 24 }}>{tpcRejected ? '⚠️' : tpcDone ? '✅' : '📄'}</div>
+                                            <div style={{ color: tpcRejected ? '#b42318' : tpcDone ? '#157347' : '#64748b' }}><Icon name={tpcRejected ? 'alert' : tpcDone ? 'check' : 'file'} size={24} /></div>
                                             <div>
                                                 <strong style={{ fontSize: 13, color: tpcRejected ? '#b91c1c' : '#1e293b', display: 'block' }}>
-                                                    {tpcRejected ? 'Rejected — click to re-upload' : tpcDone ? 'Offer letter uploaded ✓ (click to replace)' : 'Upload Offer Letter'}
+                                                    {tpcRejected ? 'Rejected — click to re-upload' : tpcDone ? 'Offer letter uploaded (click to replace)' : 'Upload Offer Letter'}
                                                 </strong>
                                                 <span style={{ fontSize: 11, color: '#64748b' }}>PDF, JPG, PNG · max 10 MB</span>
                                             </div>
@@ -608,11 +607,11 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                             </div>
                         )}
 
-                        {intakeError && <div className="alert alert-danger" style={{ whiteSpace: 'pre-line', fontSize: 13 }}>⚠️ <strong>Action Required:</strong>{'\n• '}{intakeError}</div>}
+                        {intakeError && <div className="alert alert-danger" style={{ whiteSpace: 'pre-line', fontSize: 13 }}><strong>Action Required:</strong>{'\n• '}{intakeError}</div>}
 
                         <div style={{ textAlign: 'right' }}>
                             <button onClick={proceed} className="btn btn-success" disabled={busy === 'submit'} style={{ padding: '12px 24px', fontSize: 14, fontWeight: 700 }}>
-                                {busy === 'submit' ? 'Submitting…' : 'Save & Proceed to Clearance Matrix ➔'}
+                                {busy === 'submit' ? 'Submitting…' : 'Save & Proceed to Clearance Matrix'}
                             </button>
                         </div>
                     </div>
@@ -621,33 +620,33 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                 {/* ── PAGE 2: Core Tri-Gate verification ── */}
                 {activeTab === 'page2' && (
                     <div style={{ background: '#fff', border: '1px solid #cbd5e1', borderRadius: 8, padding: 24 }}>
-                        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, padding: '14px 18px', marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ background: '#f4f7fb', border: '1px solid #c9d6e6', borderRadius: 6, padding: '14px 18px', marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div>
-                                <h3 style={{ margin: 0, color: '#1e40af', fontSize: 16 }}>
-                                    {triGate.some((c) => sec(c)?.status === 'REJECTED') ? '⚠️ Action Required' : '🔒 Verification In Progress'}
+                                <h3 style={{ margin: 0, color: '#1b365d', fontSize: 16 }}>
+                                    {triGate.some((c) => sec(c)?.status === 'REJECTED') ? 'Action Required' : 'Verification In Progress'}
                                 </h3>
-                                <p style={{ margin: '4px 0 0', color: '#3b82f6', fontSize: 13 }}>
+                                <p style={{ margin: '4px 0 0', color: '#475569', fontSize: 13 }}>
                                     {triGate.some((c) => sec(c)?.status === 'REJECTED')
                                         ? 'One or more sections were rejected. Re-upload and re-confirm, then re-submit.'
                                         : 'Please wait while officers verify your tri-gate submissions.'}
                                 </p>
                             </div>
                             <span style={{
-                                background: triGate.some((c) => sec(c)?.status === 'REJECTED') ? '#b91c1c' : triGateApproved ? '#16a34a' : '#1d4ed8',
+                                background: triGate.some((c) => sec(c)?.status === 'REJECTED') ? '#b91c1c' : triGateApproved ? '#15803d' : '#1b365d',
                                 color: '#fff', padding: '6px 14px', borderRadius: 20, fontWeight: 700, fontSize: 12,
                             }}>
                                 {triGate.some((c) => sec(c)?.status === 'REJECTED') ? 'Needs Attention' : triGateApproved ? 'Tri-Gate Cleared' : 'Verification Pending'}
                             </span>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                            {has('LIBRARY') && <VerifyCard code="LIBRARY" icon="📘" title="Librarian Verification" subtitle="Checking OCR data against physical records" detail={<>Form No: <code>{formNo}</code> · Title: <em>{title}</em> · Plagiarism: <strong style={{ color: '#b91c1c' }}>{plagiarism}</strong></>} />}
-                            {has('TPC') && <VerifyCard code="TPC" icon="💼" title="TPC Check" subtitle="Reviewing your offer letter" detail={<>Offer Letter: 📄 <em>{sec('TPC')?.documents[0]?.original_name || 'uploaded'}</em></>} />}
-                            {has('WARDEN') && <VerifyCard code="WARDEN" icon="🏛️" title="Warden Desk" subtitle="Verifying vacant room details" detail={<>Block <strong>{request.student.hostel}</strong> · Vacant Room: <strong style={{ color: '#1b365d' }}>{request.vacant_room_no || '—'}</strong></>} />}
+                            {has('LIBRARY') && <VerifyCard code="LIBRARY" icon="LI" title="Librarian Verification" subtitle="Checking OCR data against physical records" detail={<>Form No: <code>{formNo}</code> · Title: <em>{title}</em> · Plagiarism: <strong style={{ color: '#b91c1c' }}>{plagiarism}</strong></>} />}
+                            {has('TPC') && <VerifyCard code="TPC" icon="TP" title="TPC Check" subtitle="Reviewing your offer letter" detail={<>Offer Letter: <em>{sec('TPC')?.documents[0]?.original_name || 'uploaded'}</em></>} />}
+                            {has('WARDEN') && <VerifyCard code="WARDEN" icon="WA" title="Warden Desk" subtitle="Verifying vacant room details" detail={<>Block <strong>{request.student.hostel}</strong> · Vacant Room: <strong style={{ color: '#1b365d' }}>{request.vacant_room_no || '—'}</strong></>} />}
                         </div>
                         <div style={{ marginTop: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>ℹ️ When the tri-gate is cleared, Page 3 unlocks automatically.</p>
+                            <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>When the tri-gate is cleared, Page 3 unlocks automatically.</p>
                             <button onClick={() => triGateApproved && setActiveTab('page3')} disabled={!triGateApproved} className={triGateApproved ? 'btn btn-success' : 'btn btn-secondary'} style={{ padding: '10px 20px', fontSize: 13, fontWeight: 700 }}>
-                                {triGateApproved ? 'Proceed to Dept & Field ➔' : '🔒 Page 3 Locked'}
+                                {triGateApproved ? 'Proceed to Dept & Field' : 'Page 3 Locked'}
                             </button>
                         </div>
                     </div>
@@ -664,8 +663,8 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                                 const s = sec(code)!;
                                 const labView = code === 'HOD' && labsOn;
                                 const meta = labView
-                                    ? { icon: '🏛️', subtitle: `Labs (${labs.approved}/${labs.total} approved) → HOD approval` }
-                                    : SECTION_META[code] || { icon: '📋', subtitle: '' };
+                                    ? { icon: 'HD', subtitle: `Labs (${labs.approved}/${labs.total} approved) → HOD approval` }
+                                    : SECTION_META[code] || { icon: code.slice(0, 2), subtitle: '' };
                                 const ok = s.status === 'APPROVED';
                                 const rej = s.status === 'REJECTED' || (labView && !ok && labRejected);
                                 const needsUpload = !!UPLOAD_SECTION_CONFIG[code];
@@ -679,10 +678,10 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                                         title="Click to open">
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                                <div style={{ fontSize: 22, background: '#dbeafe', padding: 8, borderRadius: 8 }}>{meta.icon}</div>
+                                                <div className="section-mark">{meta.icon}</div>
                                                 <div>
                                                     <h4 style={{ margin: 0, fontSize: 14, color: '#1e293b' }}>{s.name}</h4>
-                                                    <span style={{ fontSize: 11, color: '#64748b' }}>{needsUpload ? '📎 Upload required' : meta.subtitle}</span>
+                                                    <span style={{ fontSize: 11, color: '#64748b' }}>{needsUpload ? 'Upload required' : meta.subtitle}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -690,17 +689,17 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                                             {(() => {
                                                 if (labView && s.status === 'PENDING') {
                                                     const [label, color] = !labs.started ? ['NOT SENT', '#b45309']
-                                                        : labRejected ? ['LAB REJECTED ✗', '#b91c1c']
+                                                        : labRejected ? ['LAB REJECTED', '#b91c1c']
                                                             : !labs.cleared ? [`LABS ${labs.approved}/${labs.total}`, '#b45309']
                                                                 : ['WITH HOD', '#b45309'];
                                                     return <span style={{ fontSize: 11, color, fontWeight: 700 }}>{label}</span>;
                                                 }
                                                 const notSent = s.needs_confirm && !s.student_confirmed;
-                                                const label = ok ? 'APPROVED ✓' : rej ? 'REJECTED ✗' : notSent ? 'NOT SENT' : (!s.actionable ? 'WAITING' : 'IN PROGRESS');
+                                                const label = ok ? 'APPROVED' : rej ? 'REJECTED' : notSent ? 'NOT SENT' : (!s.actionable ? 'WAITING' : 'IN PROGRESS');
                                                 const color = ok ? '#15803d' : rej ? '#b91c1c' : notSent ? '#b45309' : (!s.actionable ? '#94a3b8' : '#b45309');
                                                 return <span style={{ fontSize: 11, color, fontWeight: 700 }}>{label}</span>;
                                             })()}
-                                            <span style={{ fontSize: 11, color: '#2563eb', fontWeight: 600 }}>Open ▸</span>
+                                            <span style={{ fontSize: 11, color: '#1b365d', fontWeight: 600 }}>Open ▸</span>
                                         </div>
                                     </div>
                                 );
@@ -709,7 +708,7 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                         <div style={{ marginTop: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>All departmental sections must be approved to proceed to Accounts and Administration.</p>
                             <button onClick={() => financeUnlock && setActiveTab('page4')} disabled={!financeUnlock} className={financeUnlock ? 'btn btn-success' : 'btn btn-secondary'} style={{ padding: '10px 20px', fontSize: 13, fontWeight: 700 }}>
-                                {financeUnlock ? 'Proceed to Financial & Administration ➔' : '🔒 Page 4 Locked'}
+                                {financeUnlock ? 'Proceed to Financial & Administration' : 'Page 4 Locked'}
                             </button>
                         </div>
                     </div>
@@ -718,7 +717,7 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                 {/* ── PAGE 3 detail view (opened by clicking a section) ── */}
                 {activeTab === 'page3' && openStageSection && (() => {
                     const s = sec(openStageSection)!;
-                    const meta = SECTION_META[openStageSection] || { icon: '📋', subtitle: '' };
+                    const meta = SECTION_META[openStageSection] || { icon: openStageSection.slice(0, 2), subtitle: '' };
                     const cfg = UPLOAD_SECTION_CONFIG[openStageSection];
                     return (
                         <div>
@@ -754,7 +753,7 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                 {activeTab === 'page4' && (
                     <div>
                         <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#475569' }}>
-                            ⇉ <strong>Accounts</strong> and <strong>Administration</strong> work on your request at the same time. Finish both.
+                            <strong>Accounts</strong> and <strong>Administration</strong> work on your request at the same time. Finish both.
                             Your certificate (Page 5) unlocks once both have approved and Accounts has sent your refund.
                         </div>
                         <div className="row">
@@ -789,7 +788,7 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                         </div>
                         <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
                             <button onClick={() => setActiveTab('page5')} className="btn btn-success" style={{ padding: '10px 20px', fontSize: 13, fontWeight: 700 }}>
-                                Go to Certificate ➔
+                                Go to Certificate
                             </button>
                         </div>
                     </div>
@@ -800,10 +799,10 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                     <div className="well" style={{ textAlign: 'center', background: cleared ? '#f0fdf4' : '#fff', border: cleared ? '1px solid #86efac' : '1px solid #cbd5e1' }}>
                         {cleared ? (
                             <>
-                                <h3 style={{ color: '#15803d', marginTop: 0 }}>✅ Released Successfully!</h3>
+                                <h3 style={{ color: '#15803d', marginTop: 0 }}>Released Successfully!</h3>
                                 <p style={{ color: '#475569', fontSize: 13 }}>Your clearance is complete. Download your digital No-Dues certificate below.</p>
                                 <button className="btn btn-success" style={{ padding: '12px 24px', fontSize: 14, fontWeight: 700 }} onClick={downloadCertificate}>
-                                    🎓 Download Complete Digital No-Dues Certificate
+                                    Download Complete Digital No-Dues Certificate
                                 </button>
                             </>
                         ) : (
@@ -816,7 +815,7 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                                     <Spinner />
                                     <span style={{ color: '#475569', fontSize: 13 }}>
                                         {refund.status === 'pending'
-                                            ? `Every section has approved ✓. Waiting for Accounts to send your refund of ${rupees(refund.amount)}${refund.account ? ` to ${refund.account}` : ''}.`
+                                            ? `Every section has approved. Waiting for Accounts to send your refund of ${rupees(refund.amount)}${refund.account ? ` to ${refund.account}` : ''}.`
                                             : `Still waiting for: ${request.sections.filter((s) => s.status !== 'APPROVED').map((s) => s.name).join(', ')}`}
                                     </span>
                                 </div>
@@ -858,7 +857,7 @@ function RefundLedger({ request, onReload }: { request: ClearanceRequest; onRelo
         setBusy(true); setNote(null);
         try {
             await api.setDonation(value);
-            setNote({ text: Number(value) > 0 ? '✓ Donation saved. Thank you!' : '✓ Saved: no donation.', err: false });
+            setNote({ text: Number(value) > 0 ? 'Donation saved. Thank you!' : 'Saved: no donation.', err: false });
             onReload();
         } catch (e) { setNote({ text: e instanceof Error ? e.message : 'Could not save the donation', err: true }); }
         finally { setBusy(false); }
@@ -881,14 +880,14 @@ function RefundLedger({ request, onReload }: { request: ClearanceRequest; onRelo
             <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, padding: '10px 12px', marginBottom: 12 }}>
                 {locked ? (
                     <div style={{ fontSize: 13 }}>
-                        🤝 Students' Welfare Fund (Fund-Us) donation: <strong>₹{saved.toLocaleString('en-IN')}</strong>
-                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>🔒 {locked}</div>
+                        Students' Welfare Fund (Fund-Us) donation: <strong>₹{saved.toLocaleString('en-IN')}</strong>
+                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>{locked}</div>
                     </div>
                 ) : (
                     <>
                         <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: 0, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                             <input type="checkbox" checked={donate} disabled={busy} onChange={(e) => { setDonate(e.target.checked); setNote(null); }} />
-                            🤝 Donate to Students' Welfare Fund (Fund-Us)
+                            Donate to Students' Welfare Fund (Fund-Us)
                         </label>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                             {donate && (
@@ -907,7 +906,7 @@ function RefundLedger({ request, onReload }: { request: ClearanceRequest; onRelo
                         </div>
                     </>
                 )}
-                {note && <div style={{ fontSize: 12, marginTop: 6, color: note.err ? '#b91c1c' : '#15803d' }}>{note.err ? '⚠️ ' : ''}{note.text}</div>}
+                {note && <div style={{ fontSize: 12, marginTop: 6, color: note.err ? '#b91c1c' : '#15803d' }}>{note.text}</div>}
             </div>
 
             <Row k="Caution Money (refundable)" v={`₹${CAUTION_MONEY.toLocaleString('en-IN')}`} />
@@ -918,10 +917,10 @@ function RefundLedger({ request, onReload }: { request: ClearanceRequest; onRelo
                 marginTop: 10, padding: '8px 10px', borderRadius: 6, fontSize: 12,
                 background: paid ? '#f0fdf4' : '#f8fafc', color: paid ? '#166534' : '#475569',
             }}>
-                {refund.status === 'sent' ? <>✅ <strong>Paid {rupees(refund.amount)}</strong> by {refund.mode}
+                {refund.status === 'sent' ? <><strong>Paid {rupees(refund.amount)}</strong> by {refund.mode}
                     {refund.paid_on ? ` on ${new Date(refund.paid_on).toLocaleDateString()}` : ''} · UTR {refund.reference}</>
-                    : refund.status === 'not_due' ? <>✅ No refund was due.</>
-                        : refund.status === 'pending' ? <>⏳ Every section has approved: Accounts is sending your refund
+                    : refund.status === 'not_due' ? <>No refund was due.</>
+                        : refund.status === 'pending' ? <>Every section has approved: Accounts is sending your refund
                             {refund.account ? ` to your account ${refund.account}` : ''}.</>
                             : <>Your refund is sent to the bank account on your cancelled cheque once every section has approved.</>}
             </div>
@@ -944,9 +943,9 @@ function CommentThread({ comments, me, busy, onSend }: {
         <div style={{ marginTop: 10, borderTop: '1px dashed #e2e8f0', paddingTop: 8 }}>
             <button
                 onClick={() => setOpen((o) => !o)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, fontWeight: 700, color: '#2563eb', display: 'flex', alignItems: 'center', gap: 4 }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, fontWeight: 700, color: '#1b365d', display: 'flex', alignItems: 'center', gap: 4 }}
             >
-                💬 Messages{comments.length ? ` (${comments.length})` : ''} <span style={{ fontSize: 9 }}>{open ? '▲' : '▼'}</span>
+                Messages{comments.length ? ` (${comments.length})` : ''} <span style={{ fontSize: 9 }}>{open ? '▲' : '▼'}</span>
             </button>
 
             {open && (
@@ -959,10 +958,12 @@ function CommentThread({ comments, me, busy, onSend }: {
                                 <div key={i} style={{ fontSize: 11, marginBottom: 4, textAlign: mine ? 'right' : 'left' }}>
                                     <span style={{
                                         display: 'inline-block', padding: '4px 8px', borderRadius: 8, maxWidth: '85%',
-                                        background: c.is_system ? '#f1f5f9' : mine ? '#dbeafe' : '#fee2e2',
-                                        color: c.is_system ? '#64748b' : mine ? '#1e40af' : '#7f1d1d',
+                                        background: c.is_system ? '#f8fafc' : mine ? '#eef2f8' : '#ffffff',
+                                        border: `1px solid ${c.is_system ? '#e2e8f0' : mine ? '#c9d6e6' : '#d7dee8'}`,
+                                        color: c.is_system ? '#64748b' : mine ? '#1b365d' : '#334155',
+                                        fontStyle: c.is_system ? 'italic' : 'normal',
                                     }}>
-                                        {c.is_system ? '⚙️ ' : ''}{c.body}
+                                        {c.body}
                                         <span style={{ display: 'block', fontSize: 9, opacity: 0.7 }}>{mine ? 'You' : c.author}</span>
                                     </span>
                                 </div>
@@ -1055,7 +1056,7 @@ function UploadReview({ section, icon, config, student, me, onReload, stacked = 
 
     const doConfirm = async () => {
         setBusy('confirm');
-        try { await api.confirmReview(section.code, fields); setConfirmed(true); setNoteErr(false); setNote('✓ Confirmed and sent to the office.'); onReload(); }
+        try { await api.confirmReview(section.code, fields); setConfirmed(true); setNoteErr(false); setNote('Confirmed and sent to the office.'); onReload(); }
         catch (e) { setNoteErr(true); setNote(e instanceof Error ? e.message : 'Could not confirm'); }
         finally { setBusy(''); }
     };
@@ -1064,21 +1065,21 @@ function UploadReview({ section, icon, config, student, me, onReload, stacked = 
         <div className="well" style={{ background: '#fff', border: '1px solid #cbd5e1', borderRadius: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ fontSize: 24, background: '#dbeafe', padding: 8, borderRadius: 8 }}>{icon}</div>
+                    <div className="section-mark">{icon}</div>
                     <h3 style={{ margin: 0, color: '#1b365d', fontSize: 16 }}>{section.name}</h3>
-                    {approvedOk && <span style={{ background: '#dcfce7', color: '#15803d', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>APPROVED ✓</span>}
-                    {rejected && <span style={{ background: '#fee2e2', color: '#b91c1c', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>REJECTED ✗</span>}
+                    {approvedOk && <span style={{ background: '#dcfce7', color: '#15803d', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>APPROVED</span>}
+                    {rejected && <span style={{ background: '#fee2e2', color: '#b91c1c', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>REJECTED</span>}
                 </div>
                 {config.formUrl && (
-                    <a href={config.formUrl} download target="_blank" rel="noreferrer" style={{ color: '#2563eb', fontWeight: 600, fontSize: 13, textDecoration: 'underline' }}>
-                        📥 Download {config.formLabel || 'Form'}
+                    <a href={config.formUrl} download target="_blank" rel="noreferrer" style={{ color: '#1b365d', fontWeight: 600, fontSize: 13, textDecoration: 'underline' }}>
+                        Download {config.formLabel || 'Form'}
                     </a>
                 )}
             </div>
 
             {rejected && reason && <div style={{ marginBottom: 12, fontSize: 12, color: '#b91c1c' }}><strong>Officer's reason:</strong> {reason.body}</div>}
             {note && (noteErr
-                ? <div className="alert alert-danger" style={{ marginBottom: 12, fontSize: 13 }}>⚠️ {note}</div>
+                ? <div className="alert alert-danger" style={{ marginBottom: 12, fontSize: 13 }}>{note}</div>
                 : <div style={{ marginBottom: 12, fontSize: 12, color: '#15803d' }}>{note}</div>)}
 
             <div className="row" style={stacked ? { rowGap: 12 } : undefined}>
@@ -1086,9 +1087,9 @@ function UploadReview({ section, icon, config, student, me, onReload, stacked = 
                     <label style={{ ...dropzone, ...(stacked ? { minHeight: 120, padding: 16 } : {}), cursor: locked ? 'default' : 'pointer', border: rejected ? '2px dashed #f87171' : locked ? '2px solid #bbf7d0' : '2px dashed #cbd5e1', background: rejected ? '#fef2f2' : locked ? '#f0fdf4' : '#f8fafc' }}>
                         <input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: 'none' }} disabled={locked}
                             onChange={(e) => doUpload(e.target.files && e.target.files[0] ? e.target.files[0] : null)} />
-                        <div style={{ fontSize: 32, marginBottom: 8 }}>{rejected ? '⚠️' : approvedOk ? '✅' : uploaded ? '✅' : '☁️'}</div>
+                        <div style={{ marginBottom: 8, color: rejected ? '#b42318' : uploaded ? '#157347' : '#64748b' }}><Icon name={rejected ? 'alert' : uploaded ? 'check' : 'upload'} size={30} /></div>
                         <strong style={{ fontSize: 14, color: rejected ? '#b91c1c' : approvedOk ? '#15803d' : '#1e293b' }}>
-                            {rejected ? 'Rejected — click to re-upload' : approvedOk ? 'Approved ✓' : locked ? 'Uploaded ✓' : uploaded ? 'Uploaded ✓ (click to replace)' : 'Upload Document'}
+                            {rejected ? 'Rejected — click to re-upload' : approvedOk ? 'Approved' : locked ? 'Uploaded' : uploaded ? 'Uploaded (click to replace)' : 'Upload Document'}
                         </strong>
                         <span style={{ fontSize: 11, color: '#94a3b8', marginTop: 8 }}>PDF, JPG, PNG · max 10 MB</span>
                     </label>
@@ -1104,12 +1105,12 @@ function UploadReview({ section, icon, config, student, me, onReload, stacked = 
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                             <strong style={{ fontSize: 13, color: '#334155' }}>Review <span style={{ color: '#64748b', fontWeight: 'normal' }}>(auto-filled)</span></strong>
                             <span style={{
-                                background: processing ? '#fef3c7' : approvedOk ? '#dcfce7' : confirmed ? '#dcfce7' : uploaded ? '#dbeafe' : '#f1f5f9',
-                                color: processing ? '#b45309' : approvedOk ? '#15803d' : confirmed ? '#15803d' : uploaded ? '#1e40af' : '#64748b',
+                                background: processing ? '#fef3c7' : approvedOk ? '#dcfce7' : confirmed ? '#dcfce7' : uploaded ? '#eef2f8' : '#f1f5f9',
+                                color: processing ? '#b45309' : approvedOk ? '#15803d' : confirmed ? '#15803d' : uploaded ? '#1b365d' : '#64748b',
                                 padding: '2px 8px', borderRadius: 12, fontSize: 11, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6,
                             }}>
                                 {processing && <Spinner />}
-                                {processing ? 'Scanning…' : approvedOk ? 'Approved ✓' : confirmed ? 'Confirmed ✓' : uploaded ? 'Review & Confirm' : 'Awaiting upload'}
+                                {processing ? 'Scanning…' : approvedOk ? 'Approved' : confirmed ? 'Confirmed' : uploaded ? 'Review & Confirm' : 'Awaiting upload'}
                             </span>
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -1130,7 +1131,7 @@ function UploadReview({ section, icon, config, student, me, onReload, stacked = 
                         )}
                         <button className="btn btn-primary" style={{ width: '100%', marginTop: 12, fontSize: 13 }}
                             disabled={!uploaded || processing || locked || busy === 'confirm'} onClick={doConfirm}>
-                            {approvedOk ? '✓ Approved' : confirmed ? '✓ Confirmed' : busy === 'confirm' ? 'Confirming…' : 'Confirm & Send'}
+                            {approvedOk ? 'Approved' : confirmed ? 'Confirmed' : busy === 'confirm' ? 'Confirming…' : 'Confirm & Send'}
                         </button>
                     </div>
                 </div>
@@ -1168,26 +1169,26 @@ function LabChainDetail({ chain, hod, student, me, onReload }: {
 
     const sendNext = () => run('send', async () => {
         const res = await api.sendToLabs();
-        return `✓ Request sent to ${res.sent_to.join(', ')}.`;
+        return `Request sent to ${res.sent_to.join(', ')}.`;
     });
     const resend = (labId: number, name: string) => run('resend-' + labId, async () => {
         await api.resendToLab(labId);
-        return `✓ Request re-sent to ${name}.`;
+        return `Request re-sent to ${name}.`;
     });
     const comment = (labId: number, text: string) => run('c-' + labId, async () => {
         await api.labCommentFromStudent(labId, text.trim());
     });
 
     const next = chain.levels.find((lv) => lv.level === chain.next_level);
-    const hodStatus = hod.status === 'APPROVED' ? '✓ APPROVED' : hod.status === 'REJECTED' ? '✗ REJECTED'
-        : chain.cleared ? 'WITH HOD' : '🔒 after every lab approves';
+    const hodStatus = hod.status === 'APPROVED' ? 'APPROVED' : hod.status === 'REJECTED' ? 'REJECTED'
+        : chain.cleared ? 'WITH HOD' : 'AFTER ALL LABS APPROVE';
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div className="well" style={{ background: '#fff', border: '1px solid #cbd5e1', borderRadius: 8, margin: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ fontSize: 24, background: '#dbeafe', padding: 8, borderRadius: 8 }}>🏛️</div>
+                        <div className="section-mark">HD</div>
                         <div>
                             <h3 style={{ margin: 0, color: '#1b365d', fontSize: 16 }}>{hod.name} — {student.department} Labs</h3>
                             <span style={{ fontSize: 12, color: '#64748b' }}>Your department's labs clear you first; HOD gives the final approval.</span>
@@ -1195,7 +1196,7 @@ function LabChainDetail({ chain, hod, student, me, onReload }: {
                     </div>
                     <span style={{
                         padding: '4px 12px', borderRadius: 20, fontWeight: 700, fontSize: 12,
-                        background: chain.cleared ? '#dcfce7' : '#f5f3ff', color: chain.cleared ? '#15803d' : '#5b21b6',
+                        background: chain.cleared ? '#dcfce7' : '#f4f7fb', color: chain.cleared ? '#15803d' : '#1b365d',
                     }}>{chain.approved}/{chain.total} labs approved</span>
                 </div>
                 <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 12px' }}>
@@ -1203,17 +1204,17 @@ function LabChainDetail({ chain, hod, student, me, onReload }: {
                 </p>
 
                 {note && (noteErr
-                    ? <div className="alert alert-danger" style={{ fontSize: 13 }}>⚠️ {note}</div>
+                    ? <div className="alert alert-danger" style={{ fontSize: 13 }}>{note}</div>
                     : <div style={{ fontSize: 12, color: '#15803d', marginBottom: 10 }}>{note}</div>)}
 
                 {next && (chain.can_send ? (
                     <button className="btn btn-success" style={{ marginBottom: 12, fontSize: 13, fontWeight: 700, whiteSpace: 'normal', textAlign: 'left' }}
                         disabled={busy === 'send'} onClick={sendNext}>
-                        {busy === 'send' ? 'Sending…' : `📨 Send request to Level ${next.level}: ${next.labs.map((e) => e.name).join(', ')}`}
+                        {busy === 'send' ? 'Sending…' : `Send request to Level ${next.level}: ${next.labs.map((e) => e.name).join(', ')}`}
                     </button>
                 ) : chain.started && (
                     <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
-                        ⏳ Level {next.level} can be sent once every lab on the earlier level has approved.
+                        Level {next.level} can be sent once every lab on the earlier level has approved.
                     </div>
                 ))}
 
@@ -1221,10 +1222,10 @@ function LabChainDetail({ chain, hod, student, me, onReload }: {
                     {chain.levels.map((lv) => (
                         <div key={lv.level}>
                             <div style={{
-                                background: lv.approved ? '#f0fdf4' : '#f5f3ff', borderRadius: 8, padding: 10,
-                                border: `1px solid ${lv.approved ? '#bbf7d0' : '#ddd6fe'}`,
+                                background: lv.approved ? '#f0fdf4' : '#f4f7fb', borderRadius: 8, padding: 10,
+                                border: `1px solid ${lv.approved ? '#bbf7d0' : '#c9d6e6'}`,
                             }}>
-                                <div style={{ fontSize: 12, fontWeight: 700, color: '#5b21b6', marginBottom: 8 }}>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: '#1b365d', marginBottom: 8 }}>
                                     Level {lv.level}{lv.labs.length > 1 ? ' · these labs get it together' : ''}{!lv.sent ? ' · not sent yet' : ''}
                                 </div>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -1237,7 +1238,7 @@ function LabChainDetail({ chain, hod, student, me, onReload }: {
                                             }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                                                     <div>
-                                                        <strong style={{ fontSize: 13, color: '#1e293b' }}>🧪 {e.name}</strong>
+                                                        <strong style={{ fontSize: 13, color: '#1e293b' }}>{e.name}</strong>
                                                         {e.incharge_name && <div style={{ fontSize: 11, color: '#64748b' }}>{e.incharge_name}</div>}
                                                     </div>
                                                     <span style={{ fontSize: 11, fontWeight: 700, color: b.color, background: b.bg, padding: '2px 8px', borderRadius: 12, whiteSpace: 'nowrap' }}>{b.label}</span>
@@ -1254,7 +1255,7 @@ function LabChainDetail({ chain, hod, student, me, onReload }: {
                                                         <div style={{ marginTop: 6 }}>
                                                             <button className="btn btn-primary" style={{ fontSize: 11, padding: '3px 10px' }}
                                                                 disabled={busy === 'resend-' + e.lab_id} onClick={() => resend(e.lab_id, e.name)}>
-                                                                {busy === 'resend-' + e.lab_id ? 'Re-sending…' : `↻ Re-send to ${e.name}`}
+                                                                {busy === 'resend-' + e.lab_id ? 'Re-sending…' : `Re-send to ${e.name}`}
                                                             </button>
                                                         </div>
                                                     </div>
@@ -1272,10 +1273,10 @@ function LabChainDetail({ chain, hod, student, me, onReload }: {
                         </div>
                     ))}
                     <div style={{
-                        background: hod.status === 'APPROVED' ? '#f0fdf4' : '#eef4ff', border: '1px solid #bfdbfe', borderRadius: 8,
+                        background: hod.status === 'APPROVED' ? '#f0fdf4' : '#f4f7fb', border: '1px solid #c9d6e6', borderRadius: 8,
                         padding: 10, fontSize: 13, color: '#1b365d', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     }}>
-                        <strong>🏛️ HOD — final departmental approval</strong>
+                        <strong>HOD — final departmental approval</strong>
                         <span style={{ fontSize: 11, fontWeight: 700 }}>{hodStatus}</span>
                     </div>
                 </div>
@@ -1283,7 +1284,7 @@ function LabChainDetail({ chain, hod, student, me, onReload }: {
 
             {/* HOD's own status, thread, and re-send (if HOD rejects) — once it's HOD's turn. */}
             {(chain.cleared || hod.status !== 'PENDING') && (
-                <BasicDetail section={hod} icon="🏛️" subtitle="Final departmental approval" student={student} me={me} onReload={onReload} />
+                <BasicDetail section={hod} icon="HD" subtitle="Final departmental approval" student={student} me={me} onReload={onReload} />
             )}
         </div>
     );
@@ -1318,7 +1319,7 @@ function BasicDetail({ section, icon, subtitle, student, me, onReload }: {
         setBusy(true); setNote('');
         try {
             await api.confirmSection(section.code, { name: name.trim(), roll_no: roll.trim(), department: dept.trim() });
-            setNote('✓ Confirmed — request sent to the office.');
+            setNote('Confirmed — request sent to the office.');
             onReload();
         } catch (e) { setNote(e instanceof Error ? e.message : 'Could not confirm'); }
         finally { setBusy(false); }
@@ -1333,7 +1334,7 @@ function BasicDetail({ section, icon, subtitle, student, me, onReload }: {
         <div className="well" style={{ background: '#fff', border: `1px solid ${rejected ? '#fca5a5' : ok ? '#bbf7d0' : '#cbd5e1'}`, borderRadius: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ fontSize: 24, background: '#dbeafe', padding: 8, borderRadius: 8 }}>{icon}</div>
+                    <div className="section-mark">{icon}</div>
                     <div><h3 style={{ margin: 0, color: '#1b365d', fontSize: 16 }}>{section.name}</h3>
                         <span style={{ fontSize: 12, color: '#64748b' }}>{subtitle}</span></div>
                 </div>
@@ -1341,7 +1342,7 @@ function BasicDetail({ section, icon, subtitle, student, me, onReload }: {
                     padding: '4px 12px', borderRadius: 20, fontWeight: 700, fontSize: 12,
                     background: ok ? '#dcfce7' : rejected ? '#fee2e2' : (needsConfirm && !sent) ? '#fef3c7' : '#f1f5f9',
                     color: ok ? '#15803d' : rejected ? '#b91c1c' : (needsConfirm && !sent) ? '#b45309' : '#64748b',
-                }}>{ok ? 'APPROVED ✓' : rejected ? 'REJECTED ✗' : (needsConfirm && !sent) ? 'NOT SENT' : waiting ? 'WAITING' : 'IN PROGRESS'}</span>
+                }}>{ok ? 'APPROVED' : rejected ? 'REJECTED' : (needsConfirm && !sent) ? 'NOT SENT' : waiting ? 'WAITING' : 'IN PROGRESS'}</span>
             </div>
 
             {note && <div style={{ fontSize: 12, color: '#475569', marginBottom: 10 }}>{note}</div>}
@@ -1369,8 +1370,8 @@ function BasicDetail({ section, icon, subtitle, student, me, onReload }: {
                 <div style={{ fontSize: 13, color: '#334155' }}>
                     {/* Only while the office is still deciding: once approved there's nothing left to explain. */}
                     {!ok && (
-                        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: '#1e40af' }}>
-                            ✓ Request sent to this office. They verify from the details below and approve/reject.
+                        <div style={{ background: '#f4f7fb', border: '1px solid #c9d6e6', borderRadius: 6, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: '#1b365d' }}>
+                            Request sent to this office. They verify from the details below and approve/reject.
                         </div>
                     )}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, background: '#f8fafc', padding: 12, borderRadius: 6 }}>
