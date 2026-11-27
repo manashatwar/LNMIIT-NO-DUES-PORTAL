@@ -77,7 +77,7 @@ flowchart TD
     class CERT done;
 ```
 
-> **Department labs replace the paper department form.** The "No Dues Form for Department Purpose" ([photo](../LNMIIT_DOCUMENTS/IMG-20260628-WA0008.jpg)) listed a department's labs (for ECE: Microwave, ADC, TI, DSP, E-CAD, BE). Each lab's in-charge signed it, then the HOD. Each HOD now keeps that list in the portal and arranges it in levels. A department with no labs set up behaves exactly as described below: HOD acts directly, once the tri-gate has approved. See [Department labs](#department-labs-hod-managed-hierarchy).
+> **Department labs replace the paper department form.** The "No Dues Form for Department Purpose" ([photo](./paper-forms/department-lab-no-dues-form.jpg)) listed a department's labs (for ECE: Microwave, ADC, TI, DSP, E-CAD, BE). Each lab's in-charge signed it, then the HOD. Each HOD now keeps that list in the portal and arranges it in levels. A department with no labs set up behaves exactly as described below: HOD acts directly, once the tri-gate has approved. See [Department labs](#department-labs-hod-managed-hierarchy).
 
 > **No "Confirm & Send".** Store, LUCS, Sports, Medical, NAD and Administration used to reach an office only after the student clicked "Confirm & Send" on that section's card. Now each gets the request by itself once its prerequisites approve: the departments after the tri-gate, Administration after the departments. Until then, the request isn't on that office's desk. After a rejection, the student sends it back with **Re-send Request** on the card (`POST /api/student/resend-section/`). The HOD card keeps its editable name / roll / department form for that.
 
