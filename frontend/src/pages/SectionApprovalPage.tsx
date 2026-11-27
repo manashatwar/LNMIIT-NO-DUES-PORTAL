@@ -390,8 +390,8 @@ export function SectionApprovalPage({
                                 )}
                                 {staff.length > 0 && <> You can also <strong>Approve</strong> a request at any level, standing in for the people on
                                     it: it moves up one step (at the last level, that is also your final approval).{' '}
-                                    <em>Not ready yet</em> means it is still waiting for Library, Warden or HOD (or TPC, for a
-                                    graduating student){role === 'ACCOUNTS' ? ", or for the student's cheque details" : ''}: each row
+                                    <em>Not ready yet</em> means it is still waiting for Library, Warden or one of the six
+                                    departments (or TPC, for a graduating student){role === 'ACCOUNTS' ? ", or for the student's cheque details" : ''}: each row
                                     says which.</>}
                                 {checklistCol && <> Tick the <strong>Checklist</strong> (e.g. the physical ID card) when the student hands it in:
                                     Approve stays locked until every item is ticked.</>}
