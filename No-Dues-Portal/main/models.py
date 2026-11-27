@@ -129,8 +129,6 @@ class SectionStatus(models.Model):
     status = models.CharField(max_length=12, default=STATUS_PENDING)
     decided_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
     decided_at = models.DateTimeField(null=True, blank=True)
-    # Basic (name/roll) sections only reach the officer's queue after the student confirms.
-    student_confirmed = models.BooleanField(default=True)
     # Section staff (main/staff.py — Library, LUCS, NAD Cell): the staff member
     # the section head sent this request to. Null = still with the head.
     assigned_to = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL,
