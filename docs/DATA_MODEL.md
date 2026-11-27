@@ -104,7 +104,7 @@ erDiagram
     }
     CLEARANCEREQUEST {
         int student FK
-        string exit_type "GRADUATION | NEP_EXIT | WITHDRAWAL | ADMISSION_CANCEL"
+        string exit_type "GRADUATION | WITHDRAWAL | ADMISSION_CANCEL"
         string overall_status "IN_PROGRESS | CLEARED"
         decimal fund_us_amount
         bool is_active "true = the one active request"
