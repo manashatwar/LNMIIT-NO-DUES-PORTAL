@@ -11,15 +11,15 @@ export function LabChainView({ levels, highlight }: { levels: LabLevel[]; highli
     const all = levels.flatMap((lv) => lv.labs);
     const approved = all.filter((e) => e.status === 'APPROVED').length;
     return (
-        <div style={{ marginTop: 8, border: '1px solid #cbd5e1', borderRadius: 6, padding: 10, background: '#f5f3ff' }}>
+        <div style={{ marginTop: 8, border: '1px solid #cbd5e1', borderRadius: 6, padding: 10, background: '#f4f7fb' }}>
             <strong style={{ fontSize: 12, color: '#1b365d' }}>
-                🧪 Department lab clearance — {approved} of {all.length} lab{all.length !== 1 ? 's' : ''} approved
+                Department lab clearance — {approved} of {all.length} lab{all.length !== 1 ? 's' : ''} approved
             </strong>
             <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {levels.map((lv) => (
                     <div key={lv.level}>
                         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: '#5b21b6', minWidth: 54, paddingTop: 5 }}>Level {lv.level}</span>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#1b365d', minWidth: 54, paddingTop: 5 }}>Level {lv.level}</span>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, flex: 1 }}>
                                 {lv.labs.map((e) => {
                                     const b = labBadge(e);
@@ -43,7 +43,7 @@ export function LabChainView({ levels, highlight }: { levels: LabLevel[]; highli
                         <div style={{ fontSize: 11, color: '#94a3b8', paddingLeft: 62 }}>↓</div>
                     </div>
                 ))}
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#1b365d', paddingLeft: 62 }}>🏛️ HOD — final departmental approval</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#1b365d', paddingLeft: 62 }}>HOD — final departmental approval</div>
             </div>
         </div>
     );
