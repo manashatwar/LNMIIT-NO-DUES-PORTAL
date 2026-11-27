@@ -271,7 +271,7 @@ def _section_dict(ss, request):
         "status": ss.status,
         "actionable": engine.actionable(request, ss.section.code),
         # The earlier sections this one still waits for, for this student's exit
-        # type (no TPC on an NEP exit) — the student's lock messages name them.
+        # type (no TPC on a withdrawal) — the student's lock messages name them.
         "waiting_for": [smap[code].section.name if code in smap else code.title()
                         for code in engine.unapproved_prerequisites(request, ss.section.code)],
         "is_upload_section": ss.section.is_upload_section,
