@@ -40,7 +40,7 @@ from .prefetch import prefetched
 #
 # Accounts and Administration sit side by side: both open once Library, TPC
 # (graduation only — see OPTIONAL_PREREQUISITES), Warden and HOD have approved
-# (the student's Pages 4 and 5 unlock together), and neither waits for the
+# (side by side on the student's Page 4), and neither waits for the
 # other. The request is cleared only when every one of its sections is approved
 # (recompute_overall).
 _AFTER_DEPT_AND_FIELD = [SECTION_LIBRARY, SECTION_TPC, SECTION_WARDEN, SECTION_HOD]
