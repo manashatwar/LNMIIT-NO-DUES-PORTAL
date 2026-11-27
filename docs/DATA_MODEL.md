@@ -1,6 +1,6 @@
 # Data Model
 
-Source: `No-Dues-Portal/main/models.py`. This mirrors [`DESIGN.md`](./DESIGN.md#data-models) closely — differences from that spec are called out below.
+Source: `backend/main/models.py`. This mirrors [`DESIGN.md`](./DESIGN.md#data-models) closely — differences from that spec are called out below.
 
 ## Entity relationship diagram
 
