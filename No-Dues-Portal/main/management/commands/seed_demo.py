@@ -56,9 +56,15 @@ SECTION_STAFF = {
                                   ("Admin Assistant 2", "admin.staff2@lnmiit.ac.in")],
 }
 
-# Confirm-only sections the demo students have already "Confirm & Send"-ed, so
-# demo requests also wait at those desks (and their staff have work to get).
-DEMO_CONFIRMED = [SECTION_LUCS, SECTION_NAD]
+# Who approves the demo students' sections (CSE, hostel BH1) when a demo needs a
+# request to have got past them.
+DEMO_APPROVERS = {
+    SECTION_LIBRARY: "library@lnmiit.ac.in", SECTION_TPC: "tpc@lnmiit.ac.in",
+    SECTION_WARDEN: "warden.bh1@lnmiit.ac.in", SECTION_STORE: "store@lnmiit.ac.in",
+    SECTION_LUCS: "lucs@lnmiit.ac.in", SECTION_SPORTS: "sports@lnmiit.ac.in",
+    SECTION_MEDICAL: "medical@lnmiit.ac.in", SECTION_NAD: "nad@lnmiit.ac.in",
+    SECTION_HOD: "hod.cse@lnmiit.ac.in",
+}
 
 # code, name, order, is_upload_section, is_consolidator
 # Department-Purpose was removed (HOD no longer requires a dedicated form
@@ -90,16 +96,17 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--demo-requests", type=int, default=0, metavar="N",
-            help="Also create N demo students (demo001@lnmiit.ac.in, ...) whose requests "
-                 "are waiting at the Library, LUCS and NAD Cell, ready to review — e.g. "
-                 "to try sending 35 at once to staff. Max 999.",
+            help="Also create N demo students (demo001@lnmiit.ac.in, ...), Page 1 submitted: the "
+                 "first half wait at the Library; the second half have cleared Library, TPC and "
+                 "Warden and wait at the six Page-3 offices (Store, LUCS, Sports, Medical, NAD Cell, "
+                 "HOD) — e.g. to try sending 15 at once to staff. Max 999.",
         )
         parser.add_argument(
             "--demo-accounts", type=int, default=0, metavar="N",
             help="Also create N demo students (acct001@lnmiit.ac.in, ...) whose requests have "
-                 "reached Accounts and Administration — Library, TPC, Warden and HOD approved, "
-                 "cancelled-cheque details submitted, Administration details confirmed — to try Accounts' "
-                 "staff levels, and Administration's staff and checklist. Max 999.",
+                 "reached Accounts and Administration — Library, TPC, Warden and the six departments "
+                 "approved, cancelled-cheque details submitted — to try Accounts' staff levels, and "
+                 "Administration's staff and checklist. Max 999.",
         )
         parser.add_argument(
             "--demo-refunds", type=int, default=0, metavar="N",
@@ -274,7 +281,7 @@ class Command(BaseCommand):
                 student=student, exit_type="GRADUATION", vacant_room_no=f"D{i:03d}",
                 intake_submitted=True, fund_us_amount=1000 * (i % 3))
             for code in engine.required_sections("GRADUATION"):
-                SectionStatus.objects.create(request=req, section=sections[code], student_confirmed=True)
+                SectionStatus.objects.create(request=req, section=sections[code])
             accounts = SectionStatus.objects.get(request=req, section__code=SECTION_ACCOUNTS)
             Document.objects.create(
                 section_status=accounts,
@@ -285,9 +292,9 @@ class Command(BaseCommand):
             admin_ss = SectionStatus.objects.get(request=req, section__code=SECTION_ADMINISTRATION)
             for item in id_card:
                 ChecklistTick.objects.get_or_create(section_status=admin_ss, item=item, defaults={"ticked_by": approver})
-            # Prerequisites first (engine.approve checks them), then the rest.
-            for code in sorted(engine.required_sections("GRADUATION"),
-                               key=lambda c: c in (SECTION_ACCOUNTS, SECTION_ADMINISTRATION)):
+            # In tier order — tri-gate, departments, then Accounts and Administration —
+            # since engine.approve checks each section's prerequisites.
+            for code in engine.required_sections("GRADUATION"):
                 engine.approve(SectionStatus.objects.get(request=req, section__code=code), approver)
             created += 1
         self.stdout.write(
@@ -296,15 +303,11 @@ class Command(BaseCommand):
 
     def _demo_accounts(self, n, dept, hostel):
         """N demo students whose requests have reached Accounts and Administration
-        (side by side): Library, TPC, Warden (BH1) and HOD (CSE) approved,
-        cancelled-cheque details submitted, Administration details confirmed."""
-        from main.api import BASIC_CONFIRM_SECTIONS
-
+        (side by side): Library, TPC, Warden (BH1) and the six departments (HOD:
+        CSE) approved, cancelled-cheque details submitted."""
         hashed = make_password(PASSWORD)   # hash once; hashing per account is slow
         sections = {s.code: s for s in Section.objects.all()}
-        approvers = {code: User.objects.get(username=email) for code, email in (
-            (SECTION_LIBRARY, "library@lnmiit.ac.in"), (SECTION_TPC, "tpc@lnmiit.ac.in"),
-            (SECTION_WARDEN, "warden.bh1@lnmiit.ac.in"), (SECTION_HOD, "hod.cse@lnmiit.ac.in"))}
+        approvers = {code: User.objects.get(username=email) for code, email in DEMO_APPROVERS.items()}
         created = 0
         for i in range(1, n + 1):
             webmail = f"acct{i:03d}@lnmiit.ac.in"
@@ -323,10 +326,8 @@ class Command(BaseCommand):
                 student=student, exit_type="GRADUATION", vacant_room_no=f"C{i:03d}",
                 intake_submitted=True)
             for code in engine.required_sections("GRADUATION"):
-                # Administration's details are confirmed too (it sits beside Accounts on Page 4).
-                confirmed = code not in BASIC_CONFIRM_SECTIONS or code == SECTION_ADMINISTRATION
-                SectionStatus.objects.create(request=req, section=sections[code], student_confirmed=confirmed)
-            for code, officer in approvers.items():
+                SectionStatus.objects.create(request=req, section=sections[code])
+            for code, officer in approvers.items():   # tri-gate first, then the departments
                 engine.approve(SectionStatus.objects.get(request=req, section__code=code), officer)
             # What the student's Accounts "Confirm & Send" stores (api.confirm_review).
             Document.objects.create(
@@ -341,11 +342,13 @@ class Command(BaseCommand):
             f"(students acct001@ to acct{n:03d}@lnmiit.ac.in, password {PASSWORD}).")
 
     def _demo_requests(self, n, dept, hostel):
-        """N demo students whose requests are waiting at the Library, Page 1 submitted."""
-        from main.api import BASIC_CONFIRM_SECTIONS
-
+        """N demo students, Page 1 submitted. The first half wait at the Library
+        (Page 2); the second half have cleared Library, TPC and Warden, so they wait
+        at the six Page-3 offices — Store, LUCS, Sports, Medical, NAD Cell and HOD."""
         hashed = make_password(PASSWORD)   # hash once; hashing per account is slow
         sections = {s.code: s for s in Section.objects.all()}
+        tri_gate = {code: User.objects.get(username=DEMO_APPROVERS[code]) for code in engine.TRI_GATE_SECTIONS}
+        at_library = (n + 1) // 2
         created = 0
         for i in range(1, n + 1):
             webmail = f"demo{i:03d}@lnmiit.ac.in"
@@ -364,17 +367,12 @@ class Command(BaseCommand):
                 student=student, exit_type="GRADUATION", vacant_room_no=f"B{i:03d}",
                 intake_submitted=True)
             for code in engine.required_sections("GRADUATION"):
-                confirmed = code not in BASIC_CONFIRM_SECTIONS or code in DEMO_CONFIRMED
-                ss = SectionStatus.objects.create(request=req, section=sections[code],
-                                                  student_confirmed=confirmed)
-                if code in DEMO_CONFIRMED:
-                    # What the student's "Confirm & Send" stores (api.confirm_section).
-                    Document.objects.create(section_status=ss, ocr_fields={
-                        "review": {"name": student.name, "roll_no": student.roll_no,
-                                   "department": dept.code},
-                        "confirmed": True,
-                    })
+                SectionStatus.objects.create(request=req, section=sections[code])
+            if i > at_library:
+                for code, officer in tri_gate.items():
+                    engine.approve(SectionStatus.objects.get(request=req, section__code=code), officer)
             created += 1
         self.stdout.write(
-            f"Demo requests: {created} new, waiting at the Library, LUCS and NAD Cell "
-            f"(students demo001@ to demo{n:03d}@lnmiit.ac.in, password {PASSWORD}).")
+            f"Demo requests: {created} new — demo001@ to demo{at_library:03d}@ wait at the Library, "
+            f"demo{at_library + 1:03d}@ to demo{n:03d}@ at Store, LUCS, Sports, Medical, NAD Cell and HOD "
+            f"(@lnmiit.ac.in, password {PASSWORD}).")
