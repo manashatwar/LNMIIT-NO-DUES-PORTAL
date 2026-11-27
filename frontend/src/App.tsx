@@ -102,7 +102,12 @@ export function App() {
   }, [user]);
 
   if (booting) {
-    return <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center' }}><p>Loading…</p></div>;
+    return (
+      <div className="loading-block" style={{ height: '100vh', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 240 }}><div className="loading-bar" /></div>
+        <span>Loading the No-Dues Portal…</span>
+      </div>
+    );
   }
 
   if (!user) return <LoginPage onLogin={handleLogin} />;
