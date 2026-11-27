@@ -96,7 +96,7 @@ def ready_for_staff(section_code):
     # randomised planner, which could pick a plan that never finished.)
     rows = SectionStatus.objects.filter(request=OuterRef("request"), section__code__in=prereqs)
     # No prerequisite row of the request is unapproved. An optional one the exit
-    # type lacks (no TPC row on an NEP exit) has no row, so nothing to wait for…
+    # type lacks (no TPC row on a withdrawal) has no row, so nothing to wait for…
     qs = qs.filter(~Exists(rows.exclude(status=STATUS_APPROVED)))
     # …and every required one has its row (one per section: unique_together).
     required = [code for code in prereqs if code not in engine.OPTIONAL_PREREQUISITES]
@@ -211,8 +211,8 @@ _SHORT_NAMES = {
 
 def waiting_for(ss):
     """The earlier sections a request still waits on before this section's turn
-    (Accounts: Library, TPC, Warden and the six departments — no TPC for an NEP
-    exit, a withdrawal or an admission cancel), by short name — as
+    (Accounts: Library, TPC, Warden and the six departments — no TPC for a
+    withdrawal or an admission cancel), by short name — as
     engine.actionable sees them."""
     return [_SHORT_NAMES.get(code, code.title())
             for code in engine.unapproved_prerequisites(ss.request, ss.section.code)]
