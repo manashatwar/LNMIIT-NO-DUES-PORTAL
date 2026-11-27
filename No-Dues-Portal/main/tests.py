@@ -6,6 +6,7 @@ Tests for
     /api/section/staff/*.
 Run with: python manage.py test main  (needs PostgreSQL, like the app).
 """
+import io
 import json
 import tempfile
 from datetime import timedelta
@@ -13,6 +14,7 @@ from unittest import mock
 
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command
 from django.db import connection
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
@@ -24,7 +26,6 @@ from main import labs as lab_service
 from main import prefetch
 from main import refunds as refund_service
 from main import staff as staff_service
-from main.api import BASIC_CONFIRM_SECTIONS
 from main.management.commands.seed_demo import SECTION_DEFS
 from main.models import (
     Department, Hostel, Section, UserProfile, Student, ClearanceRequest, SectionStatus,
@@ -448,8 +449,7 @@ class LibraryStaffTests(ApiHelpers, TestCase):
             req = ClearanceRequest.objects.create(student=student, exit_type="GRADUATION",
                                                   vacant_room_no="A102", intake_submitted=ready)
             for code in engine.required_sections("GRADUATION"):
-                SectionStatus.objects.create(request=req, section=Section.objects.get(code=code),
-                                             student_confirmed=code not in BASIC_CONFIRM_SECTIONS)
+                SectionStatus.objects.create(request=req, section=Section.objects.get(code=code))
             return req
 
         cls.ready = [request_for(i, ready=True) for i in range(6)]      # oldest first
@@ -589,9 +589,9 @@ class LibraryStaffTests(ApiHelpers, TestCase):
 
 @override_settings(PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"])
 class LucsNadStaffTests(ApiHelpers, TestCase):
-    """The same head/staff desk for LUCS and NAD Cell. Both are confirm-only
-    sections, so a request only waits at the desk once the student has clicked
-    "Confirm & Send" for it."""
+    """The same head/staff desk for LUCS and NAD Cell. Both are Page-3
+    departments, so a request reaches the desk by itself — no "Confirm & Send" —
+    once Library, TPC and Warden have approved it."""
 
     @classmethod
     def setUpTestData(cls):
@@ -610,7 +610,7 @@ class LucsNadStaffTests(ApiHelpers, TestCase):
                      SECTION_NAD: officer("nad@t.in", SECTION_NAD)}
         cls.library = officer("library@t.in", SECTION_LIBRARY)
 
-        def request_for(i, confirmed):
+        def request_for(i, tri_gate_cleared):
             user = User.objects.create_user(f"stu{i}@t.in", password="x")
             UserProfile.objects.create(user=user, role="STUDENT")
             student = Student.objects.create(user=user, name=f"Student {i}", roll_no=f"25UCS{i:03d}",
@@ -619,14 +619,15 @@ class LucsNadStaffTests(ApiHelpers, TestCase):
             req = ClearanceRequest.objects.create(student=student, exit_type="GRADUATION",
                                                   vacant_room_no="A102", intake_submitted=True)
             for code in engine.required_sections("GRADUATION"):
-                SectionStatus.objects.create(request=req, section=Section.objects.get(code=code),
-                                             student_confirmed=code not in BASIC_CONFIRM_SECTIONS or confirmed)
+                SectionStatus.objects.create(request=req, section=Section.objects.get(code=code))
+            if tri_gate_cleared:
+                SectionStatus.objects.filter(request=req, section__code__in=engine.TRI_GATE_SECTIONS)                     .update(status=STATUS_APPROVED)
             return req
 
-        # Three students confirmed LUCS + NAD ("Confirm & Send"); the fourth hasn't yet.
-        cls.requests = [request_for(i, confirmed=i < 3) for i in range(4)]
+        # Three students have cleared Library, TPC and Warden; the fourth hasn't yet.
+        cls.requests = [request_for(i, tri_gate_cleared=i < 3) for i in range(4)]
 
-    def test_lucs_and_nad_heads_send_confirmed_requests_to_their_own_staff(self):
+    def test_lucs_and_nad_heads_send_requests_past_the_tri_gate_to_their_own_staff(self):
         for code, head in self.heads.items():
             with self.subTest(section=code):
                 email = f"{code.lower()}.helper@t.in"
@@ -639,7 +640,7 @@ class LucsNadStaffTests(ApiHelpers, TestCase):
 
                 q = self.get(head, "/api/section/queue/").json()
                 self.assertTrue(q["can_manage_staff"])
-                self.assertEqual(len(q["students"]), 3)                          # unconfirmed one isn't here
+                self.assertEqual(len(q["students"]), 3)                          # not past the tri-gate: not here
                 self.assertEqual(q["ready_to_assign"], 3)
                 self.assertEqual(self.post(head, "/api/section/assign/",
                                            {"staff_id": helper.id, "count": 35}).json()["moved"], 3)
@@ -650,8 +651,8 @@ class LucsNadStaffTests(ApiHelpers, TestCase):
                 self.assertEqual(self.post(helper, "/api/section/approve/", {"request_id": first}).status_code, 200)
                 decided = SectionStatus.objects.get(request_id=first, section__code=code)
                 self.assertEqual((decided.status, decided.decided_by), (STATUS_APPROVED, helper))
-                unconfirmed = SectionStatus.objects.get(request=self.requests[3], section__code=code)
-                self.assertIsNone(unconfirmed.assigned_to)
+                waiting = SectionStatus.objects.get(request=self.requests[3], section__code=code)
+                self.assertIsNone(waiting.assigned_to)
 
     def test_each_head_manages_only_its_own_staff(self):
         lucs_helper = staff_service.create_staff(self.heads[SECTION_LUCS].profile, name="LUCS Helper",
@@ -691,6 +692,7 @@ class AccountsLevelsTests(ApiHelpers, TestCase):
         cls.tpc = officer("tpc@t.in", SECTION_TPC)
         cls.warden = officer("warden.bh1@t.in", SECTION_WARDEN, hostel="BH1")
         cls.hod = officer("hod.cse@t.in", SECTION_HOD, dept="CSE")
+        cls.field = {code: officer(f"{code.lower()}@t.in", code) for code in FIELD_SECTIONS}
         cls.head = officer("accounts@t.in", SECTION_ACCOUNTS)
 
         def staff(name, email, level):
@@ -711,11 +713,11 @@ class AccountsLevelsTests(ApiHelpers, TestCase):
             req = ClearanceRequest.objects.create(student=student, exit_type="GRADUATION",
                                                   vacant_room_no="A102", intake_submitted=True)
             for code in engine.required_sections("GRADUATION"):
-                SectionStatus.objects.create(request=req, section=Section.objects.get(code=code),
-                                             student_confirmed=code not in BASIC_CONFIRM_SECTIONS)
+                SectionStatus.objects.create(request=req, section=Section.objects.get(code=code))
             if prereqs:
+                # The tri-gate, then the six departments (Page 3).
                 for code, who in ((SECTION_LIBRARY, cls.library), (SECTION_TPC, cls.tpc),
-                                  (SECTION_WARDEN, cls.warden), (SECTION_HOD, cls.hod)):
+                                  (SECTION_WARDEN, cls.warden), *cls.field.items(), (SECTION_HOD, cls.hod)):
                     engine.approve(SectionStatus.objects.get(request=req, section__code=code), who)
             if cheque:
                 Document.objects.create(
@@ -725,7 +727,7 @@ class AccountsLevelsTests(ApiHelpers, TestCase):
 
         cls.ready = [request_for(i) for i in range(3)]
         cls.no_cheque = request_for(10, cheque=False)          # student hasn't confirmed cheque details
-        cls.prereqs_pending = request_for(11, prereqs=False)   # Library/TPC/Warden/HOD not approved
+        cls.prereqs_pending = request_for(11, prereqs=False)   # tri-gate and departments not approved
 
     def acc(self, req):
         return SectionStatus.objects.get(request=req, section__code=SECTION_ACCOUNTS)
@@ -795,12 +797,13 @@ class AccountsLevelsTests(ApiHelpers, TestCase):
             self.assertFalse(rows[req.id]["stage"]["ready"])
         self.assertTrue(rows[self.ready[0].id]["stage"]["ready"])
         # The head is told what each one still waits on, and can't approve it yet.
-        self.assertEqual(rows[self.prereqs_pending.id]["stage"]["blocked_by"], ["Library", "TPC", "Warden", "HOD"])
+        self.assertEqual(rows[self.prereqs_pending.id]["stage"]["blocked_by"],
+                         ["Library", "TPC", "Warden", "Store", "LUCS", "Sports", "Medical", "NAD", "HOD"])
         self.assertEqual(rows[self.no_cheque.id]["stage"]["blocked_by"], [])      # the cheque details
         self.assertEqual(rows[self.ready[0].id]["stage"]["blocked_by"], [])
         r = self.approve(self.head, self.prereqs_pending)
         self.assertEqual(r.status_code, 409)
-        self.assertIn("Library, TPC, Warden, HOD", r.json()["detail"])
+        self.assertIn("Library, TPC, Warden, Store, LUCS, Sports, Medical, NAD, HOD", r.json()["detail"])
         r = self.approve(self.head, self.no_cheque)
         self.assertEqual(r.status_code, 409)
         self.assertIn("cheque details", r.json()["detail"])
@@ -888,6 +891,10 @@ class AccountsLevelsTests(ApiHelpers, TestCase):
         self.assertEqual(self.acc(req).stage_approvals.count(), 0)
         self.assertNotIn(req.id, self.incoming(self.clerk))                  # Library not approved: with the head
         engine.approve(SectionStatus.objects.get(pk=library.pk), self.library)
+        # The Library reopening reset the six departments too; they approve again.
+        self.assertNotIn(req.id, self.incoming(self.clerk))
+        for code, who in (*self.field.items(), (SECTION_HOD, self.hod)):
+            engine.approve(SectionStatus.objects.get(request=req, section__code=code), who)
         self.assertIn(req.id, self.incoming(self.clerk))                     # back to level 1
 
     def test_head_approves_only_without_staff_or_once_every_level_approved(self):
@@ -948,7 +955,7 @@ class AccountsLevelsTests(ApiHelpers, TestCase):
 @override_settings(PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"])
 class AdministrationTests(ApiHelpers, TestCase):
     """Administration runs alongside Accounts (both open once Library, TPC, Warden
-    and HOD approve). Its staff work by hand, like LUCS and NAD: admin.office@ (the
+    and the six departments approve). Its staff work by hand, like LUCS and NAD: admin.office@ (the
     head) sends requests to Admin Assistant 1 / 2, whose decision is final. And its
     checklist must be ticked before anyone approves ("Physical ID card submitted")."""
 
@@ -971,6 +978,7 @@ class AdministrationTests(ApiHelpers, TestCase):
         cls.tpc = officer("tpc@t.in", SECTION_TPC)
         cls.warden = officer("warden.bh1@t.in", SECTION_WARDEN, hostel="BH1")
         cls.hod = officer("hod.cse@t.in", SECTION_HOD, dept="CSE")
+        cls.field = {code: officer(f"{code.lower()}@t.in", code) for code in FIELD_SECTIONS}
         cls.accounts = officer("accounts@t.in", SECTION_ACCOUNTS)
         cls.head = officer("admin.office@t.in", SECTION_ADMINISTRATION)
         cls.asst1 = staff_service.create_staff(cls.head.profile, name="Admin Assistant 1", email="asst1@t.in",
@@ -987,16 +995,16 @@ class AdministrationTests(ApiHelpers, TestCase):
             req = ClearanceRequest.objects.create(student=student, exit_type="GRADUATION",
                                                   vacant_room_no="A102", intake_submitted=True)
             for code in engine.required_sections("GRADUATION"):
-                SectionStatus.objects.create(request=req, section=Section.objects.get(code=code),
-                                             student_confirmed=True)   # every "Confirm & Send" done
+                SectionStatus.objects.create(request=req, section=Section.objects.get(code=code))
             if prereqs:
+                # The tri-gate, then the six departments (Page 3).
                 for code, who in ((SECTION_LIBRARY, cls.library), (SECTION_TPC, cls.tpc),
-                                  (SECTION_WARDEN, cls.warden), (SECTION_HOD, cls.hod)):
+                                  (SECTION_WARDEN, cls.warden), *cls.field.items(), (SECTION_HOD, cls.hod)):
                     engine.approve(SectionStatus.objects.get(request=req, section__code=code), who)
             return req
 
         cls.req = request_for(1)
-        cls.waiting = request_for(2, prereqs=False)   # Library, TPC, Warden, HOD still to approve
+        cls.waiting = request_for(2, prereqs=False)   # tri-gate and departments still to approve
 
     def ss(self, req, code):
         return SectionStatus.objects.get(request=req, section__code=code)
@@ -1176,8 +1184,7 @@ class RefundTests(ApiHelpers, TestCase):
         cls.req = ClearanceRequest.objects.create(student=student, exit_type="GRADUATION", vacant_room_no="A102",
                                                   intake_submitted=True, fund_us_amount=1000)
         for code in engine.required_sections("GRADUATION"):
-            SectionStatus.objects.create(request=cls.req, section=Section.objects.get(code=code),
-                                         student_confirmed=True)
+            SectionStatus.objects.create(request=cls.req, section=Section.objects.get(code=code))
         Document.objects.create(
             section_status=SectionStatus.objects.get(request=cls.req, section__code=SECTION_ACCOUNTS),
             ocr_fields={"review": {"account_holder": "Student One", "account_no": "50100000001",
@@ -1462,7 +1469,7 @@ class QueryCountTests(ApiHelpers, TestCase):
                                              webmail=user.username)
             req = ClearanceRequest.objects.create(student=student, exit_type="GRADUATION",
                                                   vacant_room_no="A102", intake_submitted=True, fund_us_amount=1000)
-            ss = {code: SectionStatus.objects.create(request=req, section=sections[code], student_confirmed=True)
+            ss = {code: SectionStatus.objects.create(request=req, section=sections[code])
                   for code in engine.required_sections("GRADUATION")}
             Document.objects.create(section_status=ss[SECTION_ACCOUNTS], ocr_fields={
                 "review": {"account_holder": student.name, "account_no": f"5010000{i:04d}",
@@ -1590,7 +1597,7 @@ class QueryCountTests(ApiHelpers, TestCase):
                                            engine.actionable(ss.request, SECTION_ADMINISTRATION)))
 
         has_labs = engine.department_has_labs(self.dept["ECE"].id)
-        loaded = desk(SECTION_HOD, labs=True)
+        loaded = desk(SECTION_HOD, prerequisites=True, labs=True)   # HOD waits for the tri-gate
         for ss in lone.filter(section__code=SECTION_HOD, request__student__department__code="ECE"):
             with self.subTest(f"HOD {ss.request.student.roll_no}"):
                 fast = loaded[ss.id]
@@ -1599,6 +1606,154 @@ class QueryCountTests(ApiHelpers, TestCase):
                                engine.actionable(fast.request, SECTION_HOD, dept_has_labs=has_labs))
                 self.assertEqual(answers, (engine.lab_progress(ss.request),
                                            engine.actionable(ss.request, SECTION_HOD)))
+
+
+@override_settings(PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"])
+class PageOrderTests(ApiHelpers, TestCase):
+    """The student's pages are enforced by the server, not just the screen: the six
+    Page-3 departments get a request by themselves once Library, TPC and Warden
+    approve (no "Confirm & Send"), and Accounts and Administration once all six
+    have approved. A department without labs has its HOD approve directly."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.dept = {c: Department.objects.create(code=c) for c in DEPARTMENT_CODES}
+        cls.hostel = {c: Hostel.objects.create(code=c) for c in HOSTEL_CODES}
+        for code, name, order, upload, consolidator in SECTION_DEFS:
+            Section.objects.create(code=code, name=name, order=order,
+                                   is_upload_section=upload, is_consolidator=consolidator)
+
+        def officer(username, role, hostel=None, dept=None):
+            user = User.objects.create_user(username, password="x")
+            UserProfile.objects.create(user=user, role=role, hostel=cls.hostel.get(hostel),
+                                       department=cls.dept.get(dept))
+            return user
+
+        cls.tri_gate = {SECTION_LIBRARY: officer("library@t.in", SECTION_LIBRARY),
+                        SECTION_TPC: officer("tpc@t.in", SECTION_TPC),
+                        SECTION_WARDEN: officer("warden.bh1@t.in", SECTION_WARDEN, hostel="BH1")}
+        cls.hod = officer("hod.cse@t.in", SECTION_HOD, dept="CSE")            # CSE has no labs
+        cls.other_hod = officer("hod.ece@t.in", SECTION_HOD, dept="ECE")
+        cls.departments = {**{code: officer(f"{code.lower()}@t.in", code) for code in FIELD_SECTIONS},
+                           SECTION_HOD: cls.hod}
+        cls.admin = officer("admin.office@t.in", SECTION_ADMINISTRATION)
+
+    def start(self):
+        """A CSE student starts a graduation request and submits Page 1."""
+        user = User.objects.create_user("stu@t.in", password="x")
+        UserProfile.objects.create(user=user, role="STUDENT")
+        Student.objects.create(user=user, name="Page Order", roll_no="25UCS900", department=self.dept["CSE"],
+                               hostel=self.hostel["BH1"], webmail=user.username)
+        r = self.post(user, "/api/student/initiate/", {"exit_type": "GRADUATION", "vacant_room_no": "A102"})
+        self.assertEqual(r.status_code, 201, r.content)
+        req = ClearanceRequest.objects.get(pk=r.json()["request"]["id"])
+        ClearanceRequest.objects.filter(pk=req.pk).update(intake_submitted=True)   # uploads aren't under test here
+        return user, req
+
+    def approve(self, who, req):
+        return self.post(who, "/api/section/approve/", {"request_id": req.id})
+
+    def clear_tri_gate(self, req):
+        for code, who in self.tri_gate.items():
+            self.assertEqual(self.approve(who, req).status_code, 200, code)
+
+    def incoming(self, who):
+        return {r["request_id"] for r in self.get(who, "/api/section/queue/").json()["students"]
+                if r["status"] == STATUS_PENDING}
+
+    def mine(self, student):
+        return {s["code"]: s for s in self.get(student, "/api/student/request/").json()["request"]["sections"]}
+
+    def test_departments_get_the_request_by_themselves_once_the_tri_gate_clears(self):
+        student, req = self.start()
+        for code, who in self.departments.items():
+            with self.subTest(before=code):
+                self.assertNotIn(req.id, self.incoming(who))
+                r = self.approve(who, req)
+                self.assertEqual(r.status_code, 409, r.content)
+                self.assertIn("waiting for Central Library, TPC / Placement, Warden / Hostel", r.json()["detail"])
+
+        self.clear_tri_gate(req)
+        view = self.mine(student)
+        for code, who in self.departments.items():
+            with self.subTest(after=code):
+                self.assertIn(req.id, self.incoming(who))          # no student action needed
+                self.assertTrue(view[code]["actionable"])
+                self.assertNotIn("needs_confirm", view[code])
+
+    def test_hod_without_labs_approves_directly_once_the_tri_gate_clears(self):
+        _, req = self.start()
+        self.assertFalse(engine.department_has_labs(self.dept["CSE"].id))
+        self.assertNotIn(req.id, self.incoming(self.hod))
+        self.assertEqual(self.approve(self.hod, req).status_code, 409)   # Page 1 not verified yet
+
+        self.clear_tri_gate(req)
+        self.assertIn(req.id, self.incoming(self.hod))
+        self.assertNotIn(req.id, self.incoming(self.other_hod))
+        self.assertEqual(self.approve(self.other_hod, req).status_code, 403)   # not their department
+        self.assertEqual(self.approve(self.hod, req).status_code, 200)
+
+    def test_accounts_and_administration_open_only_once_all_six_departments_approve(self):
+        student, req = self.start()
+        self.clear_tri_gate(req)
+        *first_five, last = engine.DEPARTMENT_SECTIONS
+        for code in first_five:
+            self.assertEqual(self.approve(self.departments[code], req).status_code, 200, code)
+        view = self.mine(student)
+        for code in engine.FINAL_SECTIONS:
+            self.assertEqual((view[code]["actionable"], view[code]["waiting_for"]), (False, ["HOD / Department"]))
+        self.assertNotIn(req.id, self.incoming(self.admin))
+
+        self.assertEqual(self.approve(self.departments[last], req).status_code, 200)
+        view = self.mine(student)
+        for code in engine.FINAL_SECTIONS:
+            self.assertEqual((view[code]["actionable"], view[code]["waiting_for"]), (True, []))
+        self.assertIn(req.id, self.incoming(self.admin))
+
+    def test_the_student_re_sends_a_rejected_department(self):
+        student, req = self.start()
+        self.clear_tri_gate(req)
+        store = self.departments[SECTION_STORE]
+        resend = lambda code: self.post(student, "/api/student/resend-section/", {"section": code})   # noqa: E731
+
+        self.assertEqual(resend(SECTION_STORE).status_code, 400)            # nothing to re-send yet
+        r = self.post(store, "/api/section/reject/", {"request_id": req.id, "reason": "Return the multimeter"})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertNotIn(req.id, self.incoming(store))
+        self.assertEqual(resend(SECTION_STORE).status_code, 200)
+        ss = SectionStatus.objects.get(request=req, section__code=SECTION_STORE)
+        self.assertEqual(ss.status, STATUS_PENDING)
+        self.assertTrue(ss.comments.filter(is_system=True,
+                                           body="Student re-sent the request after rejection.").exists())
+        self.assertIn(req.id, self.incoming(store))
+
+        # The Library is re-sent by re-uploading its form on Page 1, not from here.
+        r = self.post(self.tri_gate[SECTION_LIBRARY], "/api/section/reject/", {"request_id": req.id, "reason": "Unsigned"})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(resend(SECTION_LIBRARY).status_code, 400)
+
+
+@override_settings(PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"])
+class SeedDemoTests(ApiHelpers, TestCase):
+    """seed_demo's demo students land where the README says, under the page order."""
+
+    def test_demo_students_wait_where_the_readme_says(self):
+        call_command("seed_demo", demo_requests=4, demo_accounts=2, demo_refunds=1, stdout=io.StringIO())
+        queue = lambda email: {r["roll_no"] for r in self.get(User.objects.get(username=email),   # noqa: E731
+                                                              "/api/section/queue/").json()["students"]
+                               if r["status"] == STATUS_PENDING}
+        # --demo-requests 4: two at the Library, two past the tri-gate at LUCS / NAD.
+        self.assertEqual({r for r in queue("library@lnmiit.ac.in") if r.startswith("25UDM")}, {"25UDM001", "25UDM002"})
+        for desk in ("lucs@lnmiit.ac.in", "nad@lnmiit.ac.in", "store@lnmiit.ac.in", "hod.cse@lnmiit.ac.in"):
+            self.assertEqual({r for r in queue(desk) if r.startswith("25UDM")}, {"25UDM003", "25UDM004"}, desk)
+        # --demo-accounts 2: at Accounts and Administration.
+        for req in ClearanceRequest.objects.filter(student__roll_no__startswith="25UAC"):
+            for code in engine.FINAL_SECTIONS:
+                self.assertTrue(engine.actionable(req, code), code)
+        self.assertTrue({"25UAC001", "25UAC002"} <= queue("admin.office@lnmiit.ac.in"))
+        # --demo-refunds 1: every section approved, waiting for the refund.
+        req = ClearanceRequest.objects.get(student__roll_no="25URF001")
+        self.assertTrue(engine.all_sections_approved(req))
 
 
 class WorkflowGraphTests(SimpleTestCase):
@@ -1621,14 +1776,19 @@ class WorkflowGraphTests(SimpleTestCase):
                         self.assertLess(order.index(p), order.index(code), f"{p} must come before {code}")
 
     def test_tpc_is_waited_for_only_by_graduations(self):
+        departments = engine.DEPARTMENT_SECTIONS
+        for code in departments:
+            self.assertEqual(engine.prerequisites(code, "GRADUATION"), [SECTION_LIBRARY, SECTION_TPC, SECTION_WARDEN])
         self.assertEqual(engine.prerequisites(SECTION_ACCOUNTS, "GRADUATION"),
-                         [SECTION_LIBRARY, SECTION_TPC, SECTION_WARDEN, SECTION_HOD])
+                         [SECTION_LIBRARY, SECTION_TPC, SECTION_WARDEN] + departments)
         for exit_type in self.NO_TPC:
             with self.subTest(exit_type):
                 self.assertNotIn(SECTION_TPC, engine.required_sections(exit_type))
+                for code in departments:
+                    self.assertEqual(engine.prerequisites(code, exit_type), [SECTION_LIBRARY, SECTION_WARDEN])
                 for code in (SECTION_ACCOUNTS, SECTION_ADMINISTRATION):
                     self.assertEqual(engine.prerequisites(code, exit_type),
-                                     [SECTION_LIBRARY, SECTION_WARDEN, SECTION_HOD])
+                                     [SECTION_LIBRARY, SECTION_WARDEN] + departments)
         # Without an exit type: the full rule ("does Accounts wait on anything?").
         self.assertIn(SECTION_TPC, engine.prerequisites(SECTION_ACCOUNTS))
 
@@ -1638,7 +1798,7 @@ class WorkflowGraphTests(SimpleTestCase):
             problems = engine.workflow_problems()
         self.assertEqual(sorted(problems), sorted(
             f"{exit_type}: {code} waits for TPC, which isn't part of this workflow"
-            for exit_type in self.NO_TPC for code in (SECTION_ACCOUNTS, SECTION_ADMINISTRATION)))
+            for exit_type in self.NO_TPC for code in engine.DEPARTMENT_SECTIONS + engine.FINAL_SECTIONS))
 
     def test_kahn_finds_missing_dependencies_and_cycles(self):
         self.assertEqual(engine.analyze_workflow({"A": [], "B": ["A", "X"], "C": ["B"]}),
@@ -1662,13 +1822,16 @@ class WorkflowGraphTests(SimpleTestCase):
 
     def test_the_reverse_cascade_follows_the_exit_type(self):
         both = {SECTION_ACCOUNTS, SECTION_ADMINISTRATION}
-        self.assertEqual(engine.downstream_closure(SECTION_TPC, "GRADUATION"), both)
+        after_tri_gate = set(engine.DEPARTMENT_SECTIONS) | both
+        self.assertEqual(engine.downstream_closure(SECTION_TPC, "GRADUATION"), after_tri_gate)
         self.assertEqual(engine.downstream_closure(SECTION_TPC, "NEP_EXIT"), set())   # nothing waits for it
         for exit_type in EXIT_TYPES:
             with self.subTest(exit_type):
-                for code in (SECTION_LIBRARY, SECTION_WARDEN, SECTION_HOD):
+                for code in (SECTION_LIBRARY, SECTION_WARDEN):
+                    self.assertEqual(engine.downstream_closure(code, exit_type), after_tri_gate)
+                for code in engine.DEPARTMENT_SECTIONS:
                     self.assertEqual(engine.downstream_closure(code, exit_type), both)
-                self.assertEqual(engine.downstream_closure(SECTION_STORE, exit_type), set())
+                self.assertEqual(engine.downstream_closure(SECTION_ACCOUNTS, exit_type), set())
 
 
 @override_settings(PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"])
@@ -1711,7 +1874,8 @@ class ExitTypeClearanceTests(ApiHelpers, TestCase):
 
     def start(self, exit_type):
         """A CSE student starts a request of `exit_type` and completes their side:
-        the confirm-only sections confirmed, Page 1 submitted, cheque details confirmed."""
+        Page 1 submitted, cheque details confirmed. (Nothing to send by hand: each
+        office gets the request once its prerequisites approve.)"""
         tag = exit_type.lower()
         user = User.objects.create_user(f"{tag}@t.in", password="x")
         UserProfile.objects.create(user=user, role="STUDENT")
@@ -1720,10 +1884,6 @@ class ExitTypeClearanceTests(ApiHelpers, TestCase):
         r = self.post(user, "/api/student/initiate/", {"exit_type": exit_type, "vacant_room_no": "A102"})
         self.assertEqual(r.status_code, 201, r.content)
         req = ClearanceRequest.objects.get(pk=r.json()["request"]["id"])
-        for code in BASIC_CONFIRM_SECTIONS & set(engine.required_sections(exit_type)):
-            r = self.post(user, "/api/student/confirm-section/",
-                          {"section": code, "name": student.name, "roll_no": student.roll_no, "department": "CSE"})
-            self.assertEqual(r.status_code, 200, r.content)
         ClearanceRequest.objects.filter(pk=req.pk).update(intake_submitted=True)   # uploads aren't under test here
         Document.objects.create(section_status=self.ss(req, SECTION_ACCOUNTS), ocr_fields={
             "review": {"account_holder": student.name, "account_no": "50100000001", "ifsc": "SBIN0000001"},
@@ -1786,10 +1946,11 @@ class ExitTypeClearanceTests(ApiHelpers, TestCase):
                                       engine.required_sections(exit_type))
 
     def test_accounts_shows_what_each_exit_type_still_waits_for(self):
-        for exit_type, expected in (("GRADUATION", ["Library", "TPC", "Warden", "HOD"]),
-                                    ("NEP_EXIT", ["Library", "Warden", "HOD"]),
-                                    ("WITHDRAWAL", ["Library", "Warden", "HOD"]),
-                                    ("ADMISSION_CANCEL", ["Library", "Warden", "HOD"])):
+        departments = ["Store", "LUCS", "Sports", "Medical", "NAD", "HOD"]
+        for exit_type, expected in (("GRADUATION", ["Library", "TPC", "Warden"] + departments),
+                                    ("NEP_EXIT", ["Library", "Warden"] + departments),
+                                    ("WITHDRAWAL", ["Library", "Warden"] + departments),
+                                    ("ADMISSION_CANCEL", ["Library", "Warden"] + departments)):
             with self.subTest(exit_type):
                 _, req = self.start(exit_type)
                 row = next(r for r in self.get(self.accounts, "/api/section/queue/").json()["students"]
@@ -1808,13 +1969,15 @@ class ExitTypeClearanceTests(ApiHelpers, TestCase):
                 r = self.post(library, "/api/section/reject/", {"request_id": req.id, "reason": "Book not returned"})
                 self.assertEqual(r.status_code, 200, r.content)
 
-                # Accounts and Administration depend on the Library: back to pending; the rest stays.
+                # Everything after the tri-gate depends on the Library (the six departments,
+                # Accounts and Administration): back to pending. TPC and Warden stay.
+                after_tri_gate = engine.DEPARTMENT_SECTIONS + engine.FINAL_SECTIONS
                 for code in engine.required_sections(exit_type):
                     expected = (STATUS_REJECTED if code == SECTION_LIBRARY
-                                else STATUS_PENDING if code in (SECTION_ACCOUNTS, SECTION_ADMINISTRATION)
+                                else STATUS_PENDING if code in after_tri_gate
                                 else STATUS_APPROVED)
                     self.assertEqual(self.ss(req, code).status, expected, code)
-                for code in (SECTION_ACCOUNTS, SECTION_ADMINISTRATION):
+                for code in after_tri_gate:
                     self.assertTrue(self.ss(req, code).comments.filter(
                         is_system=True, body="Reset: upstream LIBRARY reopened").exists())
                 self.assertEqual(StageApproval.objects.filter(section_status__request=req).count(), 0)
@@ -1822,11 +1985,13 @@ class ExitTypeClearanceTests(ApiHelpers, TestCase):
                 self.assertEqual(req.overall_status, OVERALL_IN_PROGRESS)
                 self.assertFalse(Certificate.objects.filter(request=req).exists())
                 view = self.mine(student)
-                self.assertEqual((view[SECTION_ACCOUNTS]["actionable"], view[SECTION_ACCOUNTS]["waiting_for"]),
+                self.assertEqual((view[SECTION_STORE]["actionable"], view[SECTION_STORE]["waiting_for"]),
                                  (False, ["Central Library"]))
+                self.assertFalse(view[SECTION_ACCOUNTS]["actionable"])
 
-                # Library approves again: it clears again, without a second refund.
-                for code in (SECTION_LIBRARY, SECTION_ACCOUNTS, SECTION_ADMINISTRATION):
+                # Library approves again, then the departments and the last two: it clears
+                # again, without a second refund.
+                for code in [SECTION_LIBRARY] + after_tri_gate:
                     self.approve(req, code)
                 req.refresh_from_db()
                 self.assertEqual(req.overall_status, OVERALL_CLEARED)
