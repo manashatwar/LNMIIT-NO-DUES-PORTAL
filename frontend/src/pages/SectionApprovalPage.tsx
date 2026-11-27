@@ -137,7 +137,7 @@ export function SectionApprovalPage({
             return (
                 <span>
                     <strong>Level {s.current}</strong> of {s.levels.length}
-                    {done > 0 && <span style={{ color: '#15803d' }}> · {done} ✓</span>}
+                    {done > 0 && <span style={{ color: '#15803d' }}> · {done} approved</span>}
                     <div style={{ fontSize: 10, color: '#64748b' }}>{s.waiting_on.join(' / ')}</div>
                 </span>
             );
@@ -145,11 +145,11 @@ export function SectionApprovalPage({
         if (s.final) {
             // Every level approved: with the main account for the final approval.
             return levelsHead
-                ? <strong style={{ color: '#a16207' }}>👑 With you · final approval{done > 0 && <span style={{ color: '#15803d', fontWeight: 'normal' }}> · {done} ✓</span>}</strong>
-                : <span style={{ color: '#64748b' }}>All levels ✓ · with the main account for the final approval</span>;
+                ? <strong style={{ color: '#b45309' }}>With you · final approval{done > 0 && <span style={{ color: '#15803d', fontWeight: 'normal' }}> · {done} approved</span>}</strong>
+                : <span style={{ color: '#64748b' }}>All levels approved · with the main account for the final approval</span>;
         }
         if (r.status === 'APPROVED') {
-            return <span style={{ color: '#15803d' }}>{done ? `All ${done} level${done !== 1 ? 's' : ''} ✓` : 'Approved'}</span>;
+            return <span style={{ color: '#15803d' }}>{done ? `All ${done} level${done !== 1 ? 's' : ''} approved` : 'Approved'}</span>;
         }
         if (r.status === 'REJECTED') {
             return <span style={{ color: '#b91c1c' }}>Rejected{done ? ` after ${stepLabel(s.approved[done - 1].level)}` : ''}</span>;
@@ -229,7 +229,7 @@ export function SectionApprovalPage({
             const res = await api.sendToStaff(Number(bulkTo), bulkCount);
             await onReload();   // show the message and the updated list together
             setMsg(res.moved === 0 ? 'No requests are waiting to be sent.'
-                : `✓ Sent ${res.moved} request${res.moved !== 1 ? 's' : ''} to ${res.to?.name}`
+                : `Sent ${res.moved} request${res.moved !== 1 ? 's' : ''} to ${res.to?.name}`
                 + (res.moved < bulkCount ? ` (only ${res.moved} were waiting).` : '.'));
         } catch (e) { setMsg(e instanceof Error ? e.message : 'Could not send'); }
         finally { setBusy(null); }
@@ -241,7 +241,7 @@ export function SectionApprovalPage({
         try {
             const res = await api.moveRequests([row.request_id], staffId ? Number(staffId) : null);
             await onReload();
-            setMsg(res.to ? `✓ ${row.roll_no} sent to ${res.to.name}` : `✓ ${row.roll_no} is back with you`);
+            setMsg(res.to ? `${row.roll_no} sent to ${res.to.name}` : `${row.roll_no} is back with you`);
         } catch (e) { setMsg(e instanceof Error ? e.message : 'Could not move'); }
         finally { setBusy(null); }
     };
@@ -269,7 +269,7 @@ export function SectionApprovalPage({
         if (isLab) return r.level ? `Level ${r.level}` : '—';
         if (!r.labs) return '—';
         if (!r.labs.started) return r.labs.cleared ? 'No labs' : 'Not sent yet';
-        return `${r.labs.approved}/${r.labs.total} approved${r.labs.cleared ? ' ✓' : ''}`;
+        return `${r.labs.approved}/${r.labs.total} approved`;
     };
 
     const sendFeedback = async (requestId: number) => {
@@ -289,10 +289,10 @@ export function SectionApprovalPage({
         try {
             const res = await desk.approve(row.request_id, at);
             await onReload();   // show the message and the updated list together
-            setMsg(at === null || !s ? `✓ Approved ${row.roll_no}${s?.final ? ': final approval' : ''}`
-                : res.status === 'APPROVED' ? `✓ Approved ${row.roll_no} at ${stepLabel(at)}: final approval`
-                    : lastLevel ? `✓ Approved ${row.roll_no} at ${stepLabel(at)}: it's now with the main account for the final approval`
-                        : `✓ Approved ${row.roll_no} at ${stepLabel(at)}: it moved up to the next level`);
+            setMsg(at === null || !s ? `Approved ${row.roll_no}${s?.final ? ': final approval' : ''}`
+                : res.status === 'APPROVED' ? `Approved ${row.roll_no} at ${stepLabel(at)}: final approval`
+                    : lastLevel ? `Approved ${row.roll_no} at ${stepLabel(at)}: it's now with the main account for the final approval`
+                        : `Approved ${row.roll_no} at ${stepLabel(at)}: it moved up to the next level`);
         }
         catch (e) { setMsg(e instanceof Error ? e.message : 'Approve failed'); onReload(); }
         finally { setBusy(null); }
@@ -321,17 +321,17 @@ export function SectionApprovalPage({
     };
 
     const badge = (status: string) => {
-        const c = status === 'APPROVED' ? '#16a34a' : status === 'REJECTED' ? '#dc2626' : '#b45309';
+        const c = status === 'APPROVED' ? '#15803d' : status === 'REJECTED' ? '#dc2626' : '#b45309';
         return <span style={{ color: c, fontWeight: 700 }}>{status}</span>;
     };
 
-    const TAB_META: Record<Tab, { label: string; icon: string }> = {
-        incoming: { label: 'Incoming', icon: '📥' },
-        labs: { label: 'In labs', icon: '🧪' },
-        approved: { label: 'Approved', icon: '✅' },
-        rejected: { label: 'Rejected', icon: '❌' },
-        manage: { label: 'Manage labs', icon: '⚙️' },
-        staff: { label: 'Manage staff', icon: '👥' },
+    const TAB_META: Record<Tab, { label: string }> = {
+        incoming: { label: 'Incoming' },
+        labs: { label: 'In labs' },
+        approved: { label: 'Approved' },
+        rejected: { label: 'Rejected' },
+        manage: { label: 'Manage labs' },
+        staff: { label: 'Manage staff' },
     };
     const isPanelTab = tab === 'manage' || tab === 'staff';
     const approveBlockedTitle = isHod ? 'Every department lab must approve first'
@@ -353,8 +353,8 @@ export function SectionApprovalPage({
                             <button key={t} onClick={() => setTab(t)}
                                 className={tab === t ? 'btn btn-primary' : 'btn btn-secondary'}
                                 style={{ fontSize: 13, padding: '6px 14px', fontWeight: tab === t ? 700 : 400 }}>
-                                {TAB_META[t].icon} {TAB_META[t].label}{t === 'manage' || t === 'staff' ? '' : ` (${rows.filter((r) => inTab(r, t)).length})`}
-                                {t === 'approved' && canRecordRefunds && refundsPending > 0 ? ` · 💸 ${refundsPending} to send` : ''}
+                                {TAB_META[t].label}{t === 'manage' || t === 'staff' ? '' : ` (${rows.filter((r) => inTab(r, t)).length})`}
+                                {t === 'approved' && canRecordRefunds && refundsPending > 0 ? ` · ${refundsPending} to send` : ''}
                             </button>
                         ))}
                     </div>
@@ -365,7 +365,7 @@ export function SectionApprovalPage({
                     {!isPanelTab && (
                         <button className="btn btn-secondary" style={{ fontSize: 12, padding: '6px 12px' }}
                             disabled={refreshing} onClick={doRefresh}>
-                            {refreshing ? '↻ Refreshing…' : '↻ Refresh'}
+                            {refreshing ? 'Refreshing…' : 'Refresh'}
                         </button>
                     )}
                 </div>
@@ -377,14 +377,14 @@ export function SectionApprovalPage({
                 )}
 
                 {levelsHead && tab === 'incoming' && (
-                    <div className="well" style={{ padding: '10px 12px', margin: '0 0 12px', background: '#eef4ff', border: '1px solid #bfdbfe', borderRadius: 6, fontSize: 12, color: '#1e3a8a' }}>
+                    <div className="well" style={{ padding: '10px 12px', margin: '0 0 12px', background: '#f4f7fb', border: '1px solid #c9d6e6', borderRadius: 6, fontSize: 12, color: '#1e3a8a' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
                             <div style={{ flex: '1 1 520px' }}>
                                 {staff.length === 0 ? (
-                                    <>🪜 You have no staff yet, so requests come to you and you approve them yourself. Add staff and their
+                                    <>You have no staff yet, so requests come to you and you approve them yourself. Add staff and their
                                         levels in <strong>Manage staff</strong> to have requests move up a chain by themselves.</>
                                 ) : (
-                                    <>🪜 Requests reach <strong>Level 1</strong> by themselves and move up: <strong>Level 1 → Level 2 → … → you</strong>.
+                                    <>Requests reach <strong>Level 1</strong> by themselves and move up: <strong>Level 1 → Level 2 → … → you</strong>.
                                         Either person on a level can approve. After the last level, every request comes to you: <strong>your approval
                                         is final</strong> for {LOGIN_LABEL[role] ?? heading}.</>
                                 )}
@@ -393,7 +393,7 @@ export function SectionApprovalPage({
                                     <em>Not ready yet</em> means it is still waiting for Library, Warden or HOD (or TPC, for a
                                     graduating student){role === 'ACCOUNTS' ? ", or for the student's cheque details" : ''}: each row
                                     says which.</>}
-                                {checklistCol && <> 📋 Tick the <strong>Checklist</strong> (e.g. the physical ID card) when the student hands it in:
+                                {checklistCol && <> Tick the <strong>Checklist</strong> (e.g. the physical ID card) when the student hands it in:
                                     Approve stays locked until every item is ticked.</>}
                             </div>
                             <span style={{ fontSize: 12, color: '#475569', whiteSpace: 'nowrap' }}>
@@ -419,16 +419,16 @@ export function SectionApprovalPage({
 
                 {!levelsHead && checklistCol && tab === 'incoming' && (
                     <p style={{ fontSize: 12, color: '#475569', margin: '0 0 10px' }}>
-                        📋 Tick the <strong>Checklist</strong> (e.g. the physical ID card) when the student hands it in: Approve stays locked until every item is ticked.
+                        Tick the <strong>Checklist</strong> (e.g. the physical ID card) when the student hands it in: Approve stays locked until every item is ticked.
                     </p>
                 )}
 
                 {sendsByHand && tab === 'incoming' && (
                     <div className="well" style={{
                         display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '10px 12px',
-                        margin: '0 0 12px', background: '#eef4ff', border: '1px solid #bfdbfe', borderRadius: 6,
+                        margin: '0 0 12px', background: '#f4f7fb', border: '1px solid #c9d6e6', borderRadius: 6,
                     }}>
-                        <strong style={{ fontSize: 13, color: '#1b365d' }}>📤 Send the next</strong>
+                        <strong style={{ fontSize: 13, color: '#1b365d' }}>Send the next</strong>
                         <input className="erp-input" type="number" min={1} max={500} value={bulkCount}
                             onChange={(e) => setBulkCount(Math.max(1, Math.min(500, Number(e.target.value) || 1)))}
                             style={{ width: 80, padding: '4px 8px', fontSize: 13 }} />
@@ -463,7 +463,7 @@ export function SectionApprovalPage({
 
                 {refundCol && (
                     <p style={{ fontSize: 12, color: '#475569', margin: '0 0 10px' }}>
-                        💸 You send the refunds. Once every section has approved a student, pay their refund from the bank to the account shown,
+                        You send the refunds. Once every section has approved a student, pay their refund from the bank to the account shown,
                         then enter the bank's <strong>UTR</strong> and click <strong>Mark refund sent</strong>: the student is told and their
                         No-Dues certificate unlocks. <strong>Reject</strong> sends it back to the student with your reason (e.g. wrong bank details).
                     </p>
@@ -537,8 +537,8 @@ export function SectionApprovalPage({
                                                                 onClick={() => startReject(row)}>Reject</button>
                                                         </>
                                                     )}
-                                                    <button className="btn btn-warning" style={{ fontSize: 12, padding: '3px 8px' }}
-                                                        onClick={() => toggleChat(row)}>{expanded === row.request_id ? 'Hide' : '💬 Chat'}</button>
+                                                    <button className="btn btn-secondary" style={{ fontSize: 12, padding: '3px 8px' }}
+                                                        onClick={() => toggleChat(row)}>{expanded === row.request_id ? 'Hide' : 'Chat'}</button>
                                                 </>
                                             )}
                                         </td>
@@ -547,7 +547,7 @@ export function SectionApprovalPage({
                                     {expanded === row.request_id && (
                                         <tr>
                                             <td colSpan={colCount} style={{ background: '#f8fafc' }}>
-                                                {!review ? <span className="text-muted">Loading…</span> : (
+                                                {!review ? <span className="text-muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><span className="spinner" /> Loading…</span> : (
                                                     <div style={{ fontSize: 12 }}>
                                                         <div><strong>Vacated Room:</strong> {review.vacant_room_no || '—'}</div>
 
@@ -559,8 +559,8 @@ export function SectionApprovalPage({
                                                             const stage = review.stage;
                                                             if (!stage || stage.levels.length === 0) return null;
                                                             return (
-                                                                <div style={{ marginTop: 8, border: '1px solid #bfdbfe', borderRadius: 6, padding: 10, background: '#eff6ff' }}>
-                                                                    <strong style={{ fontSize: 12, color: '#1b365d' }}>🪜 Approval chain</strong>
+                                                                <div style={{ marginTop: 8, border: '1px solid #c9d6e6', borderRadius: 6, padding: 10, background: '#f4f7fb' }}>
+                                                                    <strong style={{ fontSize: 12, color: '#1b365d' }}>Approval chain</strong>
                                                                     <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
                                                                         {stage.levels.map((lv, i) => {
                                                                             const done = stage.approved.find((a) => a.level === lv);
@@ -570,10 +570,10 @@ export function SectionApprovalPage({
                                                                                     {i > 0 && <span style={{ color: '#94a3b8' }}>→</span>}
                                                                                     <span style={{
                                                                                         fontSize: 11, padding: '3px 8px', borderRadius: 10, background: '#fff',
-                                                                                        border: here ? '2px solid #2563eb' : '1px solid #e2e8f0',
-                                                                                        color: done ? '#15803d' : here ? '#1d4ed8' : '#64748b',
+                                                                                        border: here ? '2px solid #1b365d' : '1px solid #e2e8f0',
+                                                                                        color: done ? '#15803d' : here ? '#1b365d' : '#64748b',
                                                                                     }}>
-                                                                                        {stepLabel(lv)}{done ? ` ✓ ${done.by ?? ''} · ${new Date(done.at).toLocaleDateString()}` : here ? ` · now with ${stage.waiting_on.join(' / ')}` : ''}
+                                                                                        {stepLabel(lv)}{done ? ` · approved by ${done.by ?? ''} · ${new Date(done.at).toLocaleDateString()}` : here ? ` · now with ${stage.waiting_on.join(' / ')}` : ''}
                                                                                     </span>
                                                                                 </Fragment>
                                                                             );
@@ -584,8 +584,8 @@ export function SectionApprovalPage({
                                                         })()}
 
                                                         {review.intake && review.intake.length > 0 && (
-                                                            <div style={{ marginTop: 8, border: '1px solid #cbd5e1', borderRadius: 6, padding: 10, background: '#eef4ff' }}>
-                                                                <strong style={{ fontSize: 12, color: '#1b365d' }}>🎒 Student Intake &amp; Hostel Status (Page 2 — submitted before reaching your queue)</strong>
+                                                            <div style={{ marginTop: 8, border: '1px solid #cbd5e1', borderRadius: 6, padding: 10, background: '#f4f7fb' }}>
+                                                                <strong style={{ fontSize: 12, color: '#1b365d' }}>Student Intake &amp; Hostel Status (Page 2 — submitted before reaching your queue)</strong>
                                                                 <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 8 }}>
                                                                     {review.intake.map((sec) => {
                                                                         const c = sec.status === 'APPROVED' ? '#15803d' : sec.status === 'REJECTED' ? '#b91c1c' : '#b45309';
@@ -601,8 +601,8 @@ export function SectionApprovalPage({
                                                                                     </div>
                                                                                 ) : sec.documents.map((d) => (
                                                                                     <div key={d.id} style={{ fontSize: 11, marginTop: 4 }}>
-                                                                                        📎 {d.original_name || d.event_report_url || `Doc #${d.id}`}
-                                                                                        {d.download_url && <a href={d.download_url} target="_blank" rel="noreferrer" style={{ marginLeft: 6, color: '#2563eb' }}>⬇ Download</a>}
+                                                                                        {d.original_name || d.event_report_url || `Doc #${d.id}`}
+                                                                                        {d.download_url && <a href={d.download_url} target="_blank" rel="noreferrer" style={{ marginLeft: 6, color: '#1b365d' }}>Download</a>}
                                                                                     </div>
                                                                                 ))}
                                                                             </div>
@@ -619,15 +619,15 @@ export function SectionApprovalPage({
                                                             return (
                                                                 <div key={d.id} style={{ marginTop: 8, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: 10 }}>
                                                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                                        <strong>📎 {d.original_name || d.event_report_url || `Document #${d.id}`}</strong>
+                                                                        <strong>{d.original_name || d.event_report_url || `Document #${d.id}`}</strong>
                                                                         {d.download_url && (
                                                                             <a href={d.download_url} target="_blank" rel="noreferrer"
-                                                                                style={{ color: '#2563eb', fontWeight: 600, textDecoration: 'underline' }}>
-                                                                                ⬇ Download
+                                                                                style={{ color: '#1b365d', fontWeight: 600, textDecoration: 'underline' }}>
+                                                                                Download
                                                                             </a>
                                                                         )}
                                                                         {d.event_report_url && !d.download_url && (
-                                                                            <a href={d.event_report_url} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>🔗 Open link</a>
+                                                                            <a href={d.event_report_url} target="_blank" rel="noreferrer" style={{ color: '#1b365d' }}>Open link</a>
                                                                         )}
                                                                     </div>
                                                                     {rev && Object.keys(rev).length > 0 && (
@@ -654,7 +654,7 @@ export function SectionApprovalPage({
 
                                                         {review.prerequisites && review.prerequisites.length > 0 && (
                                                             <div style={{ marginTop: 10, border: '1px solid #cbd5e1', borderRadius: 6, padding: 10, background: '#f8fafc' }}>
-                                                                <strong style={{ fontSize: 12, color: '#1b365d' }}>📋 Consolidation — {review.prerequisites.length} dependent section{review.prerequisites.length !== 1 ? 's' : ''} (documents · OCR · status · discussion)</strong>
+                                                                <strong style={{ fontSize: 12, color: '#1b365d' }}>Consolidation — {review.prerequisites.length} dependent section{review.prerequisites.length !== 1 ? 's' : ''} (documents · OCR · status · discussion)</strong>
                                                                 <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 8 }}>
                                                                     {review.prerequisites.map((p) => {
                                                                         const c = p.status === 'APPROVED' ? '#15803d' : p.status === 'REJECTED' ? '#b91c1c' : '#b45309';
@@ -667,8 +667,8 @@ export function SectionApprovalPage({
                                                                                 </div>
                                                                                 {p.documents.map((d) => (
                                                                                     <div key={d.id} style={{ fontSize: 11, marginTop: 4 }}>
-                                                                                        📎 {d.original_name || d.event_report_url || `Doc #${d.id}`}
-                                                                                        {d.download_url && <a href={d.download_url} target="_blank" rel="noreferrer" style={{ marginLeft: 6, color: '#2563eb' }}>⬇ Download</a>}
+                                                                                        {d.original_name || d.event_report_url || `Doc #${d.id}`}
+                                                                                        {d.download_url && <a href={d.download_url} target="_blank" rel="noreferrer" style={{ marginLeft: 6, color: '#1b365d' }}>Download</a>}
                                                                                         {d.ocr_text && (
                                                                                             <pre style={{ whiteSpace: 'pre-wrap', fontSize: 10, background: '#f8fafc', padding: 4, margin: '2px 0 0', border: '1px solid #eef2f7' }}>{d.ocr_text.slice(0, 200)}</pre>
                                                                                         )}
@@ -681,7 +681,7 @@ export function SectionApprovalPage({
                                                                                 )}
                                                                                 {p.comments.filter((cm) => cm.body).length > 0 && (
                                                                                     <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>
-                                                                                        💬 {p.comments.filter((cm) => cm.body).slice(-1)[0].body}
+                                                                                        {p.comments.filter((cm) => cm.body).slice(-1)[0].body}
                                                                                     </div>
                                                                                 )}
                                                                             </div>
@@ -693,15 +693,15 @@ export function SectionApprovalPage({
 
                                                         <div style={{ marginTop: 8 }}>
                                                             <button onClick={() => setMsgOpen((o) => !o)}
-                                                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 700, color: '#2563eb', fontSize: 12 }}>
-                                                                💬 Messages{review.section.comments.length ? ` (${review.section.comments.length})` : ''} {msgOpen ? '▲' : '▼'}
+                                                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 700, color: '#1b365d', fontSize: 12 }}>
+                                                                Messages{review.section.comments.length ? ` (${review.section.comments.length})` : ''} {msgOpen ? '▲' : '▼'}
                                                             </button>
                                                             {msgOpen && (
                                                                 <div style={{ marginTop: 6 }}>
                                                                     {review.section.comments.length === 0 && <span className="text-muted">No messages yet.</span>}
                                                                     <ul style={{ margin: '4px 0 0 16px' }}>
                                                                         {review.section.comments.map((c, i) => (
-                                                                            <li key={i}>{c.is_system ? '⚙️ ' : ''}{c.body} <span className="text-muted">— {c.author}</span></li>
+                                                                            <li key={i}>{c.body} <span className="text-muted">— {c.author}</span></li>
                                                                         ))}
                                                                     </ul>
                                                                     <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
