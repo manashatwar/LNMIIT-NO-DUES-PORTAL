@@ -97,10 +97,10 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
             <nav className="lnmiit-navbar">
                 <ul className="lnmiit-nav-list">
-                    <li className="lnmiit-nav-item">🏠&nbsp;Home</li>
-                    <li className="lnmiit-nav-item">📋&nbsp;Rules</li>
-                    <li className="lnmiit-nav-item">📞&nbsp;Contact</li>
-                    <li className="lnmiit-nav-item">⚖️&nbsp;Grievance Redressal</li>
+                    <li className="lnmiit-nav-item">Home</li>
+                    <li className="lnmiit-nav-item">Rules</li>
+                    <li className="lnmiit-nav-item">Contact</li>
+                    <li className="lnmiit-nav-item">Grievance Redressal</li>
                 </ul>
             </nav>
 
@@ -108,14 +108,14 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 <div style={{ maxWidth: 1200, margin: '0 auto' }}>
                     <div className="erp-main-content">
                         <div className="erp-signin-box">
-                            <h3 className="erp-signin-header">🔒 Sign in</h3>
+                            <h3 className="erp-signin-header">Sign in</h3>
 
                             {error && (
                                 <div style={{
                                     backgroundColor: '#fee2e2', color: '#b91c1c', padding: '8px 12px',
                                     borderRadius: 4, fontSize: 12, marginBottom: 14, border: '1px solid #fca5a5',
                                 }}>
-                                    ⚠️ {error}
+                                    {error}
                                 </div>
                             )}
 
@@ -131,11 +131,11 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
                                 {role === 'STUDENT' && (
                                     <div className="erp-field-group" style={{
-                                        background: '#eff6ff', padding: '10px 12px', borderRadius: 6,
-                                        border: '1px solid #bfdbfe',
+                                        background: '#f4f7fb', padding: '10px 12px', borderRadius: 6,
+                                        border: '1px solid #c9d6e6',
                                     }}>
-                                        <label className="erp-label" style={{ color: '#1e40af', fontWeight: 600 }}>
-                                            🎓 Student Exit Type :
+                                        <label className="erp-label" style={{ color: '#1b365d', fontWeight: 600 }}>
+                                            Student Exit Type :
                                         </label>
                                         <select className="erp-select" value={exitType}
                                             onChange={(e) => setExitType(e.target.value as ExitType)}
@@ -166,14 +166,14 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                                     <label className="erp-label">Security Captcha :</label>
                                     <div className="captcha-container">
                                         <span className="captcha-code">{captchaCode}</span>
-                                        <button type="button" onClick={handleRefreshCaptcha} className="captcha-refresh" title="Refresh Captcha">🔄</button>
+                                        <button type="button" onClick={handleRefreshCaptcha} className="captcha-refresh" title="Refresh Captcha">Refresh</button>
                                     </div>
                                     <input type="text" className="erp-input" placeholder="Enter 6-digit captcha"
                                         value={captchaInput} onChange={(e) => setCaptchaInput(e.target.value)} />
                                 </div>
 
                                 <button type="submit" className="btn-signin" disabled={loading}>
-                                    {loading ? 'Authenticating…' : 'Sign In'}
+                                    {loading ? <><span className="spinner" style={{ borderColor: 'rgba(255,255,255,0.35)', borderTopColor: '#fff', marginRight: 8, verticalAlign: -2 }} />Authenticating…</> : 'Sign In'}
                                 </button>
                             </form>
                         </div>
@@ -203,7 +203,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             </div>
 
             <div className="erp-compatibility-strip">
-                <span>Site Compatible with: 🌐 Google Chrome 70+ &nbsp;|&nbsp; 🦊 Firefox 65+</span>
+                <span>Site Compatible with: Google Chrome 70+ &nbsp;|&nbsp; Firefox 65+</span>
                 <span>The LNM Institute of Information Technology, Jaipur</span>
             </div>
             <footer><strong>&copy;&nbsp;LNMIIT Jaipur &nbsp;|&nbsp; 2026</strong></footer>
