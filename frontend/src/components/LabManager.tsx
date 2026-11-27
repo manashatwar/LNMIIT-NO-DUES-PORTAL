@@ -71,7 +71,7 @@ export function LabManager({ onChanged }: LabManagerProps) {
         ev.preventDefault();
         run(async () => {
             const { lab } = await api.hodAddLab({ ...form, level: Number(form.level) });
-            say(`✓ Added ${lab.name} at level ${lab.level}. Its in-charge can now sign in as "Lab In-charge" with ${lab.email}.`);
+            say(`Added ${lab.name} at level ${lab.level}. Its in-charge can now sign in as "Lab In-charge" with ${lab.email}.`);
             setForm({ name: '', incharge_name: '', email: '', password: '', level: lab.level });
             setShowPassword(false);
         });
@@ -86,14 +86,14 @@ export function LabManager({ onChanged }: LabManagerProps) {
     const saveEdit = (lab: HodLab) => run(async () => {
         await api.hodUpdateLab(lab.id, { ...edit, level: Number(edit.level) });
         setEditId(null);
-        say(`✓ Saved ${edit.name}.` + (Number(edit.level) !== lab.level
+        say(`Saved ${edit.name}.` + (Number(edit.level) !== lab.level
             ? ' The new level applies to students who start their lab clearance from now on.' : ''));
     });
 
     const savePassword = (lab: HodLab) => run(async () => {
         await api.hodUpdateLab(lab.id, { password: pwValue });
         setPwId(null); setPwValue('');
-        say(`✓ Password changed for ${lab.name} (${lab.email}).`);
+        say(`Password changed for ${lab.name} (${lab.email}).`);
     });
 
     const removeLab = (lab: HodLab) => {
@@ -103,18 +103,18 @@ export function LabManager({ onChanged }: LabManagerProps) {
         run(async () => {
             const res = await api.hodRemoveLab(lab.id);
             say(res.outcome === 'deleted'
-                ? `✓ ${lab.name} removed.`
-                : `✓ ${lab.name} removed — kept under "Removed labs" because past requests record its approvals.`);
+                ? `${lab.name} removed.`
+                : `${lab.name} removed — kept under "Removed labs" because past requests record its approvals.`);
             onChanged();
         });
     };
 
     const restoreLab = (lab: HodLab) => run(async () => {
         await api.hodUpdateLab(lab.id, { is_active: true });
-        say(`✓ ${lab.name} restored at level ${lab.level}; its login works again.`);
+        say(`${lab.name} restored at level ${lab.level}; its login works again.`);
     });
 
-    if (loading) return <div className="well">Loading labs…</div>;
+    if (loading) return <div className="well loading-block"><span>Loading labs…</span><div className="loading-bar" /></div>;
 
     const labCard = (lab: HodLab) => {
         if (editId === lab.id) {
@@ -134,22 +134,22 @@ export function LabManager({ onChanged }: LabManagerProps) {
             );
         }
         return (
-            <div key={lab.id} style={{ background: '#fff', border: '1px solid #ddd6fe', borderRadius: 8, padding: 10, minWidth: 220, flex: '1 1 220px' }}>
-                <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 14 }}>🧪 {lab.name}</div>
+            <div key={lab.id} style={{ background: '#fff', border: '1px solid #c9d6e6', borderRadius: 8, padding: 10, minWidth: 220, flex: '1 1 220px' }}>
+                <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 14 }}>{lab.name}</div>
                 <div style={{ fontSize: 12, color: '#475569', marginTop: 2 }}>{lab.incharge_name || <em>In-charge not named</em>}</div>
-                <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>🔑 Login: <code>{lab.email}</code></div>
-                {lab.waiting > 0 && <div style={{ fontSize: 11, color: '#b45309', marginTop: 2 }}>⏳ {lab.waiting} student{lab.waiting !== 1 ? 's' : ''} waiting</div>}
+                <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Login: <code>{lab.email}</code></div>
+                {lab.waiting > 0 && <div style={{ fontSize: 11, color: '#b45309', marginTop: 2 }}>{lab.waiting} student{lab.waiting !== 1 ? 's' : ''} waiting</div>}
                 {pwId === lab.id ? (
                     <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
                         <input className="erp-input" style={{ ...input, flex: 1 }} type="text" autoComplete="new-password" autoFocus
                             placeholder="New password" value={pwValue} onChange={(e) => setPwValue(e.target.value)} />
                         <button className="btn btn-success" style={smallBtn} disabled={busy || !pwValue} onClick={() => savePassword(lab)}>Set</button>
-                        <button className="btn btn-secondary" style={smallBtn} onClick={() => { setPwId(null); setPwValue(''); }}>✕</button>
+                        <button className="btn btn-secondary" style={smallBtn} onClick={() => { setPwId(null); setPwValue(''); }}>Cancel</button>
                     </div>
                 ) : (
                     <div style={{ display: 'flex', gap: 4, marginTop: 8, flexWrap: 'wrap' }}>
                         <button className="btn btn-primary" style={smallBtn} onClick={() => startEdit(lab)}>Edit</button>
-                        <button className="btn btn-warning" style={smallBtn} onClick={() => { setEditId(null); setPwId(lab.id); setPwValue(''); }}>Reset password</button>
+                        <button className="btn btn-secondary" style={smallBtn} onClick={() => { setEditId(null); setPwId(lab.id); setPwValue(''); }}>Reset password</button>
                         <button className="btn btn-danger" style={smallBtn} disabled={busy} onClick={() => removeLab(lab)}>Remove</button>
                     </div>
                 )}
@@ -160,11 +160,11 @@ export function LabManager({ onChanged }: LabManagerProps) {
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {note && (noteErr
-                ? <div className="alert alert-danger" style={{ fontSize: 13, margin: 0 }}>⚠️ {note}</div>
+                ? <div className="alert alert-danger" style={{ fontSize: 13, margin: 0 }}>{note}</div>
                 : <div className="well" style={{ padding: '8px 12px', fontSize: 13, margin: 0, color: '#15803d' }}>{note}</div>)}
 
             <div className="well" style={{ background: '#fff', border: '1px solid #cbd5e1', borderRadius: 8, margin: 0 }}>
-                <h3 style={{ marginTop: 0, color: '#1b365d', fontSize: 16 }}>🧪 {department} Lab Hierarchy</h3>
+                <h3 style={{ marginTop: 0, color: '#1b365d', fontSize: 16 }}>{department} Lab Hierarchy</h3>
                 <p style={{ fontSize: 12, color: '#64748b', marginTop: 0 }}>
                     Students send their request level by level from their HOD card. Labs on the <strong>same level</strong> get it
                     together; the next level gets it only after <strong>every</strong> lab on the previous level approves. Your
@@ -181,8 +181,8 @@ export function LabManager({ onChanged }: LabManagerProps) {
                             const here = active.filter((l) => l.level === lv);
                             return (
                                 <div key={lv}>
-                                    <div style={{ background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 8, padding: 10 }}>
-                                        <div style={{ fontSize: 12, fontWeight: 700, color: '#5b21b6', marginBottom: 8 }}>
+                                    <div style={{ background: '#f4f7fb', border: '1px solid #c9d6e6', borderRadius: 8, padding: 10 }}>
+                                        <div style={{ fontSize: 12, fontWeight: 700, color: '#1b365d', marginBottom: 8 }}>
                                             Level {lv}{here.length > 1 ? ' · these labs receive the request together' : ''}
                                         </div>
                                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{here.map(labCard)}</div>
@@ -193,15 +193,15 @@ export function LabManager({ onChanged }: LabManagerProps) {
                                 </div>
                             );
                         })}
-                        <div style={{ background: '#eef4ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: 10, fontSize: 13, fontWeight: 700, color: '#1b365d' }}>
-                            🏛️ HOD — final departmental approval (you)
+                        <div style={{ background: '#f4f7fb', border: '1px solid #c9d6e6', borderRadius: 8, padding: 10, fontSize: 13, fontWeight: 700, color: '#1b365d' }}>
+                            HOD — final departmental approval (you)
                         </div>
                     </div>
                 )}
             </div>
 
             <form onSubmit={addLab} className="well" style={{ background: '#fff', border: '1px solid #cbd5e1', borderRadius: 8, margin: 0 }} autoComplete="off">
-                <h4 style={{ marginTop: 0, color: '#1b365d', fontSize: 15 }}>➕ Add a lab</h4>
+                <h4 style={{ marginTop: 0, color: '#1b365d', fontSize: 15 }}>Add a lab</h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10 }}>
                     <div><label style={label}>Lab name *</label>
                         <input className="erp-input" style={input} placeholder="e.g. Microwave Lab" value={form.name}
@@ -239,7 +239,7 @@ export function LabManager({ onChanged }: LabManagerProps) {
                 <div className="well" style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, margin: 0 }}>
                     <button onClick={() => setShowRemoved((s) => !s)}
                         style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 700, color: '#475569', fontSize: 13 }}>
-                        🗄️ Removed labs ({removed.length}) {showRemoved ? '▲' : '▼'}
+                        Removed labs ({removed.length}) {showRemoved ? '▲' : '▼'}
                     </button>
                     {showRemoved && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
