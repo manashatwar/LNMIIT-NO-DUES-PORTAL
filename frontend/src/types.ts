@@ -18,7 +18,7 @@ export type RoleType =
 
 export type ApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
-export type ExitType = 'GRADUATION' | 'NEP_EXIT' | 'WITHDRAWAL' | 'ADMISSION_CANCEL';
+export type ExitType = 'GRADUATION' | 'WITHDRAWAL' | 'ADMISSION_CANCEL';
 
 export interface CurrentUser {
   username: string;
@@ -56,7 +56,7 @@ export interface SectionInfo {
   comments: SectionComment[];
   documents: SectionDocument[];
   checklist?: { label: string; done: boolean }[];     // Administration: what to complete at the office
-  waiting_for?: string[];   // earlier sections it still waits for, for this student's exit type (no TPC on an NEP exit)
+  waiting_for?: string[];   // earlier sections it still waits for, for this student's exit type (no TPC on a withdrawal)
 }
 
 // Administration's checklist for one request (e.g. "Physical ID card submitted"):
