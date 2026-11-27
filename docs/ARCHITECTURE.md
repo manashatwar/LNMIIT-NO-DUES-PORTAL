@@ -1,6 +1,6 @@
 # Architecture
 
-This describes the system as implemented — a decoupled React SPA talking to a Django JSON API — verified against the code (`No-Dues-Portal/main/*.py`, `frontend/src/*`). For the domain rules (why the section order is what it is, the correctness properties), see [`DESIGN.md`](./DESIGN.md).
+This describes the system as implemented — a decoupled React SPA talking to a Django JSON API — verified against the code (`backend/main/*.py`, `frontend/src/*`). For the domain rules (why the section order is what it is, the correctness properties), see [`DESIGN.md`](./DESIGN.md).
 
 ## System overview
 
@@ -10,7 +10,7 @@ flowchart LR
         SPA[React SPA<br/>frontend/src]
     end
 
-    subgraph Server["Django (No-Dues-Portal/)"]
+    subgraph Server["Django (backend/)"]
         direction TB
         URLS[main/urls.py] --> VIEWS[main/api.py<br/>JSON views]
         VIEWS --> GUARD[Auth + role/scope guard<br/>_scope_ok / login_required]
