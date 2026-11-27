@@ -18,7 +18,7 @@ urlpatterns = [
     path('api/student/donation/', api.student_donation, name='student_donation'),
     path('api/student/confirm-review/', api.confirm_review, name='confirm_review'),
     path('api/student/comment/', api.student_comment, name='student_comment'),
-    path('api/student/confirm-section/', api.confirm_section, name='confirm_section'),
+    path('api/student/resend-section/', api.resend_section, name='resend_section'),
     path('api/student/certificate/', api.generate_certificate, name='certificate'),
 
     # Student — department lab chain (HOD card on Page 3)
