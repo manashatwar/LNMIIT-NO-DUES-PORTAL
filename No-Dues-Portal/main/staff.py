@@ -39,7 +39,7 @@ from .accounts import AccountError, clean_level, clean_name, clean_email, check_
 from .models import (
     Comment, SectionStatus, StageApproval, UserProfile,
     SECTION_LIBRARY, SECTION_LUCS, SECTION_NAD, SECTION_ACCOUNTS, SECTION_ADMINISTRATION,
-    SECTION_TPC, SECTION_WARDEN, SECTION_HOD,
+    SECTION_TPC, SECTION_WARDEN, SECTION_HOD, SECTION_STORE, SECTION_SPORTS, SECTION_MEDICAL,
     STATUS_PENDING, STATUS_APPROVED, STATUS_REJECTED,
 )
 
@@ -80,14 +80,13 @@ def _display(user):
 # ─── By hand (Library, LUCS, NAD Cell, Administration) ───────────────────────────
 
 def ready_for_staff(section_code):
-    """Waiting with the head and ready to review: the student has submitted Page 1,
-    confirmed this section (confirm-only sections such as LUCS, NAD and
-    Administration) and — for a section that waits on others (Administration:
-    Library, TPC, Warden, HOD; TPC only for the exit types that have it) — those
-    have approved, so staff can act on it."""
+    """Waiting with the head and ready to review: the student has submitted Page 1
+    and — for a section that waits on others (LUCS and NAD: the tri-gate;
+    Administration: the tri-gate and every department; TPC only for the exit
+    types that have it) — those have approved, so staff can act on it."""
     qs = SectionStatus.objects.filter(
         section__code=section_code, status=STATUS_PENDING, assigned_to__isnull=True,
-        student_confirmed=True, request__is_active=True, request__intake_submitted=True,
+        request__is_active=True, request__intake_submitted=True,
     )
     for code in engine.prerequisites(section_code):
         if code in engine.OPTIONAL_PREREQUISITES:
@@ -133,11 +132,10 @@ def my_step(profile):
 
 
 def stage_ready(ss):
-    """Ready for the section's staff levels: pending, confirmed by the student,
-    every prerequisite approved (Accounts: Library, TPC, Warden, HOD) and — for
-    Accounts — the student's latest submission confirmed (their cancelled-cheque
-    details)."""
-    if ss.status != STATUS_PENDING or not ss.student_confirmed or not ss.request.is_active:
+    """Ready for the section's staff levels: pending, every prerequisite approved
+    (Accounts: the tri-gate and every department) and — for Accounts — the
+    student's latest submission confirmed (their cancelled-cheque details)."""
+    if ss.status != STATUS_PENDING or not ss.request.is_active:
         return False
     if not engine.actionable(ss.request, ss.section.code):
         return False
@@ -197,13 +195,18 @@ def stage_info(ss, names=None):
     }
 
 
-_SHORT_NAMES ={SECTION_LIBRARY: "Library", SECTION_TPC: "TPC", SECTION_WARDEN: "Warden", SECTION_HOD: "HOD"}
+_SHORT_NAMES = {
+    SECTION_LIBRARY: "Library", SECTION_TPC: "TPC", SECTION_WARDEN: "Warden",
+    SECTION_STORE: "Store", SECTION_LUCS: "LUCS", SECTION_SPORTS: "Sports",
+    SECTION_MEDICAL: "Medical", SECTION_NAD: "NAD", SECTION_HOD: "HOD",
+}
 
 
 def waiting_for(ss):
     """The earlier sections a request still waits on before this section's turn
-    (Accounts: Library, TPC, Warden, HOD — no TPC for an NEP exit, a withdrawal
-    or an admission cancel), by short name — as engine.actionable sees them."""
+    (Accounts: Library, TPC, Warden and the six departments — no TPC for an NEP
+    exit, a withdrawal or an admission cancel), by short name — as
+    engine.actionable sees them."""
     return [_SHORT_NAMES.get(code, code.title())
             for code in engine.unapproved_prerequisites(ss.request, ss.section.code)]
 
@@ -299,7 +302,7 @@ def level_queue(profile, prepare=None):
     user = profile.user
     levels = list(chain_names(profile.role))
     rows = (SectionStatus.objects
-            .filter(section__code=profile.role, request__is_active=True, student_confirmed=True)
+            .filter(section__code=profile.role, request__is_active=True)
             .filter(Q(status=STATUS_PENDING) | Q(stage_approvals__approved_by=user) | Q(decided_by=user))
             .distinct()
             .order_by("request__created_at", "id"))
@@ -321,7 +324,7 @@ def _pending_in_chain(section_code):
     stage_ready() read, loaded in a fixed number of queries."""
     return prefetch.for_desk(
         SectionStatus.objects.filter(section__code=section_code, status=STATUS_PENDING,
-                                     student_confirmed=True, request__is_active=True),
+                                     request__is_active=True),
         prerequisites=True, stages=True)
 
 
