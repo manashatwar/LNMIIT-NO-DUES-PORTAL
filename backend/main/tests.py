@@ -1759,10 +1759,10 @@ class SeedDemoTests(ApiHelpers, TestCase):
 class WorkflowGraphTests(SimpleTestCase):
     """Every exit type's approval graph is a valid DAG, checked with Kahn's
     algorithm (engine.analyze_workflow) — and the check finds what would break
-    one: a prerequisite the exit type doesn't have (the original NEP-exit bug:
+    one: a prerequisite the exit type doesn't have (the original exit-type bug:
     Accounts waited for a TPC section the request didn't have) or a cycle."""
 
-    NO_TPC = ("NEP_EXIT", "WITHDRAWAL", "ADMISSION_CANCEL")
+    NO_TPC = ("WITHDRAWAL", "ADMISSION_CANCEL")
 
     def test_every_exit_type_has_a_complete_approval_order(self):
         self.assertEqual(engine.workflow_problems(), [])
@@ -1824,7 +1824,7 @@ class WorkflowGraphTests(SimpleTestCase):
         both = {SECTION_ACCOUNTS, SECTION_ADMINISTRATION}
         after_tri_gate = set(engine.DEPARTMENT_SECTIONS) | both
         self.assertEqual(engine.downstream_closure(SECTION_TPC, "GRADUATION"), after_tri_gate)
-        self.assertEqual(engine.downstream_closure(SECTION_TPC, "NEP_EXIT"), set())   # nothing waits for it
+        self.assertEqual(engine.downstream_closure(SECTION_TPC, "WITHDRAWAL"), set())   # nothing waits for it
         for exit_type in EXIT_TYPES:
             with self.subTest(exit_type):
                 for code in (SECTION_LIBRARY, SECTION_WARDEN):
@@ -1948,7 +1948,6 @@ class ExitTypeClearanceTests(ApiHelpers, TestCase):
     def test_accounts_shows_what_each_exit_type_still_waits_for(self):
         departments = ["Store", "LUCS", "Sports", "Medical", "NAD", "HOD"]
         for exit_type, expected in (("GRADUATION", ["Library", "TPC", "Warden"] + departments),
-                                    ("NEP_EXIT", ["Library", "Warden"] + departments),
                                     ("WITHDRAWAL", ["Library", "Warden"] + departments),
                                     ("ADMISSION_CANCEL", ["Library", "Warden"] + departments)):
             with self.subTest(exit_type):
