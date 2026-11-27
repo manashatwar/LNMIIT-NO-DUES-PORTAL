@@ -10,7 +10,7 @@ Railway lets multiple services in one project talk to each other over a private 
 
 Both Dockerfiles already support this — you're just setting environment variables Railway provides, not changing code:
 - `frontend/Dockerfile` builds nginx from `nginx.conf.template`, substituting `BACKEND_HOST`/`BACKEND_PORT` (where to find the backend) and `PORT` (what port nginx itself listens on) at container startup.
-- `No-Dues-Portal/Dockerfile` + `docker-entrypoint.sh` already read `DATABASE_URL` and run migrations on every boot.
+- `backend/Dockerfile` + `docker-entrypoint.sh` already read `DATABASE_URL` and run migrations on every boot.
 
 ## Step by step
 
@@ -21,7 +21,7 @@ In the Railway dashboard: **New Project** → **Deploy from GitHub repo** (pick 
 ### 2. Add the backend service
 
 **+ New** → **GitHub Repo** (same repo again) → set:
-- **Root Directory**: `No-Dues-Portal`
+- **Root Directory**: `backend`
 - Railway will detect the `Dockerfile` there and build from it automatically.
 
 **Variables** (Settings → Variables) — set these on the backend service:
