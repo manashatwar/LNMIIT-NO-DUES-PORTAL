@@ -56,8 +56,8 @@ PREREQUISITES = {
 }
 
 # Prerequisites that only apply when the student's exit type includes them.
-# TPC (placement) is part of a graduation only: for an NEP exit, a withdrawal or
-# an admission cancel, nothing waits for it. Any other prerequisite an exit type
+# TPC (placement) is part of a graduation only: for a withdrawal or an
+# admission cancel, nothing waits for it. Any other prerequisite an exit type
 # lacks is a configuration error — workflow_problems() reports it, and Django's
 # system check (main/checks.py) refuses to start.
 OPTIONAL_PREREQUISITES = {SECTION_TPC}
@@ -68,8 +68,8 @@ ALL_SECTION_CODES = TRI_GATE_SECTIONS + DEPARTMENT_SECTIONS + FINAL_SECTIONS
 # Graduation uses the full set. Other exit types omit sections that don't apply.
 REQUIRED_SECTIONS = {
     "GRADUATION": list(ALL_SECTION_CODES),
-    # NEP exit / withdrawal / admission-cancel: no placement (TPC) obligation.
-    "NEP_EXIT": [c for c in ALL_SECTION_CODES if c != SECTION_TPC],
+    # Withdrawal / admission-cancel: no placement (TPC) obligation. (An NEP exit
+    # is rare and handled offline, so the portal doesn't offer it.)
     "WITHDRAWAL": [c for c in ALL_SECTION_CODES if c != SECTION_TPC],
     "ADMISSION_CANCEL": [c for c in ALL_SECTION_CODES if c != SECTION_TPC],
 }
@@ -91,7 +91,7 @@ def required_sections(exit_type):
 def prerequisites(section_code, exit_type=None):
     """The sections that must approve before `section_code` can act. With an
     `exit_type`: for a request of that exit type — an optional prerequisite the
-    exit type doesn't include is dropped (no TPC to wait for on an NEP exit).
+    exit type doesn't include is dropped (no TPC to wait for on a withdrawal).
     Without one: the full rule, for every exit type (e.g. "does this section
     wait on anything at all?")."""
     prereqs = list(PREREQUISITES.get(section_code, []))
@@ -115,7 +115,7 @@ def analyze_workflow(graph):
     Returns (order, missing, blocked):
       order   — an order in which the sections can be approved, prerequisites first
       missing — [(section, prerequisite)] where the prerequisite isn't in the graph:
-                that section could never act (the original NEP-exit bug: Accounts
+                that section could never act (the original exit-type bug: Accounts
                 waited for a TPC section the request didn't have)
       blocked — sections caught on, or after, a cycle: never approvable
     A workflow is valid when `missing` and `blocked` are both empty."""
