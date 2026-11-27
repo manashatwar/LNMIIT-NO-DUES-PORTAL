@@ -15,7 +15,8 @@ from django.db import models
 DEPARTMENT_CODES = ["CCE", "CSE", "ECE", "MME"]
 HOSTEL_CODES = ["BH1", "BH2", "BH3", "BH4", "BH5", "GH1"]
 
-EXIT_TYPES = ["GRADUATION", "NEP_EXIT", "WITHDRAWAL", "ADMISSION_CANCEL"]
+# An NEP exit is rare and handled offline, so the portal doesn't offer it.
+EXIT_TYPES = ["GRADUATION", "WITHDRAWAL", "ADMISSION_CANCEL"]
 
 # Section codes (see Design.md § Approval Engine / Section Flow)
 SECTION_LIBRARY = "LIBRARY"
