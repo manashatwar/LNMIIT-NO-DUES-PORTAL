@@ -69,8 +69,10 @@ export const api = {
             method: 'POST',
             body: JSON.stringify({ section, body }),
         }),
-    confirmSection: (section: string, details: { name: string; roll_no: string; department: string }) =>
-        request<{ ok: boolean }>('/api/student/confirm-section/', {
+    // Send a rejected basic section back to its office. The HOD card also sends
+    // the (optionally edited) name / roll / department; the others send nothing.
+    resendSection: (section: string, details?: { name: string; roll_no: string; department: string }) =>
+        request<{ ok: boolean }>('/api/student/resend-section/', {
             method: 'POST',
             body: JSON.stringify({ section, ...details }),
         }),
