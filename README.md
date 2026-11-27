@@ -21,7 +21,7 @@ Accounts and **Administration run side by side**. Once Library, Warden (and TPC,
 Once **every** section has approved, Accounts **sends the student's refund** and records it in the **Refund** column of its **Approved** tab (amount, mode, UTR / transaction reference, date). `accounts@` is always the **refund manager** and does this, and so can any staff member it also marks as one (**Edit** on their card). Their Approved tab lists every request Accounts has approved and shows how many refunds are waiting ("· 2 to send"). Each row has three actions: **Mark refund sent**, **No refund due**, or **Reject** with a reason (e.g. the bank details are wrong), which sends Accounts back to the student. Only once the refund is recorded is the clearance complete. The student sees "Your refund of ₹… has been sent …" on their dashboard and in their Accounts messages, and the No-Dues certificate, which shows the refund, unlocks.
 
 - **Frontend:** React 18 + TypeScript + Vite (`frontend/`)
-- **Backend:** Django (`No-Dues-Portal/`), session auth, JSON API
+- **Backend:** Django (`backend/`), session auth, JSON API
 - **Database:** PostgreSQL — the only supported database (`docker-compose.yml`, or any `DATABASE_URL`) — see [docs/SCALING.md](./docs/SCALING.md)
 
 > **New here?** Read this file top to bottom, then go to [`docs/`](./docs) for the deep-dive (architecture, API reference, data model, and the production/scaling plan).
@@ -89,10 +89,10 @@ For the full request lifecycle (login, approval, reverse cascade, certificate) s
 │       ├── pages/                      LoginPage, StudentDashboard, SectionApprovalPage, ...
 │       └── components/Layout.tsx
 │
-├── No-Dues-Portal/                 Django backend
+├── backend/                       Django backend (JSON API)
 │   ├── Dockerfile                    gunicorn image (installs Tesseract for OCR)
 │   ├── docker-entrypoint.sh           Waits for the DB, runs migrations, then execs gunicorn
-│   ├── myproject/settings.py          Env-driven secret/debug/hosts/database (see below)
+│   ├── config/settings.py             Env-driven secret/debug/hosts/database (see below)
 │   └── main/
 │       ├── models.py                    Data model
 │       ├── engine.py                    Approval engine: gating + reverse cascade (sections and department labs)
@@ -105,17 +105,17 @@ For the full request lifecycle (login, approval, reverse cascade, certificate) s
 │       ├── urls.py
 │       └── management/commands/seed_demo.py   Demo data seeding
 │
-├── docs/                           All deep-dive documentation (the "creator docs")
-│   ├── DESIGN.md                     Domain design: section flow, approval engine, correctness properties
-│   ├── ARCHITECTURE.md               What's actually running: request lifecycle, sequence diagrams
-│   ├── API.md                        Every JSON API endpoint
-│   ├── DATA_MODEL.md                 ER diagram + field-by-field notes
-│   ├── SCALING.md                    Production readiness + load testing plan
-│   ├── DEPLOY.md                     Deploying to Railway (+ alternatives) step by step
-│   ├── loadtest/locustfile.py        Ready-to-run load test
-│   └── images/
-│
-└── LNMIIT_No_Dues_Portal_Research_Document.md   Research behind the section list & design choices
+└── docs/                           All deep-dive documentation (the "creator docs")
+    ├── DESIGN.md                     Domain design: section flow, approval engine, correctness properties
+    ├── ARCHITECTURE.md               What's actually running: request lifecycle, sequence diagrams
+    ├── API.md                        Every JSON API endpoint
+    ├── DATA_MODEL.md                 ER diagram + field-by-field notes
+    ├── SCALING.md                    Production readiness + load testing plan
+    ├── DEPLOY.md                     Deploying to Railway (+ alternatives) step by step
+    ├── RESEARCH.md                   Research behind the section list & design choices
+    ├── paper-forms/                  Scans of the paper forms the portal replaces
+    ├── loadtest/locustfile.py        Ready-to-run load test
+    └── images/
 ```
 
 ## Quickstart
@@ -134,7 +134,7 @@ docker compose up -d db
 **1. Backend (Django) — Terminal 1**
 
 ```bash
-cd No-Dues-Portal
+cd backend
 python -m venv .venv && .venv\Scripts\activate      # Windows; use `source .venv/bin/activate` on macOS/Linux
 pip install -r requirements.txt
 python manage.py migrate
@@ -142,7 +142,7 @@ python manage.py seed_demo                            # creates demo users/stude
 python manage.py runserver 8000
 ```
 
-No `DATABASE_URL` to export by hand: `myproject/settings.py` loads the repo-root `.env` automatically (`python-dotenv`) and, if `DATABASE_URL` itself isn't set, builds one from `.env`'s `POSTGRES_*` values against `localhost` — the same credentials `docker compose up -d db` above just started listening with. Change `POSTGRES_PASSWORD`/`POSTGRES_PORT` in `.env` and both the container and `manage.py` stay in sync automatically — there's only one place to edit.
+No `DATABASE_URL` to export by hand: `config/settings.py` loads the repo-root `.env` automatically (`python-dotenv`) and, if `DATABASE_URL` itself isn't set, builds one from `.env`'s `POSTGRES_*` values against `localhost` — the same credentials `docker compose up -d db` above just started listening with. Change `POSTGRES_PASSWORD`/`POSTGRES_PORT` in `.env` and both the container and `manage.py` stay in sync automatically — there's only one place to edit.
 
 **2. Frontend (React) — Terminal 2**
 
@@ -261,7 +261,8 @@ Everything beyond this README lives in [`docs/`](./docs) — one folder, no scat
 | [`docs/DATA_MODEL.md`](./docs/DATA_MODEL.md) | ER diagram + field-by-field notes on every model |
 | [`docs/SCALING.md`](./docs/SCALING.md) | Production readiness and handling high concurrent traffic (thousands of students) |
 | [`docs/DEPLOY.md`](./docs/DEPLOY.md) | Deploying to Railway step by step (+ Render/Fly.io/VPS notes), and load-testing a real deployment safely |
-| [`LNMIIT_No_Dues_Portal_Research_Document.md`](./LNMIIT_No_Dues_Portal_Research_Document.md) | Research behind the section list and design choices (kept at root — it's background research, not implementation reference) |
+| [`docs/RESEARCH.md`](./docs/RESEARCH.md) | Research behind the section list and design choices: how other institutes run no-dues, and what LNMIIT's offices check |
+| [`docs/paper-forms/`](./docs/paper-forms) | Scans of the paper forms the portal replaces: the student No Dues form, the Central Library submission form and a department's lab form |
 
 ## Scaling & handling heavy traffic
 
@@ -269,7 +270,7 @@ The traffic pattern this has to survive is near-idle for most of the semester, t
 
 PostgreSQL is the only supported database — there is no SQLite fallback anywhere in the codebase, so development and production share the same concurrency semantics rather than diverging on the one behaviour that matters here (SQLite's single-writer file lock versus real concurrency control). `docker-compose.yml` provisions Postgres locally; outside Compose, `DATABASE_URL` points the application at any Postgres host and nothing else changes.
 
-The application runs under gunicorn behind nginx, not `manage.py runserver`. `No-Dues-Portal/Dockerfile` starts three gunicorn workers, and nginx (`frontend/Dockerfile` + `nginx.conf`) serves the built SPA while proxying API, admin, and static traffic to them. The frontend bundle keeps jsPDF and html2canvas lazy-loaded, so the initial download stays around 210 KB.
+The application runs under gunicorn behind nginx, not `manage.py runserver`. `backend/Dockerfile` starts three gunicorn workers, and nginx (`frontend/Dockerfile` + `nginx.conf`) serves the built SPA while proxying API, admin, and static traffic to them. The frontend bundle keeps jsPDF and html2canvas lazy-loaded, so the initial download stays around 210 KB.
 
 Two items are deliberately still open. Database indexes on the columns officer queues filter by — `SectionStatus.status`, `request.is_active`, and the hostel and department foreign keys — have not been added yet; confirm the query plans with `EXPLAIN` under load and add them before a real rollout. Session storage is Django's DB-backed default, which is adequate for a single `backend` replica but should move behind a cache such as Redis or Memcached before scaling out with `docker compose up --scale backend=N`.
 
