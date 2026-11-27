@@ -1,6 +1,14 @@
 # LNMIIT No-Dues Portal
 
-A web application that digitizes LNMIIT's student clearance ("No Dues") process: a student initiates an exit request, every institutional section (Library, Warden, HOD, Accounts, Administration, …) independently approves or rejects with a mandatory reason, and the student downloads a final No-Dues certificate once every section is green.
+A web application that digitizes LNMIIT's student clearance ("No Dues") process: a student initiates an exit request, every institutional section (Library, Warden, HOD, Accounts, Administration, …) approves or rejects with a mandatory reason, and the student downloads a final No-Dues certificate once every section is green.
+
+The request moves through the student's pages in order, and the server enforces it:
+
+1. **Page 1:** the student uploads the Library's signed BTP / thesis form (downloaded from the portal and signed by the librarian offline), the TPC offer letter (graduation only), and the room they're vacating.
+2. **Page 2:** Library, TPC and Warden verify those (the *tri-gate*).
+3. **Page 3:** once all three approve, the request reaches **Store, LUCS, Sports, Medical, NAD and HOD by itself**, all at once; there's no "Confirm & Send". Each office can see the student's Page 1 documents. HOD approves directly in a department without labs, or after the department's labs otherwise.
+4. **Page 4:** once all six approve, **Accounts** (cancelled cheque, optional Fund-Us donation) and **Administration** (physical ID card, handed in at the Administration Block) open side by side.
+5. **Page 5:** once both approve and Accounts records the refund, the No-Dues certificate unlocks.
 
 Department labs replace the paper "No Dues Form for Department Purpose": each department's HOD registers its labs in the portal (which creates each lab in-charge's login) and arranges them in levels. A student sends their request to the labs level by level — labs on the same level review it together, the next level opens only when every lab on the current one approves — and the HOD approves last.
 
@@ -8,7 +16,7 @@ The Library, LUCS, NAD Cell and Administration desks can be shared. Every reques
 
 Accounts staff work in **levels** instead, set by `accounts@`. A ready request goes to level 1 automatically, then to level 2 once level 1 approves, and so on. When two people share a level, either one can approve. After the last level, every request comes to `accounts@` itself: it is always the **final step**, and its approval approves Accounts.
 
-Accounts and **Administration run side by side**. Once Library, Warden and HOD approve (and TPC, for a graduation), both open together, side by side on the student's Page 4 (Financial & Administration); Page 5 is the certificate. The student also sets their optional **Fund-Us donation** on Page 4, beside the Refund Ledger. It comes out of the ₹10,000 caution money and can change until Accounts approves. Each exit type has its own dependency graph: NEP exits, withdrawals and admission cancels have no TPC step, so nothing waits for one. When Django starts, a check runs Kahn's algorithm over every exit type's graph and refuses to start if a section waits for one the exit type doesn't have, or if there is a cycle. Administration's staff work by hand, like LUCS and NAD: `admin.office@` sends them requests. It also has an **office checklist**, starting with "Physical ID card submitted": its office ticks each item when the student hands it in, and Administration can't approve until everything is ticked.
+Accounts and **Administration run side by side**. Once Library, Warden (and TPC, for a graduation) and all six departments approve, both open together, side by side on the student's Page 4 (Financial & Administration); Page 5 is the certificate. The student also sets their optional **Fund-Us donation** on Page 4, beside the Refund Ledger. It comes out of the ₹10,000 caution money and can change until Accounts approves. Each exit type has its own dependency graph: NEP exits, withdrawals and admission cancels have no TPC step, so nothing waits for one. When Django starts, a check runs Kahn's algorithm over every exit type's graph and refuses to start if a section waits for one the exit type doesn't have, or if there is a cycle. Administration's staff work by hand, like LUCS and NAD: `admin.office@` sends them requests. It also has an **office checklist**, starting with "Physical ID card submitted": its office ticks each item when the student hands it in, and Administration can't approve until everything is ticked.
 
 Once **every** section has approved, Accounts **sends the student's refund** and records it in the **Refund** column of its **Approved** tab (amount, mode, UTR / transaction reference, date). `accounts@` is always the **refund manager** and does this, and so can any staff member it also marks as one (**Edit** on their card). Their Approved tab lists every request Accounts has approved and shows how many refunds are waiting ("· 2 to send"). Each row has three actions: **Mark refund sent**, **No refund due**, or **Reject** with a reason (e.g. the bank details are wrong), which sends Accounts back to the student. Only once the refund is recorded is the clearance complete. The student sees "Your refund of ₹… has been sent …" on their dashboard and in their Accounts messages, and the No-Dues certificate, which shows the refund, unlocks.
 
@@ -207,17 +215,17 @@ The same HOD account's **Manage labs** tab adds, edits, re-levels and removes la
 
 **Section staff demo (Library, LUCS, NAD Cell).**
 
-1. Run `python manage.py seed_demo --demo-requests 40`. It adds 40 demo students, `demo001@` to `demo040@`, whose requests are waiting at the Library, LUCS and NAD Cell. For LUCS and NAD, they've already clicked "Confirm & Send".
-2. Sign in as `library@` (User Type: Library). In **Incoming**, use **Send the next [35] waiting requests to [Library Assistant 1]**. Each row's **Handled by** menu moves a single request, or takes it back.
-3. Sign in as `lib.staff1@` (also User Type: Library). You'll see only those 35, and your approve or reject is final.
+1. Run `python manage.py seed_demo --demo-requests 40`. It adds 40 demo students, `demo001@` to `demo040@`, with Page 1 submitted. `demo001@` to `demo020@` wait at the Library. `demo021@` to `demo040@` have already cleared Library, TPC and Warden, so they wait at the six Page 3 offices, LUCS and NAD Cell included.
+2. Sign in as `library@` (User Type: Library). In **Incoming**, use **Send the next [15] waiting requests to [Library Assistant 1]**. Each row's **Handled by** menu moves a single request, or takes it back.
+3. Sign in as `lib.staff1@` (also User Type: Library). You'll see only those 15, and your approve or reject is final.
 
-LUCS works the same way with `lucs@` and `lucs.staff1@` (User Type: LUCS), and so does NAD with `nad@` and `nad.staff1@` (User Type: NAD Cell). For these two confirm-only sections, a request counts as waiting only once the student has clicked "Confirm & Send" for that section.
+LUCS works the same way with `lucs@` and `lucs.staff1@` (User Type: LUCS), and so does NAD with `nad@` and `nad.staff1@` (User Type: NAD Cell), on `demo021@` to `demo040@`. A request reaches these two desks by itself once Library, TPC and Warden have approved it; until then it isn't listed there.
 
 Each head's **Manage staff** tab adds, edits, resets passwords for, and removes its own staff. A removed staff member's waiting requests go back to the head. Staff never see that tab.
 
 **Accounts levels demo.**
 
-1. Run `python manage.py seed_demo --demo-accounts 10`. It adds 10 demo students, `acct001@` to `acct010@`, whose requests have already reached Accounts and Administration: Library, TPC, Warden and HOD have approved, the cheque details are submitted, and the Administration details on Page 4 are confirmed.
+1. Run `python manage.py seed_demo --demo-accounts 10`. It adds 10 demo students, `acct001@` to `acct010@`, whose requests have already reached Accounts and Administration: Library, TPC, Warden and the six departments have approved, the cheque details are submitted, and the Administration details on Page 4 are confirmed.
 2. Sign in with User Type **Accounts**, first as `acc.staff1@` (level 1). Approve a request, and it moves to level 2 by itself.
 3. There, `acc.staff2@` or `acc.staff3@` can approve it. Once one of them does, it leaves both their lists.
 4. `acc.staff4@` (level 3) approves it, and it goes to `accounts@`.
@@ -225,11 +233,11 @@ Each head's **Manage staff** tab adds, edits, resets passwords for, and removes 
 
 `accounts@` sets the levels in **Manage staff** and sees every request's stage, for example "Level 2 of 3" or "With you · final approval". Its **Show** filter lists "With you · final approval", every configured level ("At Level 1", "At Level 2", …) and "Not ready yet". Manage staff shows the chain with `accounts@` fixed at the end as the final approval and refund manager; there is no button to move it.
 
-`accounts@` has an **Approve** button on every row. After every level has approved, that is its final approval. Before that, it approves the level the request is at, standing in for the people on it, and moves the request up one level; at the last level, it's also the final approval. Rows that are **Not ready yet** show it greyed out, along with what they're waiting for: "Waiting for Library, TPC, Warden, HOD", or the student's cheque details. `accounts@` can also send any request back with Reject. If a level rejects, the student fixes the problem and the request goes back to that same level; earlier levels' approvals are kept.
+`accounts@` has an **Approve** button on every row. After every level has approved, that is its final approval. Before that, it approves the level the request is at, standing in for the people on it, and moves the request up one level; at the last level, it's also the final approval. Rows that are **Not ready yet** show it greyed out, along with what they're waiting for: "Waiting for Library, TPC, Warden, Store, LUCS, Sports, Medical, NAD, HOD", or the student's cheque details. `accounts@` can also send any request back with Reject. If a level rejects, the student fixes the problem and the request goes back to that same level; earlier levels' approvals are kept.
 
 **Administration demo.** The same 10 requests are also waiting at Administration, which runs alongside Accounts.
 
-1. Sign in with User Type **Administration** as `admin.office@`. It works like `lucs@` / `nad@`: in **Incoming**, send the next N waiting requests to `admin.staff1@` or `admin.staff2@`, or one at a time with **Handled by**. Only requests whose Library, TPC, Warden and HOD have approved count as waiting.
+1. Sign in with User Type **Administration** as `admin.office@`. It works like `lucs@` / `nad@`: in **Incoming**, send the next N waiting requests to `admin.staff1@` or `admin.staff2@`, or one at a time with **Handled by**. A request reaches Administration only once Library, TPC, Warden and all six departments have approved.
 2. Sign in as `admin.staff1@` (also User Type Administration). You see only what was sent to you. Approve is locked until you tick **Physical ID card submitted** in the Checklist column. Tick it, then approve; the decision is final.
 3. Sign in as a student (`acct001@`, User Type Student). Page 4 shows the checklist ticked, beside Accounts.
 
