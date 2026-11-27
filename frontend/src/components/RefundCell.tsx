@@ -43,8 +43,8 @@ export function RefundCells({ info, modes, onDone, onMessage }: {
             await api.recordRefund(noRefund ? { request_id: info.request_id, no_refund: true }
                 : { request_id: info.request_id, amount, mode, reference, paid_on: paidOn });
             await onDone();
-            onMessage(noRefund ? `✓ ${info.roll_no}: recorded that no refund is due. The student has been told and their certificate is unlocked.`
-                : `✓ ${info.roll_no}: refund of ${rupees(amount)} recorded. The student has been told and their certificate is unlocked.`);
+            onMessage(noRefund ? `${info.roll_no}: recorded that no refund is due. The student has been told and their certificate is unlocked.`
+                : `${info.roll_no}: refund of ${rupees(amount)} recorded. The student has been told and their certificate is unlocked.`);
         } catch (e) { onMessage(e instanceof Error ? e.message : 'Could not record the refund'); }
         finally { setBusy(false); }
     };
@@ -63,11 +63,11 @@ export function RefundCells({ info, modes, onDone, onMessage }: {
     // ── Refund cell ──
     let refundCell: React.ReactNode;
     if (info.state === 'not_due') {
-        refundCell = <span style={{ fontSize: 11, color: '#15803d' }}>✅ No refund due</span>;
+        refundCell = <span style={{ fontSize: 11, color: '#15803d' }}>No refund due</span>;
     } else if (info.state === 'sent' && r) {
         refundCell = (
             <div style={{ fontSize: 11, color: '#15803d' }}>
-                ✅ <strong>Sent {rupees(r.amount)}</strong> · {r.mode}
+                <strong>Sent {rupees(r.amount)}</strong> · {r.mode}
                 <div style={{ color: '#475569' }}>
                     UTR <code>{r.reference}</code>{r.paid_on ? ` · ${new Date(r.paid_on).toLocaleDateString()}` : ''}
                 </div>
@@ -76,7 +76,7 @@ export function RefundCells({ info, modes, onDone, onMessage }: {
     } else if (info.state === 'waiting') {
         refundCell = (
             <div style={{ fontSize: 11, color: '#94a3b8' }}>
-                ⏳ Waiting for {info.waiting_for.join(', ')}
+                Waiting for {info.waiting_for.join(', ')}
             </div>
         );
     } else {
