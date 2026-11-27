@@ -77,17 +77,17 @@ export function Layout({
                 <ul className="lnmiit-nav-list">
                     <li>
                         <button onClick={onHome} className="lnmiit-nav-item">
-                            🏠&nbsp;Home
+                            Home
                         </button>
                     </li>
                     <li>
                         <button onClick={onRules} className="lnmiit-nav-item">
-                            📋&nbsp;Rules
+                            Rules
                         </button>
                     </li>
                     <li>
                         <button onClick={onContact} className="lnmiit-nav-item">
-                            📞&nbsp;Contact
+                            Contact
                         </button>
                     </li>
                     <li>
@@ -95,14 +95,14 @@ export function Layout({
                             onClick={() => alert('Grievance Redressal Portal')}
                             className="lnmiit-nav-item"
                         >
-                            ⚖️&nbsp;Grievance Redressal
+                            Grievance Redressal
                         </button>
                     </li>
 
                     {userName && (
                         <li className="lnmiit-nav-right">
                             <button onClick={onLogout} className="lnmiit-logout-btn">
-                                ⏻&nbsp;Logout
+                                Logout
                             </button>
                         </li>
                     )}
@@ -112,7 +112,7 @@ export function Layout({
             {/* Breadcrumb Sub-Header */}
             <div className="lnmiit-breadcrumb-bar">
                 <div className="lnmiit-breadcrumb-text">
-                    <span>🏠</span>
+                    <span>Home</span>
                     <span>&gt;</span>
                     <span>No Dues Portal</span>
                     <span>&gt;</span>
@@ -128,7 +128,7 @@ export function Layout({
 
             {/* Browser Compatibility Bar */}
             <div className="erp-compatibility-strip">
-                <span>Site Compatible with: 🌐 Google Chrome 70+ &nbsp;|&nbsp; 🦊 Firefox 65+</span>
+                <span>Site Compatible with: Google Chrome 70+ &nbsp;|&nbsp; Firefox 65+</span>
                 <span>LNMIIT No Dues Management System</span>
             </div>
 
