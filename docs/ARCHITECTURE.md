@@ -64,7 +64,7 @@ sequenceDiagram
     SPA->>API: POST /api/student/submit-intake/
     API->>DB: intake_submitted = True
 
-    Note over API,DB: Independent sections (Store/Sports/Medical/NAD/...)<br/>are actionable immediately — officers approve/reject in parallel
+    Note over API,DB: Library, TPC, Warden verify Page 1 (the tri-gate).<br/>Once all three approve, Store/LUCS/Sports/Medical/NAD/HOD<br/>get the request by themselves and work in parallel;<br/>Accounts + Administration once all six approve
 
     par Officer reviews
         actor O as Section officer
