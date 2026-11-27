@@ -30,40 +30,39 @@ from .prefetch import prefetched
 # sign-offs that paper form collected are now the HOD-managed lab chain
 # (§ Department labs below), approved in the portal by each lab's in-charge.
 #
-# HOD is fully independent of the other sections — no section prerequisites,
-# and no informational consolidation of Store/LUCS/Sports/Medical/NAD either
-# (that was tried and then explicitly removed — HOD's review screen only shows
-# its own section, same as Store/LUCS/Sports/Medical/NAD's screens already do
-# for each other). The one thing HOD does wait on is its own department's labs,
-# when the HOD has set any up — see § Department labs below.
-
+# The request moves through the student's pages as three tiers:
 #
-# Accounts and Administration sit side by side: both open once Library, TPC
-# (graduation only — see OPTIONAL_PREREQUISITES), Warden and HOD have approved
-# (side by side on the student's Page 4), and neither waits for the
-# other. The request is cleared only when every one of its sections is approved
-# (recompute_overall).
-_AFTER_DEPT_AND_FIELD = [SECTION_LIBRARY, SECTION_TPC, SECTION_WARDEN, SECTION_HOD]
+#   Tri-gate (Page 2)     Library, TPC, Warden — verify what the student sent on
+#                         Page 1; nothing to wait for.
+#   Departments (Page 3)  Store, LUCS, Sports, Medical, NAD, HOD — each waits for
+#                         the whole tri-gate, and all six then work side by side.
+#                         HOD also waits for its own department's labs, when the
+#                         HOD has set any up (§ Department labs below); for a
+#                         department without labs, HOD approves directly.
+#   Final (Page 4)        Accounts and Administration — side by side, once every
+#                         department has approved (and so the tri-gate, too).
+#
+# The six departments don't wait for each other, and HOD's review screen shows
+# only its own section (an informational view of the other five was tried and
+# removed). The request is cleared only when every section is approved and the
+# refund is recorded (recompute_overall).
+TRI_GATE_SECTIONS = [SECTION_LIBRARY, SECTION_TPC, SECTION_WARDEN]
+DEPARTMENT_SECTIONS = [SECTION_STORE, SECTION_LUCS, SECTION_SPORTS, SECTION_MEDICAL, SECTION_NAD, SECTION_HOD]
+FINAL_SECTIONS = [SECTION_ACCOUNTS, SECTION_ADMINISTRATION]
 
 PREREQUISITES = {
-    SECTION_ACCOUNTS: list(_AFTER_DEPT_AND_FIELD),
-    SECTION_ADMINISTRATION: list(_AFTER_DEPT_AND_FIELD),
+    **{code: list(TRI_GATE_SECTIONS) for code in DEPARTMENT_SECTIONS},
+    **{code: TRI_GATE_SECTIONS + DEPARTMENT_SECTIONS for code in FINAL_SECTIONS},
 }
 
 # Prerequisites that only apply when the student's exit type includes them.
 # TPC (placement) is part of a graduation only: for an NEP exit, a withdrawal or
-# an admission cancel, Accounts and Administration don't wait for it. Any other
-# prerequisite an exit type lacks is a configuration error — workflow_problems()
-# reports it, and Django's system check (main/checks.py) refuses to start.
+# an admission cancel, nothing waits for it. Any other prerequisite an exit type
+# lacks is a configuration error — workflow_problems() reports it, and Django's
+# system check (main/checks.py) refuses to start.
 OPTIONAL_PREREQUISITES = {SECTION_TPC}
 
-# Independent sections (actionable immediately after submission)
-INDEPENDENT_SECTIONS = [
-    SECTION_LIBRARY, SECTION_TPC, SECTION_WARDEN, SECTION_STORE, SECTION_LUCS,
-    SECTION_SPORTS, SECTION_MEDICAL, SECTION_NAD, SECTION_HOD,
-]
-
-ALL_SECTION_CODES = INDEPENDENT_SECTIONS + [SECTION_ACCOUNTS, SECTION_ADMINISTRATION]
+ALL_SECTION_CODES = TRI_GATE_SECTIONS + DEPARTMENT_SECTIONS + FINAL_SECTIONS
 
 # ─── Exit type → the sections a request goes through (Design.md § Routing) ─────
 # Graduation uses the full set. Other exit types omit sections that don't apply.
@@ -211,15 +210,18 @@ def status_map(request):
 def unapproved_prerequisites(request, section_code):
     """The prerequisites of `section_code` — for this request's exit type — that
     haven't approved yet, in order (what "Waiting for …" lists)."""
+    prereqs = prerequisites(section_code, request.exit_type)
+    if not prereqs:
+        return []   # a tri-gate section: no need to load the request's sections
     smap = _status_map(request)
-    return [code for code in prerequisites(section_code, request.exit_type)
-            if smap.get(code) is None or smap[code].status != STATUS_APPROVED]
+    return [code for code in prereqs if smap.get(code) is None or smap[code].status != STATUS_APPROVED]
 
 
 def actionable(request, section_code, dept_has_labs=None):
     """True iff every prerequisite of `section_code` — for this request's exit
-    type — is APPROVED (for HOD, that includes every lab in the student's
-    department lab chain). `dept_has_labs`: for HOD, whether the student's
+    type — is APPROVED (for HOD, also every lab in the student's department lab
+    chain; a department without labs needs only the tri-gate, after which its
+    HOD approves directly). `dept_has_labs`: for HOD, whether the student's
     department has labs, when the caller already knows it (a desk asks once, not
     once per row)."""
     prereqs = prerequisites(section_code, request.exit_type)
@@ -243,9 +245,12 @@ def approve(section_status, actor):
     request = section_status.request
     code = section_status.section.code
     if not actionable(request, code):
-        if code == SECTION_HOD and not labs_cleared(request):
-            raise PermissionError_("Cannot approve HOD: every department lab must approve first.")
-        raise PermissionError_(f"Cannot approve {code}: prerequisites not all approved.")
+        waiting = unapproved_prerequisites(request, code)
+        if waiting:
+            smap = _status_map(request)
+            names = ", ".join(smap[c].section.name if c in smap else c.title() for c in waiting)
+            raise PermissionError_(f"Cannot approve {code}: waiting for {names} to approve first.")
+        raise PermissionError_("Cannot approve HOD: every department lab must approve first.")
     previous = section_status.status
     section_status.status = STATUS_APPROVED
     section_status.decided_by = actor
@@ -271,12 +276,9 @@ def reject(section_status, actor, reason):
 
 
 def _on_status_change(section_status, previous):
-    """Reverse-hierarchy cascade: leaving APPROVED resets the downstream closure.
-    Also resets intake_submitted if a tri-gate section (Library, TPC, Warden) is rejected,
-    so the student can re-upload and re-confirm."""
-    from .models import SECTION_LIBRARY, SECTION_TPC, SECTION_WARDEN
-    TRIGATE = {SECTION_LIBRARY, SECTION_TPC, SECTION_WARDEN}
-
+    """Reverse-hierarchy cascade: leaving APPROVED resets the downstream closure
+    — a tri-gate section reopening resets the departments and Accounts /
+    Administration; a department reopening resets Accounts / Administration."""
     if previous == STATUS_APPROVED and section_status.status != STATUS_APPROVED:
         # A section approved through staff levels (Accounts, main/staff.py) is
         # re-checked from the first level when it reopens.
@@ -344,8 +346,6 @@ def _invalidate_certificate(request):
 # LabStatus per lab (with each lab's level at that moment), so an HOD
 # re-arranging labs later only affects students who haven't started yet.
 # A department with no labs behaves exactly as before: HOD acts directly.
-
-TRI_GATE_SECTIONS = [SECTION_LIBRARY, SECTION_TPC, SECTION_WARDEN]
 
 
 def tri_gate_cleared(request):
