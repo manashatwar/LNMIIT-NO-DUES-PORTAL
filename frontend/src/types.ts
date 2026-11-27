@@ -51,8 +51,6 @@ export interface SectionInfo {
   status: ApprovalStatus;
   actionable: boolean;
   is_upload_section: boolean;
-  student_confirmed: boolean;
-  needs_confirm: boolean;
   decided_by: string | null;
   decided_at: string | null;
   comments: SectionComment[];
