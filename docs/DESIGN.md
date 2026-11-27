@@ -32,7 +32,7 @@ The request is cleared once every section has approved and Accounts has recorded
 
 ```mermaid
 flowchart TD
-    A([Student logs in]) --> B[Initiate: select exit type<br/>Graduation / NEP Exit / Withdrawal / Admission Cancel<br/>+ optional Fund Us amount]
+    A([Student logs in]) --> B[Initiate: select exit type<br/>Graduation / Withdrawal / Admission Cancel<br/>+ optional Fund Us amount]
     B --> C[Page 1: signed BTP form · offer letter · vacated room<br/>JPG/PNG/PDF · OCR extracts name & roll]
 
     C --> LIB[Central Library]
@@ -196,13 +196,13 @@ Sections are grouped into stages. A section becomes actionable only when its pre
 
 #### Each exit type has its own graph
 
-The sections a request goes through depend on its exit type (`engine.REQUIRED_SECTIONS`): a graduation has all eleven, while an NEP exit, a withdrawal or an admission cancel has no TPC (no placement obligation). The prerequisites follow: `engine.prerequisites(section, exit_type)` leaves out an *optional* prerequisite the exit type doesn't have (`OPTIONAL_PREREQUISITES = {TPC}`), so for those three the departments wait for **Library and Warden** only, and Accounts and Administration for Library, Warden and the six departments. `engine.workflow(exit_type)` is one exit type's whole graph, `{section: [prerequisites]}`, and everything that asks "is this section ready?" asks it of that graph:
+The sections a request goes through depend on its exit type (`engine.REQUIRED_SECTIONS`): a graduation has all eleven, while a withdrawal or an admission cancel has no TPC (no placement obligation). An NEP exit is rare and handled offline, so the portal doesn't offer it. The prerequisites follow: `engine.prerequisites(section, exit_type)` leaves out an *optional* prerequisite the exit type doesn't have (`OPTIONAL_PREREQUISITES = {TPC}`), so for those two the departments wait for **Library and Warden** only, and Accounts and Administration for Library, Warden and the six departments. `engine.workflow(exit_type)` is one exit type's whole graph, `{section: [prerequisites]}`, and everything that asks "is this section ready?" asks it of that graph:
 - `actionable()` and the student's lock messages (`waiting_for`);
 - the officer desk's "Waiting for …" (`stage.blocked_by`);
 - Administration's "send the next N to staff" (`staff.ready_for_staff`);
 - the reverse cascade (`downstream_closure(section, exit_type)`).
 
-This fixed a real bug: before it, every exit type waited for TPC, so a student on an NEP exit, a withdrawal or an admission cancel (who has no TPC section) could never reach Accounts or Administration, and never be cleared.
+This fixed a real bug: before it, every exit type waited for TPC, so a student on a withdrawal or an admission cancel (who has no TPC section) could never reach Accounts or Administration, and never be cleared.
 
 **Validation — Kahn's algorithm.** `engine.analyze_workflow(graph)` runs Kahn's topological sort over a graph, in O(V + E). It repeatedly takes a section whose prerequisites are all done. It returns:
 - an approval order;
@@ -430,7 +430,7 @@ Each officer sees only rows for their own section (and scope). This is a queryse
 
 ### Exit-type rules
 
-`exit_type` determines the required section set for a request. Graduation uses the full set; NEP Exit, Withdrawal, and Admission Cancel omit TPC (no placement obligation applies). The required set is resolved once at request creation, and one `SectionStatus` row is created per required section.
+`exit_type` determines the required section set for a request. Graduation uses the full set; Withdrawal and Admission Cancel omit TPC (no placement obligation applies). The required set is resolved once at request creation, and one `SectionStatus` row is created per required section.
 
 ## OCR Pipeline
 
