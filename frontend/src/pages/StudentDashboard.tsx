@@ -55,8 +55,8 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
     const deptField = ['STORE', 'LUCS', 'SPORTS', 'MEDICAL', 'NAD', 'HOD'].filter(has);
     const triGateApproved = triGate.length > 0 && triGate.every(approved);
     // Accounts and Administration work in parallel on Page 4. It opens when the
-    // backend says they can act: their prerequisites for this student's exit type
-    // have approved (engine.prerequisites). The rule lives there only — not copied here.
+    // backend says they can act: the tri-gate and all six Page-3 departments have
+    // approved (engine.prerequisites). The rule lives there only — not copied here.
     const accountsUnlock = !!sec('ACCOUNTS')?.actionable;
     const adminUnlock = !!sec('ADMINISTRATION')?.actionable;
     const financeUnlock = accountsUnlock || adminUnlock;
@@ -70,9 +70,10 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
     const labsOn = !!labs?.enabled;
     const labRejected = labsOn && labs.levels.some((lv) => lv.labs.some((e) => e.status === 'REJECTED'));
 
-    // Page lock rules. Page 4 holds Accounts and Administration side by side: both
-    // open once Library, Warden, HOD — and TPC on a graduation — approve. Page 5
-    // (the certificate) opens with it, showing what it still waits for.
+    // Page lock rules. Page 3's six departments receive the request by themselves
+    // once the tri-gate clears. Page 4 holds Accounts and Administration side by
+    // side: both open once all six departments approve. Page 5 (the certificate)
+    // opens with it, showing what it still waits for.
     const locks = {
         page1: true,
         page2: request.intake_submitted,
@@ -418,7 +419,7 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
         NAD: { icon: 'NA', subtitle: 'NAD-related verification' },
         HOD: { icon: 'HD', subtitle: 'Departmental consolidation' },
         ACCOUNTS: { icon: 'AC', subtitle: 'Refund & cancelled cheque' },
-        ADMINISTRATION: { icon: 'AD', subtitle: 'Alongside Accounts · ID card & office checklist' },
+        ADMINISTRATION: { icon: 'AD', subtitle: 'Alongside Accounts · ID card to the Administration Block' },
     };
 
     return (
@@ -656,7 +657,7 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                 {activeTab === 'page3' && !openStageSection && (
                     <div>
                         <p style={{ fontSize: 13, color: '#64748b', marginTop: 0 }}>
-                            Click a section to open it. Each is verified by their office from your name &amp; roll number — confirm your details to send your request.
+                            Your request has been sent to all of these offices together. Each verifies you from your name &amp; roll number. Click a section to see where it stands or to message the office.
                         </p>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
                             {deptField.map((code) => {
@@ -694,9 +695,8 @@ export function StudentDashboard({ request, onReload, onLogout, onRules, onConta
                                                                 : ['WITH HOD', '#b45309'];
                                                     return <span style={{ fontSize: 11, color, fontWeight: 700 }}>{label}</span>;
                                                 }
-                                                const notSent = s.needs_confirm && !s.student_confirmed;
-                                                const label = ok ? 'APPROVED' : rej ? 'REJECTED' : notSent ? 'NOT SENT' : (!s.actionable ? 'WAITING' : 'IN PROGRESS');
-                                                const color = ok ? '#15803d' : rej ? '#b91c1c' : notSent ? '#b45309' : (!s.actionable ? '#94a3b8' : '#b45309');
+                                                const label = ok ? 'APPROVED' : rej ? 'REJECTED' : (!s.actionable ? 'WAITING' : 'IN PROGRESS');
+                                                const color = ok ? '#15803d' : rej ? '#b91c1c' : (!s.actionable ? '#94a3b8' : '#b45309');
                                                 return <span style={{ fontSize: 11, color, fontWeight: 700 }}>{label}</span>;
                                             })()}
                                             <span style={{ fontSize: 11, color: '#1b365d', fontWeight: 600 }}>Open ▸</span>
@@ -1290,9 +1290,11 @@ function LabChainDetail({ chain, hod, student, me, onReload }: {
     );
 }
 
-// ── Basic detail for non-upload sections (Store, Sports, Medical, NAD, HOD) ──
-// Confirm-required sections (needs_confirm) show editable name/roll/dept + a Confirm
-// button; the request only reaches the office after the student confirms.
+// ── Basic detail for non-upload sections (Store, LUCS, Sports, Medical, NAD, HOD,
+// Administration) ──
+// The request reaches each of these offices by itself (no "Confirm & Send"). After
+// a rejection the student sends it back: HOD with its editable name/roll/dept form,
+// the others with a plain Re-send button.
 function BasicDetail({ section, icon, subtitle, student, me, onReload }: {
     section: SectionInfo;
     icon: string;
@@ -1312,22 +1314,21 @@ function BasicDetail({ section, icon, subtitle, student, me, onReload }: {
     const [busy, setBusy] = useState(false);
     const [note, setNote] = useState('');
 
-    const needsConfirm = section.needs_confirm;
-    const sent = section.student_confirmed;
+    const isHod = section.code === 'HOD';
 
-    const confirm = async () => {
+    const resend = async () => {
         setBusy(true); setNote('');
         try {
-            await api.confirmSection(section.code, { name: name.trim(), roll_no: roll.trim(), department: dept.trim() });
-            setNote('Confirmed — request sent to the office.');
+            await api.resendSection(section.code,
+                isHod ? { name: name.trim(), roll_no: roll.trim(), department: dept.trim() } : undefined);
+            setNote('Request sent back to the office.');
             onReload();
-        } catch (e) { setNote(e instanceof Error ? e.message : 'Could not confirm'); }
+        } catch (e) { setNote(e instanceof Error ? e.message : 'Could not re-send'); }
         finally { setBusy(false); }
     };
 
-    // Editable form shows when: a confirm-required section hasn't been sent yet,
-    // OR any basic section (incl. HOD) was rejected and needs re-sending.
-    const showForm = (needsConfirm && !sent) || rejected;
+    // HOD keeps its editable form for a re-send after a rejection.
+    const showForm = isHod && rejected;
     const fieldStyle: React.CSSProperties = { padding: '6px 10px', fontSize: 13 };
 
     return (
@@ -1340,9 +1341,9 @@ function BasicDetail({ section, icon, subtitle, student, me, onReload }: {
                 </div>
                 <span style={{
                     padding: '4px 12px', borderRadius: 20, fontWeight: 700, fontSize: 12,
-                    background: ok ? '#dcfce7' : rejected ? '#fee2e2' : (needsConfirm && !sent) ? '#fef3c7' : '#f1f5f9',
-                    color: ok ? '#15803d' : rejected ? '#b91c1c' : (needsConfirm && !sent) ? '#b45309' : '#64748b',
-                }}>{ok ? 'APPROVED' : rejected ? 'REJECTED' : (needsConfirm && !sent) ? 'NOT SENT' : waiting ? 'WAITING' : 'IN PROGRESS'}</span>
+                    background: ok ? '#dcfce7' : rejected ? '#fee2e2' : '#f1f5f9',
+                    color: ok ? '#15803d' : rejected ? '#b91c1c' : '#64748b',
+                }}>{ok ? 'APPROVED' : rejected ? 'REJECTED' : waiting ? 'WAITING' : 'IN PROGRESS'}</span>
             </div>
 
             {note && <div style={{ fontSize: 12, color: '#475569', marginBottom: 10 }}>{note}</div>}
@@ -1353,25 +1354,34 @@ function BasicDetail({ section, icon, subtitle, student, me, onReload }: {
                         <div style={{ fontSize: 12, color: '#b91c1c', marginBottom: 8 }}><strong>Officer's reason:</strong> {reason.body}</div>
                     )}
                     <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>
-                        {rejected
-                            ? <>Update your details and click <strong>Confirm &amp; Re-send</strong> to send the request back to this office.</>
-                            : <>Verify your details and click <strong>Confirm &amp; Send</strong>. The request reaches this office only after you confirm.</>}
+                        Update your details and click <strong>Confirm &amp; Re-send</strong> to send the request back to this office.
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                         <div><label style={ocrLabel}>Name</label><input className="erp-input" value={name} onChange={(e) => setName(e.target.value)} style={fieldStyle} /></div>
                         <div><label style={ocrLabel}>Roll No</label><input className="erp-input" value={roll} onChange={(e) => setRoll(e.target.value)} style={fieldStyle} /></div>
                         <div><label style={ocrLabel}>Department</label><input className="erp-input" value={dept} onChange={(e) => setDept(e.target.value)} style={fieldStyle} /></div>
                     </div>
-                    <button className="btn btn-success" style={{ marginTop: 12, fontSize: 13 }} disabled={busy} onClick={confirm}>
-                        {busy ? 'Sending…' : rejected ? 'Confirm & Re-send Request' : 'Confirm & Send Request'}
+                    <button className="btn btn-success" style={{ marginTop: 12, fontSize: 13 }} disabled={busy} onClick={resend}>
+                        {busy ? 'Sending…' : 'Confirm & Re-send Request'}
                     </button>
                 </>
             ) : (
                 <div style={{ fontSize: 13, color: '#334155' }}>
                     {/* Only while the office is still deciding: once approved there's nothing left to explain. */}
-                    {!ok && (
+                    {!ok && !rejected && !waiting && (
                         <div style={{ background: '#f4f7fb', border: '1px solid #c9d6e6', borderRadius: 6, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: '#1b365d' }}>
                             Request sent to this office. They verify from the details below and approve/reject.
+                        </div>
+                    )}
+                    {rejected && (
+                        <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 6, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: '#7f1d1d' }}>
+                            {reason && <div style={{ marginBottom: 6 }}><strong>Officer's reason:</strong> {reason.body}</div>}
+                            Sort this out with the office, then send your request back to them.
+                            <div>
+                                <button className="btn btn-success" style={{ marginTop: 8, fontSize: 13 }} disabled={busy} onClick={resend}>
+                                    {busy ? 'Sending…' : 'Re-send Request'}
+                                </button>
+                            </div>
                         </div>
                     )}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, background: '#f8fafc', padding: 12, borderRadius: 6 }}>
@@ -1386,7 +1396,6 @@ function BasicDetail({ section, icon, subtitle, student, me, onReload }: {
                 {section.waiting_for?.length ? `Waiting for ${joinNames(section.waiting_for)} to approve first.`
                     : 'Waiting on prerequisite sections to be approved first.'}
             </div>}
-            {rejected && reason && !showForm && <div style={{ marginTop: 10, fontSize: 12, color: '#b91c1c' }}><strong>Officer's reason:</strong> {reason.body}</div>}
             <CommentThread comments={section.comments} me={me} busy={false} onSend={(t) => api.studentComment(section.code, t).then(onReload)} />
         </div>
     );
