@@ -32,7 +32,7 @@ export function ContactPage({ onLogout, onHome }: ContactPageProps) {
                     <div className="col-sm-9" style={{ textAlign: 'left' }}>
                         {contacts.map((c, i) => (
                             <p key={i}>
-                                &nbsp;&nbsp;➤&nbsp;<strong>{c.name}</strong>:{' '}
+                                <strong>{c.name}</strong>:{' '}
                                 <a href={`mailto:${c.phone}`}>{c.phone}</a>
                             </p>
                         ))}
